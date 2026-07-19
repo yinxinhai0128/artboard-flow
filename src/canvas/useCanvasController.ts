@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasConnection, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
-import { addConnectionToProject, deleteSelectionFromProject, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, nextNodeSelection, normalizeConnectionForProject } from './document'
 
 const createId = () => crypto.randomUUID()
 
@@ -226,10 +226,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
 
   const selectNode = useCallback((id: string, additive: boolean) => {
     setSelectedConnectionId(null)
-    setSelectedNodeIds((current) => {
-      if (!additive) return [id]
-      return current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
-    })
+    setSelectedNodeIds((current) => nextNodeSelection(current, id, additive))
   }, [])
 
   const selectConnection = useCallback((id: string) => {

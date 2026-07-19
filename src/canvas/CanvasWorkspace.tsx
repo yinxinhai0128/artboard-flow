@@ -5,7 +5,7 @@ import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, Selec
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { normalizeConnectionForProject } from './document'
+import { nextNodeSelection, normalizeConnectionForProject } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -479,8 +479,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     if ((event.target as HTMLElement).closest('[data-node-control], [data-canvas-input]')) return
     event.stopPropagation()
     const additive = event.shiftKey || event.ctrlKey || event.metaKey
+    const nodeIds = nextNodeSelection(controller.selectedNodeIds, node.id, additive)
     controller.selectNode(node.id, additive)
-    const nodeIds = additive || controller.selectedNodeIds.includes(node.id) ? Array.from(new Set([...controller.selectedNodeIds, node.id])) : [node.id]
+    if (!nodeIds.includes(node.id)) return
     controller.captureHistory()
     dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds }
   }

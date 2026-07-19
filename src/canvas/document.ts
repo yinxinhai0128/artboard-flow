@@ -1,5 +1,11 @@
 import type { CanvasConnection, CanvasProject } from './types'
 
+export function nextNodeSelection(current: string[], nodeId: string, additive: boolean): string[] {
+  const exists = current.includes(nodeId)
+  if (!additive) return exists ? current : [nodeId]
+  return exists ? current.filter((id) => id !== nodeId) : [...current, nodeId]
+}
+
 export function normalizeConnectionForProject(
   project: CanvasProject,
   firstNodeId: string,

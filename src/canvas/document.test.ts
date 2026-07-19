@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, nextNodeSelection, normalizeConnectionForProject } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -38,6 +38,13 @@ const project: CanvasProject = {
 }
 
 describe('canvas document operations', () => {
+  it('keeps multi-selection stable while supporting additive toggles', () => {
+    expect(nextNodeSelection(['a', 'b'], 'a', false)).toEqual(['a', 'b'])
+    expect(nextNodeSelection(['a', 'b'], 'c', false)).toEqual(['c'])
+    expect(nextNodeSelection(['a', 'b'], 'b', true)).toEqual(['a'])
+    expect(nextNodeSelection(['a'], 'b', true)).toEqual(['a', 'b'])
+  })
+
   it('deletes selected nodes and all connected edges', () => {
     const next = deleteSelectionFromProject(project, ['b'], null)
 
