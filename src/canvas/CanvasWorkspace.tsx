@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { Compass, Copy, Download, Eye, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
 import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -241,6 +241,10 @@ function canDownloadNode(node: CanvasNode) {
   return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video' || node.type === 'audio'))
 }
 
+function canPreviewNode(node: CanvasNode) {
+  return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video' || node.type === 'audio'))
+}
+
 function safeFileName(name: string) {
   return (name.trim() || 'canvas-node')
     .split('')
@@ -323,6 +327,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
   const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null)
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
+  const [previewNodeId, setPreviewNodeId] = useState<string | null>(null)
+
+  const setActiveConnectionDraft = useCallback((draft: ConnectionDraft | null) => {
+    connectionDraftRef.current = draft
+    setConnectionDraft(draft)
+  }, [])
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [miniMapOpen, setMiniMapOpen] = useState(true)
   const [mediaUploadInputAccept, setMediaUploadInputAccept] = useState('image/*,video/*,audio/*')
@@ -369,6 +379,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const selectedSingleNodeId = controller.selectedNodeIds.length === 1 ? controller.selectedNodeIds[0] : null
   const toolbarNode = (selectedSingleNodeId ? nodesById.get(selectedSingleNodeId) : null) ?? (toolbarNodeId ? nodesById.get(toolbarNodeId) : null) ?? null
   const infoNode = infoNodeId ? nodesById.get(infoNodeId) ?? null : null
+  const previewNode = previewNodeId ? nodesById.get(previewNodeId) ?? null : null
   const infoNodeRelations = useMemo(
     () => infoNode ? getNodeRelations(controller.project, infoNode.id) : { incoming: [], outgoing: [] },
     [controller.project, infoNode],
@@ -585,7 +596,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     setNodeCreatePosition(null)
     setPendingConnectionCreate(null)
     if (connectionDraftRef.current) {
-      setConnectionDraft(null)
+      setActiveConnectionDraft(null)
       return
     }
     const startWorld = clientWorld(event)
@@ -668,7 +679,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     setPendingConnectionCreate(null)
     setNodeCreatePosition(null)
     setContextMenu(null)
-    setConnectionDraft({ nodeId, handleType, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
+    setActiveConnectionDraft({ nodeId, handleType, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
   }
 
   const finishConnectionToNode = useCallback(
@@ -676,10 +687,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       const draft = connectionDraftRef.current
       if (!draft || draft.nodeId === toNodeId) return false
       controller.connectNodes(draft.nodeId, toNodeId, draft.handleType)
-      setConnectionDraft(null)
+      setActiveConnectionDraft(null)
       return true
     },
-    [controller],
+    [controller, setActiveConnectionDraft],
   )
 
   const finishConnection = (event: React.PointerEvent<HTMLButtonElement>, toNodeId: string) => {
@@ -696,7 +707,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       setPendingConnectionCreate(null)
       setNodeCreatePosition(null)
       setContextMenu(null)
-      setConnectionDraft({
+      setActiveConnectionDraft({
         nodeId: node.id,
         handleType: 'source',
         to: anchor,
@@ -704,7 +715,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       })
       setToolbarNodeId(node.id)
     },
-    [controller],
+    [controller, setActiveConnectionDraft],
   )
 
   useEffect(() => {
@@ -717,7 +728,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           const targetNodeId = dropTarget.nodeId
           const targetNode = targetNodeId ? nodesById.get(targetNodeId) : null
           const to = targetNode ? (value.handleType === 'source' ? targetPort(targetNode) : sourcePort(targetNode)) : clientWorld(event)
-          return { ...value, targetNodeId, blockedNodeId: dropTarget.blockedNodeId, to }
+          const next = { ...value, targetNodeId, blockedNodeId: dropTarget.blockedNodeId, to }
+          connectionDraftRef.current = next
+          return next
         })
       }
       if (selectionBox) {
@@ -787,16 +800,16 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         const dropTarget = draft.targetNodeId ? { nodeId: draft.targetNodeId, isNearNode: true, blockedNodeId: null } : findConnectionDropTargetFromEvent(event, draft)
         if (dropTarget.nodeId && dropTarget.nodeId !== draft.nodeId) {
           controller.connectNodes(draft.nodeId, dropTarget.nodeId, draft.handleType)
-          setConnectionDraft(null)
+          setActiveConnectionDraft(null)
         } else if (dropTarget.isNearNode) {
-          setConnectionDraft(null)
+          setActiveConnectionDraft(null)
         } else {
           const dx = event.clientX - draft.startScreen.x
           const dy = event.clientY - draft.startScreen.y
           const isClickArmed = Math.hypot(dx, dy) < 6
           if (!isClickArmed) {
             setPendingConnectionCreate({ nodeId: draft.nodeId, handleType: draft.handleType, position: clientWorld(event) })
-            setConnectionDraft(null)
+            setActiveConnectionDraft(null)
           }
         }
       }
@@ -809,7 +822,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
-  }, [clientWorld, connectionDraft, controller, findConnectionDropTargetFromEvent, nodesById, selectionBox])
+  }, [clientWorld, connectionDraft, controller, findConnectionDropTargetFromEvent, nodesById, selectionBox, setActiveConnectionDraft])
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -843,7 +856,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }
       if (event.key === 'Delete' || event.key === 'Backspace') controller.deleteSelection()
       if (event.key === 'Escape') {
-        setConnectionDraft(null)
+        setActiveConnectionDraft(null)
         setPendingConnectionCreate(null)
         setNodeCreatePosition(null)
         setContextMenu(null)
@@ -862,7 +875,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('keyup', keyup)
     }
-  }, [controller, pasteSystemClipboard])
+  }, [controller, pasteSystemClipboard, setActiveConnectionDraft])
 
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
@@ -1466,6 +1479,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             node={toolbarNode}
             viewport={controller.project.viewport}
             onInfo={(node) => setInfoNodeId(node.id)}
+            onPreview={(node) => setPreviewNodeId(node.id)}
             onCreateGenerationTask={(node) => createGenerationTaskNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
@@ -1477,6 +1491,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               controller.deleteNode(node.id)
               setToolbarNodeId(null)
               if (infoNodeId === node.id) setInfoNodeId(null)
+              if (previewNodeId === node.id) setPreviewNodeId(null)
             }}
             onKeep={(nodeId) => setToolbarNodeId(nodeId)}
           />
@@ -1492,6 +1507,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         }}
         onClose={() => setInfoNodeId(null)}
       />
+      <MediaPreviewModal node={previewNode} onClose={() => setPreviewNodeId(null)} />
       <ShortcutHelpModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {contextMenu ? (
         <CanvasContextMenuView
@@ -1501,6 +1517,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           onClose={() => setContextMenu(null)}
           onDuplicate={() => {
             if (contextMenu.type === 'node') controller.duplicateNode(contextMenu.nodeId)
+            setContextMenu(null)
+          }}
+          onPreview={() => {
+            if (contextNode) setPreviewNodeId(contextNode.id)
             setContextMenu(null)
           }}
           onCopyContent={() => {
@@ -1780,6 +1800,7 @@ function CanvasContextMenuView({
   connectionPair,
   onClose,
   onDuplicate,
+  onPreview,
   onCopyContent,
   onFocusNode,
   onDelete,
@@ -1789,6 +1810,7 @@ function CanvasContextMenuView({
   connectionPair: ConnectionNodePair | null
   onClose: () => void
   onDuplicate: () => void
+  onPreview: () => void
   onCopyContent: () => void
   onFocusNode: (node: CanvasNode) => void
   onDelete: () => void
@@ -1810,6 +1832,11 @@ function CanvasContextMenuView({
           <button onClick={onDuplicate}>
             <Copy size={15} /> 复制节点
           </button>
+          {node && canPreviewNode(node) ? (
+            <button onClick={onPreview}>
+              <Eye size={15} /> 查看内容
+            </button>
+          ) : null}
           {node && canCopyNodePayload(node) ? (
             <button onClick={onCopyContent}>
               <FileJson size={15} /> 复制内容
@@ -1840,6 +1867,7 @@ function NodeHoverToolbar({
   node,
   viewport,
   onInfo,
+  onPreview,
   onCreateGenerationTask,
   onRetryGenerationTask,
   onStartConnection,
@@ -1853,6 +1881,7 @@ function NodeHoverToolbar({
   node: CanvasNode | null
   viewport: { x: number; y: number; k: number }
   onInfo: (node: CanvasNode) => void
+  onPreview: (node: CanvasNode) => void
   onCreateGenerationTask: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
@@ -1883,6 +1912,12 @@ function NodeHoverToolbar({
         <Info size={15} />
         信息
       </button>
+      {canPreviewNode(node) ? (
+        <button title="查看节点内容" onClick={() => onPreview(node)}>
+          <Eye size={15} />
+          查看
+        </button>
+      ) : null}
       {canCreateGenerationTask ? (
         <button title="从配置创建生成任务" onClick={() => onCreateGenerationTask(node)}>
           <Play size={15} />
@@ -1927,6 +1962,53 @@ function NodeHoverToolbar({
         <Trash2 size={15} />
         删除
       </button>
+    </div>
+  )
+}
+
+function MediaPreviewModal({ node, onClose }: { node: CanvasNode | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!node) return
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', keydown)
+    return () => window.removeEventListener('keydown', keydown)
+  }, [node, onClose])
+
+  if (!node || !node.metadata.content) return null
+  const content = node.metadata.content
+  const dimensions = node.metadata.naturalWidth && node.metadata.naturalHeight ? `${Math.round(node.metadata.naturalWidth)} × ${Math.round(node.metadata.naturalHeight)}` : `${Math.round(node.width)} × ${Math.round(node.height)}`
+
+  return (
+    <div className="media-preview-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="media-preview-modal" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>{nodeKindLabels[node.type]}预览</span>
+            <h2>{node.title || '未命名节点'}</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="media-preview-stage">
+          {node.type === 'image' ? <img src={content} alt={node.title || '图片预览'} /> : null}
+          {node.type === 'video' ? <video src={content} controls autoPlay={false} /> : null}
+          {node.type === 'audio' ? (
+            <div className="media-preview-audio">
+              <Music2 size={44} />
+              <strong>{node.title || '音频节点'}</strong>
+              <audio src={content} controls />
+            </div>
+          ) : null}
+          {node.type === 'text' ? <pre>{content}</pre> : null}
+        </div>
+        <footer>
+          <span>{node.metadata.mimeType || (node.type === 'text' ? 'text/plain' : node.type)}</span>
+          <span>{dimensions}</span>
+          {node.metadata.bytes ? <span>{node.metadata.bytes} bytes</span> : null}
+          {node.metadata.prompt ? <span title={node.metadata.prompt}>提示词：{node.metadata.prompt}</span> : null}
+        </footer>
+      </section>
     </div>
   )
 }
