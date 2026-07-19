@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, worldToScreen } from './geometry'
+import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
 import type { CanvasConnection, CanvasNode, Viewport } from './types'
 
 const node = (id: string, x: number, y: number, width = 100, height = 80): CanvasNode => ({
@@ -44,6 +44,21 @@ describe('canvas geometry', () => {
       end: { x: 300, y: 140 },
     })
     expect(connectionEndpoints({ ...connection, toNodeId: 'missing' }, nodes)).toBeNull()
+  })
+
+  it('filters nodes to the padded viewport bounds', () => {
+    const nodes = [
+      node('visible', 50, 50),
+      node('padded', 360, 50),
+      node('outside', 700, 50),
+      node('left-edge', -80, 50),
+    ]
+
+    expect(visibleNodesInViewport(nodes, { x: 0, y: 0, k: 1 }, { width: 320, height: 240 }, 100).map((item) => item.id)).toEqual([
+      'visible',
+      'padded',
+      'left-edge',
+    ])
   })
 
   it('creates a cubic bezier path for a connection', () => {

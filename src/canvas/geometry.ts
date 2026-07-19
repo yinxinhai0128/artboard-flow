@@ -55,6 +55,27 @@ export function connectionEndpoints(connection: CanvasConnection, nodes: CanvasN
   }
 }
 
+export function visibleNodesInViewport(
+  nodes: CanvasNode[],
+  viewport: Viewport,
+  viewportSize: { width: number; height: number },
+  padding = 280,
+) {
+  const scale = clampViewportScale(viewport.k)
+  const viewLeft = -viewport.x / scale - padding
+  const viewTop = -viewport.y / scale - padding
+  const viewRight = viewLeft + viewportSize.width / scale + padding * 2
+  const viewBottom = viewTop + viewportSize.height / scale + padding * 2
+
+  return nodes.filter(
+    (node) =>
+      node.position.x + node.width > viewLeft &&
+      node.position.x < viewRight &&
+      node.position.y + node.height > viewTop &&
+      node.position.y < viewBottom,
+  )
+}
+
 export function rectsIntersect(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Download, FileJson, Image, Info, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
-import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
+import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
@@ -207,6 +207,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
+  const visibleNodes = useMemo(
+    () => visibleNodesInViewport(controller.project.nodes, controller.project.viewport, canvasSize),
+    [canvasSize, controller.project.nodes, controller.project.viewport],
+  )
   const relationCounts = useMemo(() => {
     const counts = new Map<string, { incoming: number; outgoing: number }>()
     controller.project.nodes.forEach((node) => counts.set(node.id, { incoming: 0, outgoing: 0 }))
@@ -997,7 +1001,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               {selectionRect ? <rect className="selection-box" {...selectionRect} /> : null}
             </svg>
 
-            {controller.project.nodes.map((node) => (
+            {visibleNodes.map((node) => (
               <CanvasNodeView
                 key={node.id}
                 node={node}
