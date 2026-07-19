@@ -28,6 +28,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<DragState>(null)
+  const connectionDraftRef = useRef<ConnectionDraft | null>(null)
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null)
   const [spacePressed, setSpacePressed] = useState(false)
@@ -42,6 +43,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     (event: { clientX: number; clientY: number }) => screenToWorld(clientPoint(event), controller.project.viewport),
     [clientPoint, controller.project.viewport],
   )
+
+  useEffect(() => {
+    connectionDraftRef.current = connectionDraft
+  }, [connectionDraft])
 
   const zoomAt = useCallback(
     (screen: Point, nextScale: number) => {
@@ -68,6 +73,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     if (event.button !== 0) return
     const target = event.target as HTMLElement
     if (target.closest('[data-node-id], [data-connection-id], [data-toolbar], [data-minimap]')) return
+    if (connectionDraftRef.current) {
+      setConnectionDraft(null)
+      return
+    }
     const startWorld = clientWorld(event)
     if (event.ctrlKey || event.metaKey) {
       setSelectionBox({
@@ -112,16 +121,25 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const startConnection = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => {
     event.preventDefault()
     event.stopPropagation()
-    setConnectionDraft({ fromNodeId: nodeId, to: clientWorld(event) })
+    controller.captureHistory()
+    setConnectionDraft({ fromNodeId: nodeId, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
   }
+
+  const finishConnectionToNode = useCallback(
+    (toNodeId: string) => {
+      const draft = connectionDraftRef.current
+      if (!draft || draft.fromNodeId === toNodeId) return false
+      controller.connectNodes(draft.fromNodeId, toNodeId)
+      setConnectionDraft(null)
+      return true
+    },
+    [controller],
+  )
 
   const finishConnection = (event: React.PointerEvent<HTMLButtonElement>, toNodeId: string) => {
     event.preventDefault()
     event.stopPropagation()
-    if (connectionDraft) {
-      controller.connectNodes(connectionDraft.fromNodeId, toNodeId)
-      setConnectionDraft(null)
-    }
+    finishConnectionToNode(toNodeId)
   }
 
   useEffect(() => {
@@ -161,10 +179,26 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         )
       }
     }
-    const up = () => {
+    const up = (event: PointerEvent) => {
+      const draft = connectionDraftRef.current
+      if (draft) {
+        const targetNode = document
+          .elementsFromPoint(event.clientX, event.clientY)
+          .map((element) => element.closest<HTMLElement>('[data-node-id]'))
+          .find((element): element is HTMLElement => Boolean(element))
+        const targetNodeId = targetNode?.dataset.nodeId
+        if (targetNodeId && targetNodeId !== draft.fromNodeId) {
+          controller.connectNodes(draft.fromNodeId, targetNodeId)
+          setConnectionDraft(null)
+        } else {
+          const dx = event.clientX - draft.startScreen.x
+          const dy = event.clientY - draft.startScreen.y
+          const isClickArmed = Math.hypot(dx, dy) < 6
+          if (!isClickArmed) setConnectionDraft(null)
+        }
+      }
       dragRef.current = null
       setSelectionBox(null)
-      setConnectionDraft(null)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -197,7 +231,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         controller.redo()
       }
       if (event.key === 'Delete' || event.key === 'Backspace') controller.deleteSelection()
-      if (event.key === 'Escape') controller.clearSelection()
+      if (event.key === 'Escape') {
+        setConnectionDraft(null)
+        controller.clearSelection()
+      }
     }
     const keyup = (event: KeyboardEvent) => {
       if (event.code === 'Space') setSpacePressed(false)
@@ -323,6 +360,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onFinishConnection={finishConnection}
                 onUpdate={controller.updateNode}
                 onCaptureHistory={controller.captureHistory}
+                onFinishConnectionToNode={finishConnectionToNode}
+                isConnectionTarget={Boolean(connectionDraft && connectionDraft.fromNodeId !== node.id)}
               />
             ))}
           </div>
@@ -377,6 +416,8 @@ function CanvasNodeView({
   onFinishConnection,
   onUpdate,
   onCaptureHistory,
+  onFinishConnectionToNode,
+  isConnectionTarget,
 }: {
   node: CanvasNode
   selected: boolean
@@ -387,14 +428,24 @@ function CanvasNodeView({
   onFinishConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   onCaptureHistory: () => void
+  onFinishConnectionToNode: (nodeId: string) => boolean
+  isConnectionTarget: boolean
 }) {
   const Icon = nodeIcons[node.type]
   return (
     <article
       data-node-id={node.id}
-      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''}`}
+      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnectionTarget ? 'connection-target' : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
-      onPointerDown={(event) => onPointerDown(event, node)}
+      onPointerDown={(event) => {
+        if (isConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
+          event.preventDefault()
+          event.stopPropagation()
+          onFinishConnectionToNode(node.id)
+          return
+        }
+        onPointerDown(event, node)
+      }}
     >
       <button className="port target-port" title="连接到此节点" data-node-control onPointerUp={(event) => onFinishConnection(event, node.id)} />
       <header>

@@ -378,6 +378,10 @@ button:disabled {
   border-color: rgba(125, 211, 252, 0.45);
 }
 
+.canvas-node.connection-target {
+  border-color: rgba(134, 239, 172, 0.75);
+}
+
 .canvas-node header {
   height: 42px;
   display: grid;
@@ -466,23 +470,29 @@ button:disabled {
 .port {
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border: 2px solid var(--panel);
+  border: 3px solid var(--panel);
   border-radius: 999px;
   background: var(--muted);
   transform: translateY(-50%);
   cursor: crosshair;
+  z-index: 3;
 }
 
 .target-port {
-  left: -8px;
+  left: -11px;
 }
 
 .source-port {
-  right: -8px;
+  right: -11px;
   background: var(--blue);
+}
+
+.port:hover {
+  background: var(--green);
+  transform: translateY(-50%) scale(1.18);
 }
 
 .resize-handle {

@@ -61,6 +61,7 @@ export type SelectionBox = {
 export type ConnectionDraft = {
   fromNodeId: string
   to: Point
+  startScreen: Point
 }
 
 export type Snapshot = Pick<CanvasProject, 'nodes' | 'connections' | 'backgroundMode' | 'viewport'>

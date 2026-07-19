@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasConnection, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
-import { deleteSelectionFromProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject } from './document'
 
 const createId = () => crypto.randomUUID()
 
@@ -135,14 +135,8 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
 
   const connectNodes = useCallback(
     (fromNodeId: string, toNodeId: string) => {
-      if (fromNodeId === toNodeId) return
       commit((current) => {
-        const exists = current.connections.some((connection) => connection.fromNodeId === fromNodeId && connection.toNodeId === toNodeId)
-        if (exists) return current
-        return {
-          ...current,
-          connections: [...current.connections, { id: createId(), fromNodeId, toNodeId }],
-        }
+        return addConnectionToProject(current, { id: createId(), fromNodeId, toNodeId })
       })
     },
     [commit],

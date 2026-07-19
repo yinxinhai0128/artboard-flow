@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deleteSelectionFromProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -40,5 +40,22 @@ describe('canvas document operations', () => {
 
     expect(next.nodes).toHaveLength(3)
     expect(next.connections.map((connection) => connection.id)).toEqual(['ab', 'ca'])
+  })
+
+  it('adds a new connection when both nodes exist', () => {
+    const source = { ...project, connections: [] }
+    const next = addConnectionToProject(source, { id: 'new-edge', fromNodeId: 'a', toNodeId: 'b' })
+
+    expect(next.connections).toEqual([{ id: 'new-edge', fromNodeId: 'a', toNodeId: 'b' }])
+  })
+
+  it('prevents duplicate, self, and missing-node connections', () => {
+    const duplicate = addConnectionToProject(project, { id: 'duplicate', fromNodeId: 'a', toNodeId: 'b' })
+    const self = addConnectionToProject(project, { id: 'self', fromNodeId: 'a', toNodeId: 'a' })
+    const missing = addConnectionToProject(project, { id: 'missing', fromNodeId: 'a', toNodeId: 'missing' })
+
+    expect(duplicate.connections).toHaveLength(3)
+    expect(self.connections).toHaveLength(3)
+    expect(missing.connections).toHaveLength(3)
   })
 })
