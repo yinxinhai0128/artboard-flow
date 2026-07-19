@@ -1007,6 +1007,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onRefreshGenerationTask={refreshGenerationTaskNode}
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
+                isConnecting={Boolean(connectionDraft)}
                 connectionTargetState={
                   connectionDraft?.targetNodeId === node.id
                     ? 'valid'
@@ -1145,6 +1146,7 @@ function CanvasNodeView({
   onRefreshGenerationTask,
   onHoverStart,
   onFinishConnectionToNode,
+  isConnecting,
   connectionTargetState,
   onContextMenu,
 }: {
@@ -1164,6 +1166,7 @@ function CanvasNodeView({
   onRefreshGenerationTask: (nodeId: string) => void
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
+  isConnecting: boolean
   connectionTargetState: 'valid' | 'blocked' | null
   onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: string) => void
 }) {
@@ -1172,7 +1175,7 @@ function CanvasNodeView({
   return (
     <article
       data-node-id={node.id}
-      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
+      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
       onMouseEnter={() => onHoverStart(node.id)}
       onContextMenu={(event) => onContextMenu(event, node.id)}

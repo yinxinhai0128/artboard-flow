@@ -1216,6 +1216,18 @@ button:disabled {
   transform: translateY(-50%);
   cursor: crosshair;
   z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.canvas-node:hover .port,
+.canvas-node.selected .port,
+.canvas-node.connection-active .port,
+.canvas-node.connection-target-valid .port,
+.canvas-node.connection-target-blocked .port {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .target-port {
