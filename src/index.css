@@ -1539,6 +1539,11 @@ button:disabled {
   color: #111;
 }
 
+.zoom-panel button.active {
+  background: #f4f4f5;
+  color: #111;
+}
+
 .mini-map {
   position: absolute;
   z-index: 4;

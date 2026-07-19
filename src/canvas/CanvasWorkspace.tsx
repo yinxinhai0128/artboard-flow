@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, Download, FileJson, HelpCircle, Image, Info, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
+import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -206,6 +206,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null)
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [miniMapOpen, setMiniMapOpen] = useState(true)
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
   const visibleNodes = useMemo(
@@ -1070,6 +1071,13 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           </div>
 
           <div className="zoom-panel" data-toolbar>
+            <button
+              className={miniMapOpen ? 'active' : ''}
+              title={miniMapOpen ? '关闭小地图' : '打开小地图'}
+              onClick={() => setMiniMapOpen((value) => !value)}
+            >
+              <Compass size={16} />
+            </button>
             <button onClick={() => zoomAt({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, controller.project.viewport.k - 0.1)}>
               <Minus size={16} />
             </button>
@@ -1105,14 +1113,16 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             ))}
           </div>
 
-          <MiniMap
-            nodes={controller.project.nodes}
-            connections={controller.project.connections}
-            selectedNodeIds={controller.selectedNodeIds}
-            viewport={controller.project.viewport}
-            viewportSize={canvasSize}
-            onViewportChange={controller.setViewport}
-          />
+          {miniMapOpen ? (
+            <MiniMap
+              nodes={controller.project.nodes}
+              connections={controller.project.connections}
+              selectedNodeIds={controller.selectedNodeIds}
+              viewport={controller.project.viewport}
+              viewportSize={canvasSize}
+              onViewportChange={controller.setViewport}
+            />
+          ) : null}
           <NodeHoverToolbar
             node={toolbarNode}
             viewport={controller.project.viewport}
