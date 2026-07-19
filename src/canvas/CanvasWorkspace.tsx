@@ -296,6 +296,17 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const canvasCenterScreen = useCallback(
+    () => ({ x: canvasSize.width / 2, y: canvasSize.height / 2 }),
+    [canvasSize.height, canvasSize.width],
+  )
+
+  const resetViewport = useCallback(() => {
+    const center = canvasCenterScreen()
+    controller.setViewport({ x: center.x, y: center.y, k: 1 }, true)
+    setContextMenu(null)
+  }, [canvasCenterScreen, controller])
+
   const addNodeNearCenter = useCallback(
     (type: NodeKind) => {
       const rect = canvasRef.current?.getBoundingClientRect()
@@ -1097,7 +1108,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             >
               <Compass size={16} />
             </button>
-            <button onClick={() => zoomAt({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, controller.project.viewport.k - 0.1)}>
+            <button onClick={() => zoomAt(canvasCenterScreen(), controller.project.viewport.k - 0.1)}>
               <Minus size={16} />
             </button>
             <input
@@ -1107,14 +1118,14 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               max={CANVAS_MAX_SCALE}
               step="0.01"
               value={controller.project.viewport.k}
-              onChange={(event) => zoomAt({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, Number(event.target.value))}
+              onChange={(event) => zoomAt(canvasCenterScreen(), Number(event.target.value))}
             />
-            <button onClick={() => zoomAt({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, controller.project.viewport.k + 0.1)}>
+            <button onClick={() => zoomAt(canvasCenterScreen(), controller.project.viewport.k + 0.1)}>
               <Plus size={16} />
             </button>
             <button
               title="重置视图"
-              onClick={() => controller.setViewport({ x: 0, y: 0, k: 1 }, true)}
+              onClick={resetViewport}
             >
               <RotateCcw size={16} />
             </button>
