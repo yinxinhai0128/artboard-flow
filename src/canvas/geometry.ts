@@ -1,5 +1,12 @@
 import type { CanvasConnection, CanvasNode, Point, Viewport } from './types'
 
+export const CANVAS_MIN_SCALE = 0.05
+export const CANVAS_MAX_SCALE = 5
+
+export function clampViewportScale(scale: number) {
+  return Math.min(CANVAS_MAX_SCALE, Math.max(CANVAS_MIN_SCALE, scale))
+}
+
 export function screenToWorld(point: Point, viewport: Viewport): Point {
   return {
     x: (point.x - viewport.x) / viewport.k,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Download, FileJson, Image, Info, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
-import { connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
+import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
@@ -283,7 +283,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const zoomAt = useCallback(
     (screen: Point, nextScale: number) => {
       const viewport = controller.project.viewport
-      const k = Math.min(4, Math.max(0.08, nextScale))
+      const k = clampViewportScale(nextScale)
       const world = screenToWorld(screen, viewport)
       controller.setViewport({ x: screen.x - world.x * k, y: screen.y - world.y * k, k })
     },
@@ -1070,8 +1070,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             <input
               aria-label="缩放"
               type="range"
-              min="0.08"
-              max="4"
+              min={CANVAS_MIN_SCALE}
+              max={CANVAS_MAX_SCALE}
               step="0.01"
               value={controller.project.viewport.k}
               onChange={(event) => zoomAt({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, Number(event.target.value))}
