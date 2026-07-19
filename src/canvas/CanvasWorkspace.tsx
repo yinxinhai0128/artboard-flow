@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
-import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport } from './geometry'
+import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
+import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
@@ -497,6 +497,25 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     event.stopPropagation()
     finishConnectionToNode(toNodeId)
   }
+
+  const startConnectionFromToolbar = useCallback(
+    (node: CanvasNode) => {
+      if (node.type === 'config') return
+      const anchor = sourcePort(node)
+      controller.captureHistory()
+      setPendingConnectionCreate(null)
+      setNodeCreatePosition(null)
+      setContextMenu(null)
+      setConnectionDraft({
+        nodeId: node.id,
+        handleType: 'source',
+        to: anchor,
+        startScreen: worldToScreen(anchor, controller.project.viewport),
+      })
+      setToolbarNodeId(node.id)
+    },
+    [controller],
+  )
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -1129,6 +1148,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onInfo={(node) => setInfoNodeId(node.id)}
             onCreateGenerationTask={(node) => createGenerationTaskNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
+            onStartConnection={startConnectionFromToolbar}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
             onDownload={downloadNodeContent}
             onDelete={(node) => {
@@ -1192,6 +1212,7 @@ function ShortcutHelpModal({ open, onClose }: { open: boolean; onClose: () => vo
           <ShortcutHelpRow keys={['滚轮', '缩放滑杆']} value="缩放画布" />
           <ShortcutHelpRow keys={['Ctrl / Cmd', '拖动']} value="框选多个节点" />
           <ShortcutHelpRow keys={['Shift / Ctrl / Cmd', '点击']} value="追加选择节点" />
+          <ShortcutHelpRow keys={['工具条', '连线']} value="从当前节点开始连线，适合节点重叠时使用" />
           <ShortcutHelpRow keys={['Ctrl / Cmd', 'A']} value="全选节点" />
           <ShortcutHelpRow keys={['Ctrl / Cmd', 'C / V']} value="复制 / 粘贴节点，或粘贴剪贴板文本/图片" />
           <ShortcutHelpRow keys={['Ctrl / Cmd', 'Z']} value="撤销" />
@@ -1445,6 +1466,7 @@ function NodeHoverToolbar({
   onInfo,
   onCreateGenerationTask,
   onRetryGenerationTask,
+  onStartConnection,
   onDuplicate,
   onDownload,
   onDelete,
@@ -1455,6 +1477,7 @@ function NodeHoverToolbar({
   onInfo: (node: CanvasNode) => void
   onCreateGenerationTask: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
+  onStartConnection: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
   onDownload: (node: CanvasNode) => void
   onDelete: (node: CanvasNode) => void
@@ -1465,6 +1488,7 @@ function NodeHoverToolbar({
   const top = Math.max(12, viewport.y + node.position.y * viewport.k - 12)
   const canCreateGenerationTask = node.type === 'config'
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
+  const canStartConnection = node.type !== 'config'
 
   return (
     <div
@@ -1488,6 +1512,12 @@ function NodeHoverToolbar({
         <button title="重建生成任务" onClick={() => onRetryGenerationTask(node)}>
           <RotateCcw size={15} />
           重试
+        </button>
+      ) : null}
+      {canStartConnection ? (
+        <button title="从此节点开始连线" onClick={() => onStartConnection(node)}>
+          <Link2 size={15} />
+          连线
         </button>
       ) : null}
       <button title="复制节点" onClick={() => onDuplicate(node)}>
