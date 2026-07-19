@@ -191,6 +191,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const titleInputRef = useRef<HTMLInputElement | null>(null)
   const dragRef = useRef<DragState>(null)
   const connectionDraftRef = useRef<ConnectionDraft | null>(null)
+  const focusAnimationRef = useRef<number | null>(null)
   const pasteHandledAtRef = useRef(0)
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null)
@@ -728,18 +729,43 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
   const focusNode = useCallback(
     (node: CanvasNode) => {
-      const nextScale = Math.max(controller.project.viewport.k, 0.9)
+      const nodeScale = Math.min((canvasSize.width * 0.6) / node.width, (canvasSize.height * 0.6) / node.height)
+      const nextScale = clampViewportScale(Math.min(Math.max(nodeScale, 0.05), 1.5))
+      const target = {
+        x: canvasSize.width / 2 - (node.position.x + node.width / 2) * nextScale,
+        y: canvasSize.height / 2 - (node.position.y + node.height / 2) * nextScale,
+        k: nextScale,
+      }
+      const start = { ...controller.project.viewport }
+      const duration = 450
+      const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3)
+      let startTime: number | null = null
+
+      if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current)
       controller.selectNode(node.id, false)
-      controller.setViewport(
-        {
-          x: canvasSize.width / 2 - (node.position.x + node.width / 2) * nextScale,
-          y: canvasSize.height / 2 - (node.position.y + node.height / 2) * nextScale,
-          k: nextScale,
-        },
-        true,
-      )
+      controller.captureHistory()
+      setContextMenu(null)
+      const step = (now: number) => {
+        if (startTime === null) startTime = now
+        const progress = Math.min((now - startTime) / duration, 1)
+        const eased = easeOutCubic(progress)
+        controller.setViewport({
+          x: start.x + (target.x - start.x) * eased,
+          y: start.y + (target.y - start.y) * eased,
+          k: start.k + (target.k - start.k) * eased,
+        })
+        focusAnimationRef.current = progress < 1 ? requestAnimationFrame(step) : null
+      }
+      focusAnimationRef.current = requestAnimationFrame(step)
     },
     [canvasSize.height, canvasSize.width, controller],
+  )
+
+  useEffect(
+    () => () => {
+      if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current)
+    },
+    [],
   )
 
   const createGenerationTaskNode = useCallback(
