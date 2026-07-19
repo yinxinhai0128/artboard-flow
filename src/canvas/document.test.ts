@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, normalizeConnectionForProject, splitChildIdsForNode } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, normalizeConnectionForProject, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -120,6 +120,25 @@ describe('canvas document operations', () => {
     expect(next.nodes.map((node) => node.id)).toEqual(['a', 'b', 'outside'])
     expect(next.nodes.find((node) => node.id === 'a')?.metadata.groupId).toBeUndefined()
     expect(next.nodes.find((node) => node.id === 'b')?.metadata.groupId).toBeUndefined()
+  })
+
+  it('syncs moved nodes into and out of groups by their center point', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...groupNode('group'), position: { x: 100, y: 100 }, width: 300, height: 240 },
+        { ...baseNode('inside'), position: { x: 150, y: 150 } },
+        { ...baseNode('outside'), position: { x: 520, y: 160 }, metadata: { groupId: 'group' } },
+      ],
+      connections: [],
+    }
+
+    expect(findContainingGroupId(source.nodes[1], source.nodes)).toBe('group')
+
+    const next = syncNodeGroupMembership(source, ['inside', 'outside'])
+
+    expect(next.nodes.find((node) => node.id === 'inside')?.metadata.groupId).toBe('group')
+    expect(next.nodes.find((node) => node.id === 'outside')?.metadata.groupId).toBeUndefined()
   })
 
   it('deletes a selected connection without removing nodes', () => {

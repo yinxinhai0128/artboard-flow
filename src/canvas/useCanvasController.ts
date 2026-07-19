@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasConnection, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
-import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject, syncNodeGroupMembership } from './document'
 
 const createId = () => crypto.randomUUID()
 
@@ -177,6 +177,13 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
         },
         { history: recordHistory },
       )
+    },
+    [commit],
+  )
+
+  const syncDraggedNodeGroups = useCallback(
+    (ids: string[]) => {
+      commit((current) => syncNodeGroupMembership(current, ids), { history: false })
     },
     [commit],
   )
@@ -369,6 +376,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     deleteConnection,
     connectNodes,
     groupSelection,
+    syncDraggedNodeGroups,
     setViewport,
     setBackgroundMode,
     selectNode,

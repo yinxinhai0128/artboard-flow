@@ -133,6 +133,36 @@ export function groupChildIdsForNode(nodes: CanvasNode[], nodeId: string) {
     .map((node) => node.id)
 }
 
+export function findContainingGroupId(node: CanvasNode, nodes: CanvasNode[]) {
+  if (node.type === 'group') return undefined
+  const centerX = node.position.x + node.width / 2
+  const centerY = node.position.y + node.height / 2
+  return [...nodes]
+    .reverse()
+    .find((group) =>
+      group.type === 'group' &&
+      group.id !== node.id &&
+      centerX >= group.position.x &&
+      centerX <= group.position.x + group.width &&
+      centerY >= group.position.y &&
+      centerY <= group.position.y + group.height,
+    )?.id
+}
+
+export function syncNodeGroupMembership(project: CanvasProject, nodeIds: string[]): CanvasProject {
+  const movingIds = new Set(nodeIds)
+  if (!project.nodes.some((node) => movingIds.has(node.id) && node.type !== 'group')) return project
+  let changed = false
+  const nodes = project.nodes.map((node) => {
+    if (!movingIds.has(node.id) || node.type === 'group') return node
+    const groupId = findContainingGroupId(node, project.nodes)
+    if (node.metadata.groupId === groupId) return node
+    changed = true
+    return { ...node, metadata: { ...node.metadata, groupId } }
+  })
+  return changed ? { ...project, nodes } : project
+}
+
 export function expandNodeIdsWithSplitChildren(nodes: CanvasNode[], nodeIds: string[]) {
   const expanded = new Set(nodeIds)
   nodeIds.forEach((nodeId) => splitChildIdsForNode(nodes, nodeId).forEach((childId) => expanded.add(childId)))

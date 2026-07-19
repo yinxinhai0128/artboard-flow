@@ -826,6 +826,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }
     }
     const up = (event: PointerEvent) => {
+      const drag = dragRef.current
       const draft = connectionDraftRef.current
       if (draft) {
         const dropTarget = draft.targetNodeId ? { nodeId: draft.targetNodeId, isNearNode: true, blockedNodeId: null } : findConnectionDropTargetFromEvent(event, draft)
@@ -843,6 +844,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             setActiveConnectionDraft(null)
           }
         }
+      }
+      if (drag?.type === 'node') {
+        controller.syncDraggedNodeGroups(drag.nodeIds)
       }
       dragRef.current = null
       setSelectionBox(null)
