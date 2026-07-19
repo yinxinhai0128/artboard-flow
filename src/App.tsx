@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Code2, Download, Edit3, FileUp, Plus, Trash2 } from 'lucide-react'
 import { canvasApi } from './canvas/api'
 import { CanvasWorkspace } from './canvas/CanvasWorkspace'
+import { downloadCanvasProjects, readCanvasProjectsFile } from './canvas/export'
 import type { CanvasProject } from './canvas/types'
 
 function App() {
@@ -75,13 +76,13 @@ function App() {
   }
 
   const exportProject = (project: CanvasProject) => {
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${project.title}.artboard-flow.json`
-    anchor.click()
-    URL.revokeObjectURL(url)
+    void downloadCanvasProjects([project], project.title || 'ArtboardFlow')
+  }
+
+  const exportSelected = () => {
+    const selectedProjects = projects.filter((project) => selectedIds.includes(project.id))
+    if (selectedProjects.length === 0) return
+    void downloadCanvasProjects(selectedProjects, `ArtboardFlow-${selectedProjects.length}个画布`)
   }
 
   const importProject = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,13 +90,16 @@ function App() {
     event.target.value = ''
     if (!file) return
     try {
-      const parsed = JSON.parse(await file.text()) as CanvasProject
-      const imported = await canvasApi.importProject(parsed)
-      setProjects((current) => [imported, ...current])
-      setActiveId(imported.id)
+      const parsedProjects = await readCanvasProjectsFile(file)
+      const importedProjects: CanvasProject[] = []
+      for (const parsed of parsedProjects) {
+        importedProjects.push(await canvasApi.importProject(parsed))
+      }
+      setProjects((current) => [...importedProjects, ...current])
+      setActiveId(importedProjects[0]?.id ?? null)
       setError(null)
     } catch {
-      setError('导入失败，请确认 JSON 文件来自 ArtboardFlow。')
+      setError('导入失败，请确认文件来自 ArtboardFlow 的 JSON 或 ZIP 导出包。')
     }
   }
 
@@ -124,12 +128,15 @@ function App() {
             <p>把节点、参考图、视频和生成配置组织成可追溯的创作关系。</p>
           </div>
           <div className="library-actions">
+            <button className="ghost-button" disabled={selectedIds.length === 0} onClick={exportSelected}>
+              <Download size={16} /> 导出选中
+            </button>
             <button className="ghost-button" disabled={selectedIds.length === 0} onClick={deleteSelected}>
               <Trash2 size={16} /> 删除选中
             </button>
             <label className="ghost-button file-button">
               <FileUp size={16} /> 导入画布
-              <input type="file" accept="application/json" onChange={importProject} />
+              <input type="file" accept="application/json,.json,application/zip,.zip" onChange={importProject} />
             </label>
             <button className="primary-button" onClick={createProject}>
               <Plus size={17} /> 新建画布

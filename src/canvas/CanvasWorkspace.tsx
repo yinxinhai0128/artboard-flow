@@ -11,10 +11,12 @@ type CanvasWorkspaceProps = {
   onExport: (project: CanvasProject) => void
 }
 
+type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+
 type DragState =
   | { type: 'pan'; start: Point; viewportStart: Point }
   | { type: 'node'; start: Point; nodeIds: string[] }
-  | { type: 'resize'; start: Point; node: CanvasNode }
+  | { type: 'resize'; start: Point; node: CanvasNode; corner: ResizeCorner }
   | null
 
 type CanvasContextMenu =
@@ -32,6 +34,80 @@ const nodeIcons = {
   image: Image,
   video: Video,
   config: Settings2,
+}
+
+const resizeCorners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+
+async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<CanvasNode> & { type: NodeKind; position: Point }> {
+  if (file.type.startsWith('image/')) {
+    const content = await readFileAsDataUrl(file)
+    const size = await readImageSize(content)
+    const fit = fitMediaSize(size.width, size.height, 360, 280)
+    return {
+      type: 'image',
+      title: file.name || '图片节点',
+      position,
+      width: fit.width,
+      height: fit.height + 42,
+      metadata: {
+        content,
+        status: 'success',
+        mimeType: file.type,
+        bytes: file.size,
+        naturalWidth: size.width,
+        naturalHeight: size.height,
+      },
+    }
+  }
+  if (file.type.startsWith('video/')) {
+    const content = await readFileAsDataUrl(file)
+    return {
+      type: 'video',
+      title: file.name || '视频节点',
+      position,
+      width: 360,
+      height: 260,
+      metadata: {
+        content,
+        status: 'success',
+        mimeType: file.type,
+        bytes: file.size,
+      },
+    }
+  }
+  const content = await file.text()
+  return {
+    type: 'text',
+    title: file.name || '文本节点',
+    position,
+    metadata: { content, status: 'success', mimeType: file.type || 'text/plain', bytes: file.size },
+  }
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+function readImageSize(src: string) {
+  return new Promise<{ width: number; height: number }>((resolve) => {
+    const image = new window.Image()
+    image.onload = () => resolve({ width: image.naturalWidth || 280, height: image.naturalHeight || 180 })
+    image.onerror = () => resolve({ width: 280, height: 180 })
+    image.src = src
+  })
+}
+
+function fitMediaSize(width: number, height: number, maxWidth: number, maxHeight: number) {
+  const scale = Math.min(maxWidth / Math.max(width, 1), maxHeight / Math.max(height, 1), 1)
+  return {
+    width: Math.max(180, Math.round(width * scale)),
+    height: Math.max(130, Math.round(height * scale)),
+  }
 }
 
 export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: CanvasWorkspaceProps) {
@@ -162,6 +238,29 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     zoomAt(clientPoint(event), controller.project.viewport.k * factor)
   }
 
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const target = event.target as HTMLElement
+    if (target.closest('[data-node-id], [data-toolbar], [data-minimap]')) return
+    setContextMenu(null)
+    setPendingConnectionCreate(null)
+    setNodeCreatePosition(null)
+    const world = clientWorld(event)
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length) {
+      for (const [index, file] of files.entries()) {
+        const position = { x: world.x + index * 36, y: world.y + index * 36 }
+        const node = await canvasNodeFromFile(file, position)
+        controller.addNode(node.type, node.position, node)
+      }
+      return
+    }
+    const text = event.dataTransfer.getData('text/plain').trim()
+    if (text) {
+      controller.addNode('text', world, { title: '拖入文本', metadata: { content: text, status: 'idle' } })
+    }
+  }
+
   const handleNodePointerDown = (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => {
     if (event.button !== 0) return
     if ((event.target as HTMLElement).closest('[data-node-control], [data-canvas-input]')) return
@@ -173,11 +272,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds }
   }
 
-  const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode) => {
+  const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => {
     event.preventDefault()
     event.stopPropagation()
     controller.captureHistory()
-    dragRef.current = { type: 'resize', start: { x: event.clientX, y: event.clientY }, node }
+    dragRef.current = { type: 'resize', start: { x: event.clientX, y: event.clientY }, node, corner }
   }
 
   const startConnection = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => {
@@ -239,11 +338,41 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         dragRef.current = { ...drag, start: { x: event.clientX, y: event.clientY } }
       }
       if (drag.type === 'resize') {
+        const dx = (event.clientX - drag.start.x) / controller.project.viewport.k
+        const dy = (event.clientY - drag.start.y) / controller.project.viewport.k
+        const fromLeft = drag.corner.includes('left')
+        const fromTop = drag.corner.includes('top')
+        const minWidth = 160
+        const minHeight = 110
+        const startRight = drag.node.position.x + drag.node.width
+        const startBottom = drag.node.position.y + drag.node.height
+        let width = Math.max(minWidth, drag.node.width + (fromLeft ? -dx : dx))
+        let height = Math.max(minHeight, drag.node.height + (fromTop ? -dy : dy))
+        if (drag.node.type === 'image' || drag.node.type === 'video') {
+          const ratio = (drag.node.metadata.naturalWidth || drag.node.width) / (drag.node.metadata.naturalHeight || drag.node.height || 1)
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            height = width / ratio
+          } else {
+            width = height * ratio
+          }
+          if (height < minHeight) {
+            height = minHeight
+            width = height * ratio
+          }
+          if (width < minWidth) {
+            width = minWidth
+            height = width / ratio
+          }
+        }
         controller.updateNode(
           drag.node.id,
           {
-            width: Math.max(160, drag.node.width + (event.clientX - drag.start.x) / controller.project.viewport.k),
-            height: Math.max(110, drag.node.height + (event.clientY - drag.start.y) / controller.project.viewport.k),
+            position: {
+              x: fromLeft ? startRight - width : drag.node.position.x,
+              y: fromTop ? startBottom - height : drag.node.position.y,
+            },
+            width,
+            height,
           },
           false,
         )
@@ -389,6 +518,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           onPointerDown={handleCanvasPointerDown}
           onDoubleClick={handleCanvasDoubleClick}
           onWheel={handleWheel}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => void handleDrop(event)}
         >
           <div
             className="world"
@@ -565,7 +696,7 @@ function CanvasNodeView({
   selected: boolean
   related: boolean
   onPointerDown: (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => void
-  onResizePointerDown: (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode) => void
+  onResizePointerDown: (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => void
   onStartConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
   onFinishConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
@@ -605,9 +736,17 @@ function CanvasNodeView({
       </header>
       <NodeBody node={node} onUpdate={onUpdate} onCaptureHistory={onCaptureHistory} />
       <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id)} />
-      <button className="resize-handle" title="缩放节点" data-node-control onPointerDown={(event) => onResizePointerDown(event, node)}>
-        <SquarePen size={12} />
-      </button>
+      {resizeCorners.map((corner) => (
+        <button
+          key={corner}
+          className={`resize-handle ${corner}`}
+          title="缩放节点"
+          data-node-control
+          onPointerDown={(event) => onResizePointerDown(event, node, corner)}
+        >
+          <SquarePen size={12} />
+        </button>
+      ))}
     </article>
   )
 }

@@ -12,20 +12,22 @@ const nodeDefaults: Record<NodeKind, { title: string; width: number; height: num
   config: { title: '配置节点', width: 260, height: 190, content: '模型、比例、数量等生成参数会放在这里。' },
 }
 
-function createNode(type: NodeKind, position: Point): CanvasNode {
+function createNode(type: NodeKind, position: Point, patch: Partial<CanvasNode> = {}): CanvasNode {
   const defaults = nodeDefaults[type]
   return {
-    id: createId(),
+    ...patch,
+    id: patch.id ?? createId(),
     type,
-    title: defaults.title,
-    position,
-    width: defaults.width,
-    height: defaults.height,
+    title: patch.title ?? defaults.title,
+    position: patch.position ?? position,
+    width: patch.width ?? defaults.width,
+    height: patch.height ?? defaults.height,
     metadata: {
       content: defaults.content,
       status: 'idle',
       count: type === 'config' ? 1 : undefined,
       size: type === 'config' ? '1024x1024' : undefined,
+      ...patch.metadata,
     },
   }
 }
@@ -89,8 +91,8 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   )
 
   const addNode = useCallback(
-    (type: NodeKind, position: Point) => {
-      const node = createNode(type, position)
+    (type: NodeKind, position: Point, patch: Partial<CanvasNode> = {}) => {
+      const node = createNode(type, position, patch)
       commit((current) => ({ ...current, nodes: [...current.nodes, node] }))
       setSelectedNodeIds([node.id])
       setSelectedConnectionId(null)
