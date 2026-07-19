@@ -36,6 +36,41 @@ describe('generation adapter normalization', () => {
       bytes: undefined,
       naturalWidth: 640,
       naturalHeight: 480,
+      outputs: [{
+        content: 'https://cdn/result.png',
+        mimeType: 'image/png',
+        bytes: undefined,
+        naturalWidth: 640,
+        naturalHeight: 480,
+      }],
+    })
+    expect(normalizeGenerationJobResult({
+      outputs: [
+        { url: 'https://cdn/one.png', mimeType: 'image/png', width: 512, height: 512 },
+        { content: 'https://cdn/two.png', mimeType: 'image/png', width: 768, height: 512 },
+      ],
+    })).toEqual({
+      content: 'https://cdn/one.png',
+      mimeType: 'image/png',
+      bytes: undefined,
+      naturalWidth: 512,
+      naturalHeight: 512,
+      outputs: [
+        {
+          content: 'https://cdn/one.png',
+          mimeType: 'image/png',
+          bytes: undefined,
+          naturalWidth: 512,
+          naturalHeight: 512,
+        },
+        {
+          content: 'https://cdn/two.png',
+          mimeType: 'image/png',
+          bytes: undefined,
+          naturalWidth: 768,
+          naturalHeight: 512,
+        },
+      ],
     })
   })
 

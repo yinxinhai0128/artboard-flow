@@ -33,6 +33,7 @@ export type CanvasGenerationJobResult = {
   bytes?: number
   naturalWidth?: number
   naturalHeight?: number
+  outputs?: CanvasGenerationJobResult[]
 }
 
 export type CanvasGenerationJob = {
@@ -75,6 +76,8 @@ export type CanvasNode = {
     generationMode?: CanvasGenerationMode
     composerContent?: string
     generationPayload?: CanvasGenerationPayload
+    generationOutputs?: CanvasGenerationJobResult[]
+    activeOutputIndex?: number
     generationJobId?: string
     generationJobStatus?: CanvasGenerationJobStatus
     submittedAt?: string

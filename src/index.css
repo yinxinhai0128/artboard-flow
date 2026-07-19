@@ -1064,6 +1064,7 @@ button:disabled {
 }
 
 .media-body {
+  position: relative;
   display: grid;
   place-items: center;
   padding: 12px;
@@ -1102,6 +1103,49 @@ button:disabled {
 
 .audio-player audio {
   width: min(100%, 260px);
+}
+
+.generation-output-switcher {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 20px);
+  padding: 4px 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(12, 12, 12, 0.78);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
+  color: var(--muted);
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px);
+}
+
+.generation-output-switcher span {
+  padding: 0 5px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.generation-output-switcher button {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.generation-output-switcher button.active {
+  color: #061018;
+  background: var(--blue);
 }
 
 .config-body {

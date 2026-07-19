@@ -120,6 +120,10 @@ export function serializeCanvasGenerationPayload(payload: CanvasGenerationPayloa
 }
 
 export function metadataFromGenerationJob(job: CanvasGenerationJob, current: CanvasNode['metadata'] = {}): Partial<CanvasNode['metadata']> {
+  const outputs = job.result?.outputs?.filter((output) => output.content) ?? []
+  const activeOutputIndex = outputs.length > 1 ? Math.min(Math.max(current.activeOutputIndex ?? 0, 0), outputs.length - 1) : undefined
+  const activeOutput = activeOutputIndex === undefined ? undefined : outputs[activeOutputIndex]
+  const result = activeOutput ?? job.result
   const base: Partial<CanvasNode['metadata']> = {
     generationJobId: job.id,
     generationJobStatus: job.status,
@@ -134,6 +138,8 @@ export function metadataFromGenerationJob(job: CanvasGenerationJob, current: Can
       bytes: undefined,
       naturalWidth: undefined,
       naturalHeight: undefined,
+      generationOutputs: undefined,
+      activeOutputIndex: undefined,
       errorDetails: job.error || '生成任务失败',
     }
   }
@@ -141,11 +147,13 @@ export function metadataFromGenerationJob(job: CanvasGenerationJob, current: Can
     return {
       ...base,
       status: 'success',
-      content: job.result?.content || current.content,
-      mimeType: job.result?.mimeType || current.mimeType,
-      bytes: job.result?.bytes || current.bytes,
-      naturalWidth: job.result?.naturalWidth || current.naturalWidth,
-      naturalHeight: job.result?.naturalHeight || current.naturalHeight,
+      content: result?.content || current.content,
+      mimeType: result?.mimeType || current.mimeType,
+      bytes: result?.bytes || current.bytes,
+      naturalWidth: result?.naturalWidth || current.naturalWidth,
+      naturalHeight: result?.naturalHeight || current.naturalHeight,
+      generationOutputs: outputs.length > 1 ? outputs : undefined,
+      activeOutputIndex,
       generatedAt: job.updatedAt,
       errorDetails: '',
     }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
-import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
+import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
@@ -224,6 +224,8 @@ function hasGenerationMetadataChanged(current: CanvasNode['metadata'], next: Par
     current.bytes !== next.bytes ||
     current.naturalWidth !== next.naturalWidth ||
     current.naturalHeight !== next.naturalHeight ||
+    current.activeOutputIndex !== next.activeOutputIndex ||
+    JSON.stringify(current.generationOutputs ?? []) !== JSON.stringify(next.generationOutputs ?? []) ||
     current.generatedAt !== next.generatedAt ||
     current.errorDetails !== next.errorDetails
   )
@@ -1857,6 +1859,50 @@ function InfoField({ label, value }: { label: string; value: string }) {
   )
 }
 
+function generationOutputsForNode(node: CanvasNode) {
+  return node.metadata.generationOutputs?.filter((output) => output.content) ?? []
+}
+
+function selectGenerationOutput(output: CanvasGenerationJobResult, index: number): Partial<CanvasNode> {
+  return {
+    metadata: {
+      content: output.content,
+      mimeType: output.mimeType,
+      bytes: output.bytes,
+      naturalWidth: output.naturalWidth,
+      naturalHeight: output.naturalHeight,
+      activeOutputIndex: index,
+    },
+  }
+}
+
+function GenerationOutputSwitcher({
+  node,
+  onUpdate,
+}: {
+  node: CanvasNode
+  onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
+}) {
+  const outputs = generationOutputsForNode(node)
+  if (outputs.length <= 1) return null
+  const activeIndex = Math.min(Math.max(node.metadata.activeOutputIndex ?? 0, 0), outputs.length - 1)
+
+  return (
+    <div className="generation-output-switcher" data-canvas-input>
+      <span>{outputs.length} 个结果</span>
+      {outputs.map((output, index) => (
+        <button
+          key={`${output.content}-${index}`}
+          className={index === activeIndex ? 'active' : ''}
+          onClick={() => onUpdate(node.id, selectGenerationOutput(output, index))}
+        >
+          {index + 1}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function NodeBody({
   node,
   generationContext,
@@ -1885,14 +1931,28 @@ function NodeBody({
   if (node.type === 'image') {
     return (
       <div className="node-body media-body">
-        {node.metadata.content ? <img src={node.metadata.content} alt={node.title} /> : <span>{node.metadata.prompt ? `已创建图片生成任务：${node.metadata.prompt}` : '图片结果或参考图会显示在这里'}</span>}
+        {node.metadata.content ? (
+          <>
+            <img src={node.metadata.content} alt={node.title} />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} />
+          </>
+        ) : (
+          <span>{node.metadata.prompt ? `已创建图片生成任务：${node.metadata.prompt}` : '图片结果或参考图会显示在这里'}</span>
+        )}
       </div>
     )
   }
   if (node.type === 'video') {
     return (
       <div className="node-body media-body">
-        {node.metadata.content ? <video src={node.metadata.content} controls /> : <span>{node.metadata.prompt ? `已创建视频生成任务：${node.metadata.prompt}` : '视频结果、首帧或参考视频会显示在这里'}</span>}
+        {node.metadata.content ? (
+          <>
+            <video src={node.metadata.content} controls />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} />
+          </>
+        ) : (
+          <span>{node.metadata.prompt ? `已创建视频生成任务：${node.metadata.prompt}` : '视频结果、首帧或参考视频会显示在这里'}</span>
+        )}
       </div>
     )
   }
@@ -1905,6 +1965,7 @@ function NodeBody({
             <strong>{node.title || '音频节点'}</strong>
             <span>{node.metadata.mimeType || 'audio'}</span>
             <audio src={node.metadata.content} controls data-canvas-input />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} />
           </div>
         ) : (
           <span>音频素材、配音或音乐参考会显示在这里</span>

@@ -239,5 +239,29 @@ describe('canvas generation context', () => {
       generatedAt: '2026-07-19T10:05:00.000Z',
       errorDetails: '',
     })
+    expect(metadataFromGenerationJob(
+      {
+        ...baseJob,
+        status: 'succeeded',
+        updatedAt: '2026-07-19T10:06:00.000Z',
+        result: {
+          content: 'data:image/png;base64,first',
+          mimeType: 'image/png',
+          outputs: [
+            { content: 'data:image/png;base64,first', mimeType: 'image/png', naturalWidth: 64, naturalHeight: 64 },
+            { content: 'data:image/png;base64,second', mimeType: 'image/png', naturalWidth: 128, naturalHeight: 96 },
+          ],
+        },
+      },
+      { activeOutputIndex: 1 },
+    )).toMatchObject({
+      status: 'success',
+      content: 'data:image/png;base64,second',
+      activeOutputIndex: 1,
+      generationOutputs: [
+        { content: 'data:image/png;base64,first', naturalWidth: 64 },
+        { content: 'data:image/png;base64,second', naturalWidth: 128 },
+      ],
+    })
   })
 })

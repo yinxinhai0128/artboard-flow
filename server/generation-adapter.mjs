@@ -19,13 +19,32 @@ export function normalizeGenerationJobPayload(input = {}) {
 
 export function normalizeGenerationJobResult(input = {}) {
   const result = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const explicitOutputs = Array.isArray(result.outputs) ? result.outputs.flatMap(normalizeSingleGenerationOutput) : []
+  const primary = normalizeSingleGenerationOutput(result)[0] ?? explicitOutputs[0] ?? {
+    content: '',
+    mimeType: undefined,
+    bytes: undefined,
+    naturalWidth: undefined,
+    naturalHeight: undefined,
+  }
+  const outputs = explicitOutputs.length ? explicitOutputs : primary.content ? [primary] : []
   return {
-    content: typeof result.content === 'string' ? result.content : typeof result.url === 'string' ? result.url : '',
+    ...primary,
+    outputs,
+  }
+}
+
+function normalizeSingleGenerationOutput(input = {}) {
+  const result = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const content = typeof result.content === 'string' ? result.content : typeof result.url === 'string' ? result.url : ''
+  if (!content) return []
+  return [{
+    content,
     mimeType: typeof result.mimeType === 'string' ? result.mimeType : undefined,
     bytes: Number.isFinite(result.bytes) ? result.bytes : undefined,
     naturalWidth: Number.isFinite(result.naturalWidth) ? result.naturalWidth : Number.isFinite(result.width) ? result.width : undefined,
     naturalHeight: Number.isFinite(result.naturalHeight) ? result.naturalHeight : Number.isFinite(result.height) ? result.height : undefined,
-  }
+  }]
 }
 
 export function normalizeGenerationJobStatus(value) {
