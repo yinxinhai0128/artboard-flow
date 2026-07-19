@@ -326,6 +326,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [sidePanelQuery, setSidePanelQuery] = useState('')
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
   const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null)
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null)
 
@@ -378,6 +379,20 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   }, [controller.project.connections, controller.project.nodes])
   const selectedSingleNodeId = controller.selectedNodeIds.length === 1 ? controller.selectedNodeIds[0] : null
   const toolbarNode = (selectedSingleNodeId ? nodesById.get(selectedSingleNodeId) : null) ?? (toolbarNodeId ? nodesById.get(toolbarNodeId) : null) ?? null
+  const activeRelationNodeId = controller.selectedNodeIds.length > 1 ? null : hoveredNodeId ?? selectedSingleNodeId
+  const relatedHighlight = useMemo(() => {
+    const nodeIds = new Set<string>()
+    const connectionIds = new Set<string>()
+    if (!activeRelationNodeId) return { nodeIds, connectionIds }
+    nodeIds.add(activeRelationNodeId)
+    renderableConnections.forEach((connection) => {
+      if (connection.fromNodeId !== activeRelationNodeId && connection.toNodeId !== activeRelationNodeId) return
+      connectionIds.add(connection.id)
+      nodeIds.add(connection.fromNodeId)
+      nodeIds.add(connection.toNodeId)
+    })
+    return { nodeIds, connectionIds }
+  }, [activeRelationNodeId, renderableConnections])
   const infoNode = infoNodeId ? nodesById.get(infoNodeId) ?? null : null
   const previewNode = previewNodeId ? nodesById.get(previewNodeId) ?? null : null
   const infoNodeRelations = useMemo(
@@ -1312,7 +1327,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               {renderableConnections.map((connection) => {
                 const endpoints = connectionEndpoints(connection, renderableNodes)
                 if (!endpoints) return null
-                const related = controller.selectedNodeIds.includes(connection.fromNodeId) || controller.selectedNodeIds.includes(connection.toNodeId)
+                const related = relatedHighlight.connectionIds.has(connection.id)
                 const selected = controller.selectedConnectionId === connection.id
                 const path = connectionPath(endpoints.start, endpoints.end)
                 return (
@@ -1358,11 +1373,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 key={node.id}
                 node={node}
                 selected={controller.selectedNodeIds.includes(node.id)}
-                related={controller.project.connections.some(
-                  (connection) =>
-                    controller.selectedNodeIds.includes(connection.fromNodeId) && connection.toNodeId === node.id ||
-                    controller.selectedNodeIds.includes(connection.toNodeId) && connection.fromNodeId === node.id,
-                )}
+                related={relatedHighlight.nodeIds.has(node.id)}
                 onPointerDown={handleNodePointerDown}
                 onResizePointerDown={handleResizePointerDown}
                 onStartConnection={startConnection}
@@ -1377,7 +1388,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 splitOutputCount={splitOutputCounts.get(node.id) ?? 0}
                 onSplitGenerationOutputs={splitGenerationOutputs}
                 onToggleSplitOutputs={toggleSplitOutputs}
-                onHoverStart={setToolbarNodeId}
+                onHoverStart={(nodeId) => {
+                  setToolbarNodeId(nodeId)
+                  setHoveredNodeId(nodeId)
+                }}
+                onHoverEnd={(nodeId) => setHoveredNodeId((current) => (current === nodeId ? null : current))}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnecting={Boolean(connectionDraft)}
                 connectionOrigin={connectionDraft?.nodeId === node.id}
@@ -1624,6 +1639,7 @@ function CanvasNodeView({
   onSplitGenerationOutputs,
   onToggleSplitOutputs,
   onHoverStart,
+  onHoverEnd,
   onFinishConnectionToNode,
   isConnecting,
   connectionOrigin,
@@ -1648,6 +1664,7 @@ function CanvasNodeView({
   onSplitGenerationOutputs: (node: CanvasNode) => void
   onToggleSplitOutputs: (node: CanvasNode) => void
   onHoverStart: (nodeId: string) => void
+  onHoverEnd: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnecting: boolean
   connectionOrigin: boolean
@@ -1666,6 +1683,7 @@ function CanvasNodeView({
       className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${hasSplitChildren ? 'split-root' : ''} ${isSplitCollapsed ? 'split-collapsed' : ''} ${isSplitChild ? 'split-child' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionOrigin ? 'connection-origin' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
       onMouseEnter={() => onHoverStart(node.id)}
+      onMouseLeave={() => onHoverEnd(node.id)}
       onContextMenu={(event) => onContextMenu(event, node.id)}
       onPointerDown={(event) => {
         if (isValidConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
