@@ -198,9 +198,13 @@ describe('canvas generation context', () => {
       submittedAt: '2026-07-19T10:00:00.000Z',
       errorDetails: '',
     })
-    expect(metadataFromGenerationJob({ ...baseJob, status: 'failed', error: 'provider timeout' })).toMatchObject({
+    expect(metadataFromGenerationJob(
+      { ...baseJob, status: 'failed', error: 'provider timeout' },
+      { content: 'data:image/png;base64,old', mimeType: 'image/png', naturalWidth: 16, naturalHeight: 16 },
+    )).toMatchObject({
       status: 'error',
       generationJobStatus: 'failed',
+      content: '',
       errorDetails: 'provider timeout',
     })
     expect(metadataFromGenerationJob({

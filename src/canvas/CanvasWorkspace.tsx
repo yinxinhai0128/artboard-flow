@@ -1420,7 +1420,10 @@ function NodeBody({
   onSubmitGenerationTask: (nodeId: string) => void
   onRefreshGenerationTask: (nodeId: string) => void
 }) {
-  if (node.metadata.generationPayload && !node.metadata.content) {
+  const shouldRenderGenerationTask = Boolean(node.metadata.generationPayload)
+    && (!node.metadata.content || node.metadata.status === 'loading' || node.metadata.status === 'error')
+
+  if (shouldRenderGenerationTask) {
     return <GenerationTaskBody node={node} onRetry={onRetryGenerationTask} onSubmit={onSubmitGenerationTask} onRefresh={onRefreshGenerationTask} />
   }
   if (node.type === 'image') {

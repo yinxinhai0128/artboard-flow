@@ -126,6 +126,11 @@ export function metadataFromGenerationJob(job: CanvasGenerationJob, current: Can
     return {
       ...base,
       status: 'error',
+      content: '',
+      mimeType: undefined,
+      bytes: undefined,
+      naturalWidth: undefined,
+      naturalHeight: undefined,
       errorDetails: job.error || '生成任务失败',
     }
   }
