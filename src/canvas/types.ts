@@ -25,6 +25,28 @@ export type CanvasGenerationPayload = {
   createdAt: string
 }
 
+export type CanvasGenerationJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+
+export type CanvasGenerationJobResult = {
+  content: string
+  mimeType?: string
+  bytes?: number
+  naturalWidth?: number
+  naturalHeight?: number
+}
+
+export type CanvasGenerationJob = {
+  id: string
+  projectId: string
+  nodeId: string
+  status: CanvasGenerationJobStatus
+  createdAt: string
+  updatedAt: string
+  payload: CanvasGenerationPayload
+  result: CanvasGenerationJobResult | null
+  error?: string
+}
+
 export type Point = {
   x: number
   y: number
@@ -53,6 +75,9 @@ export type CanvasNode = {
     generationMode?: CanvasGenerationMode
     composerContent?: string
     generationPayload?: CanvasGenerationPayload
+    generationJobId?: string
+    generationJobStatus?: CanvasGenerationJobStatus
+    submittedAt?: string
     generatedAt?: string
     outputNodeId?: string
     model?: string

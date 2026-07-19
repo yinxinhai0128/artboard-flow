@@ -1,4 +1,4 @@
-import type { CanvasProject } from './types'
+import type { CanvasGenerationJob, CanvasGenerationPayload, CanvasProject } from './types'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -37,4 +37,10 @@ export const canvasApi = {
       method: 'DELETE',
       body: JSON.stringify({ ids }),
     }),
+  submitGenerationJob: (projectId: string, nodeId: string, payload: CanvasGenerationPayload) =>
+    request<CanvasGenerationJob>('/api/generation/jobs', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, nodeId, payload }),
+    }),
+  getGenerationJob: (id: string) => request<CanvasGenerationJob>(`/api/generation/jobs/${id}`),
 }

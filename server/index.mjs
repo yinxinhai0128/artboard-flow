@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { normalizeGenerationJobPayload, normalizeGenerationJobResult, normalizeGenerationJobStatus, parseGenerationJob } from './generation-adapter.mjs'
 
 const app = Fastify({ logger: true })
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -18,6 +19,18 @@ db.exec(`
     created_at text not null,
     updated_at text not null,
     document_json text not null
+  );
+
+  create table if not exists generation_jobs (
+    id text primary key,
+    project_id text not null,
+    node_id text not null,
+    status text not null,
+    created_at text not null,
+    updated_at text not null,
+    payload_json text not null,
+    result_json text,
+    error text
   );
 `)
 
@@ -188,6 +201,84 @@ app.delete('/api/projects', async (request) => {
   })
   transaction(ids)
   return { ok: true, deleted: ids.length }
+})
+
+app.post('/api/generation/jobs', async (request, reply) => {
+  const body = request.body && typeof request.body === 'object' ? request.body : {}
+  const projectId = typeof body.projectId === 'string' ? body.projectId : ''
+  const nodeId = typeof body.nodeId === 'string' ? body.nodeId : ''
+  if (!projectId || !nodeId) return reply.code(400).send({ error: 'INVALID_GENERATION_JOB_TARGET' })
+
+  const row = db.prepare('select id from projects where id = ?').get(projectId)
+  if (!row) return reply.code(404).send({ error: 'PROJECT_NOT_FOUND' })
+
+  const createdAt = nowIso()
+  const payload = normalizeGenerationJobPayload(body.payload)
+  const job = {
+    id: id(),
+    projectId,
+    nodeId,
+    status: 'queued',
+    createdAt,
+    updatedAt: createdAt,
+    payload,
+    result: null,
+    error: undefined,
+  }
+  db.prepare(`
+    insert into generation_jobs (id, project_id, node_id, status, created_at, updated_at, payload_json, result_json, error)
+    values (?, ?, ?, ?, ?, ?, ?, null, null)
+  `).run(job.id, job.projectId, job.nodeId, job.status, job.createdAt, job.updatedAt, JSON.stringify(job.payload))
+
+  return reply.code(201).send(job)
+})
+
+app.get('/api/generation/jobs', async (request) => {
+  const projectId = typeof request.query?.projectId === 'string' ? request.query.projectId : ''
+  const nodeId = typeof request.query?.nodeId === 'string' ? request.query.nodeId : ''
+  const clauses = []
+  const values = []
+  if (projectId) {
+    clauses.push('project_id = ?')
+    values.push(projectId)
+  }
+  if (nodeId) {
+    clauses.push('node_id = ?')
+    values.push(nodeId)
+  }
+  const where = clauses.length ? `where ${clauses.join(' and ')}` : ''
+  const rows = db.prepare(`
+    select * from generation_jobs
+    ${where}
+    order by datetime(updated_at) desc
+    limit 100
+  `).all(...values)
+  return rows.map(parseGenerationJob)
+})
+
+app.get('/api/generation/jobs/:id', async (request, reply) => {
+  const row = db.prepare('select * from generation_jobs where id = ?').get(request.params.id)
+  if (!row) return reply.code(404).send({ error: 'GENERATION_JOB_NOT_FOUND' })
+  return parseGenerationJob(row)
+})
+
+app.put('/api/generation/jobs/:id', async (request, reply) => {
+  const previous = db.prepare('select * from generation_jobs where id = ?').get(request.params.id)
+  if (!previous) return reply.code(404).send({ error: 'GENERATION_JOB_NOT_FOUND' })
+
+  const body = request.body && typeof request.body === 'object' ? request.body : {}
+  const status = normalizeGenerationJobStatus(body.status)
+  const result = status === 'succeeded' ? normalizeGenerationJobResult(body.result) : null
+  const error = status === 'failed' ? String(body.error || 'Generation failed') : null
+  const updatedAt = nowIso()
+  db.prepare(`
+    update generation_jobs
+    set status = ?, updated_at = ?, result_json = ?, error = ?
+    where id = ?
+  `).run(status, updatedAt, result ? JSON.stringify(result) : null, error, request.params.id)
+
+  const row = db.prepare('select * from generation_jobs where id = ?').get(request.params.id)
+  return parseGenerationJob(row)
 })
 
 const port = Number(process.env.PORT || 8787)

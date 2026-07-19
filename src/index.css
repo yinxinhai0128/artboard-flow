@@ -1146,6 +1146,12 @@ button:disabled {
   border-color: rgba(96, 165, 250, 0.42);
 }
 
+.generation-task-actions button:disabled {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: not-allowed;
+}
+
 .port {
   position: absolute;
   top: 50%;

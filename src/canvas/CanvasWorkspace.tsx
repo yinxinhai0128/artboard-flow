@@ -4,6 +4,7 @@ import { connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetP
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
+import { canvasApi } from './api'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -139,6 +140,13 @@ const statusLabels: Record<NonNullable<CanvasNode['metadata']['status']>, string
   success: '已完成',
   error: '失败',
 }
+
+const jobStatusLabels = {
+  queued: '已提交',
+  running: '运行中',
+  succeeded: '已完成',
+  failed: '失败',
+} satisfies Record<NonNullable<CanvasNode['metadata']['generationJobStatus']>, string>
 
 function payloadModeLabel(mode: CanvasGenerationContext['mode']) {
   if (mode === 'video') return '生视频'
@@ -767,6 +775,85 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller, createGenerationTaskNode, nodesById],
   )
 
+  const submitGenerationTaskNode = useCallback(
+    async (taskNodeId: string) => {
+      const taskNode = nodesById.get(taskNodeId)
+      const payload = taskNode?.metadata.generationPayload
+      if (!payload) return
+      try {
+        const job = await canvasApi.submitGenerationJob(controller.project.id, taskNodeId, payload)
+        controller.updateNode(taskNodeId, {
+          metadata: {
+            status: 'loading',
+            errorDetails: '',
+            generationJobId: job.id,
+            generationJobStatus: job.status,
+            submittedAt: job.createdAt,
+          },
+        })
+      } catch (error) {
+        controller.updateNode(taskNodeId, {
+          metadata: {
+            status: 'error',
+            errorDetails: error instanceof Error ? error.message : '提交生成任务失败',
+          },
+        })
+      }
+    },
+    [controller, nodesById],
+  )
+
+  const refreshGenerationTaskNode = useCallback(
+    async (taskNodeId: string) => {
+      const taskNode = nodesById.get(taskNodeId)
+      const jobId = taskNode?.metadata.generationJobId
+      if (!jobId) return
+      try {
+        const job = await canvasApi.getGenerationJob(jobId)
+        if (job.status === 'failed') {
+          controller.updateNode(taskNodeId, {
+            metadata: {
+              status: 'error',
+              generationJobStatus: job.status,
+              errorDetails: job.error || '生成任务失败',
+            },
+          })
+          return
+        }
+        if (job.status === 'succeeded') {
+          controller.updateNode(taskNodeId, {
+            metadata: {
+              status: 'success',
+              generationJobStatus: job.status,
+              content: job.result?.content || taskNode?.metadata.content,
+              mimeType: job.result?.mimeType || taskNode?.metadata.mimeType,
+              bytes: job.result?.bytes || taskNode?.metadata.bytes,
+              naturalWidth: job.result?.naturalWidth || taskNode?.metadata.naturalWidth,
+              naturalHeight: job.result?.naturalHeight || taskNode?.metadata.naturalHeight,
+              errorDetails: '',
+            },
+          })
+          return
+        }
+        controller.updateNode(taskNodeId, {
+          metadata: {
+            status: 'loading',
+            generationJobStatus: job.status,
+            errorDetails: '',
+          },
+        })
+      } catch (error) {
+        controller.updateNode(taskNodeId, {
+          metadata: {
+            status: 'error',
+            errorDetails: error instanceof Error ? error.message : '刷新生成任务状态失败',
+          },
+        })
+      }
+    },
+    [controller, nodesById],
+  )
+
   return (
     <div className="workspace">
       <header className="topbar">
@@ -964,6 +1051,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 generationContext={node.type === 'config' ? generationContextByConfigId.get(node.id) ?? null : null}
                 onCreateGenerationTask={createGenerationTaskNode}
                 onRetryGenerationTask={retryGenerationTaskNode}
+                onSubmitGenerationTask={submitGenerationTaskNode}
+                onRefreshGenerationTask={refreshGenerationTaskNode}
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnectionTarget={Boolean(connectionDraft && connectionDraft.nodeId !== node.id)}
@@ -1090,6 +1179,8 @@ function CanvasNodeView({
   generationContext,
   onCreateGenerationTask,
   onRetryGenerationTask,
+  onSubmitGenerationTask,
+  onRefreshGenerationTask,
   onHoverStart,
   onFinishConnectionToNode,
   isConnectionTarget,
@@ -1107,6 +1198,8 @@ function CanvasNodeView({
   generationContext: CanvasGenerationContext | null
   onCreateGenerationTask: (nodeId: string) => void
   onRetryGenerationTask: (nodeId: string) => void
+  onSubmitGenerationTask: (nodeId: string) => void
+  onRefreshGenerationTask: (nodeId: string) => void
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnectionTarget: boolean
@@ -1148,7 +1241,16 @@ function CanvasNodeView({
           onChange={(event) => onUpdate(node.id, { title: event.target.value }, false)}
         />
       </header>
-      <NodeBody node={node} generationContext={generationContext} onUpdate={onUpdate} onCaptureHistory={onCaptureHistory} onCreateGenerationTask={onCreateGenerationTask} onRetryGenerationTask={onRetryGenerationTask} />
+      <NodeBody
+        node={node}
+        generationContext={generationContext}
+        onUpdate={onUpdate}
+        onCaptureHistory={onCaptureHistory}
+        onCreateGenerationTask={onCreateGenerationTask}
+        onRetryGenerationTask={onRetryGenerationTask}
+        onSubmitGenerationTask={onSubmitGenerationTask}
+        onRefreshGenerationTask={onRefreshGenerationTask}
+      />
       <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
       {resizeCorners.map((corner) => (
         <button
@@ -1341,6 +1443,8 @@ function NodeBody({
   onCaptureHistory,
   onCreateGenerationTask,
   onRetryGenerationTask,
+  onSubmitGenerationTask,
+  onRefreshGenerationTask,
 }: {
   node: CanvasNode
   generationContext: CanvasGenerationContext | null
@@ -1348,9 +1452,11 @@ function NodeBody({
   onCaptureHistory: () => void
   onCreateGenerationTask: (nodeId: string) => void
   onRetryGenerationTask: (nodeId: string) => void
+  onSubmitGenerationTask: (nodeId: string) => void
+  onRefreshGenerationTask: (nodeId: string) => void
 }) {
   if (node.metadata.generationPayload && !node.metadata.content) {
-    return <GenerationTaskBody node={node} onRetry={onRetryGenerationTask} />
+    return <GenerationTaskBody node={node} onRetry={onRetryGenerationTask} onSubmit={onSubmitGenerationTask} onRefresh={onRefreshGenerationTask} />
   }
   if (node.type === 'image') {
     return (
@@ -1470,10 +1576,21 @@ function NodeBody({
   )
 }
 
-function GenerationTaskBody({ node, onRetry }: { node: CanvasNode; onRetry: (nodeId: string) => void }) {
+function GenerationTaskBody({
+  node,
+  onRetry,
+  onSubmit,
+  onRefresh,
+}: {
+  node: CanvasNode
+  onRetry: (nodeId: string) => void
+  onSubmit: (nodeId: string) => void
+  onRefresh: (nodeId: string) => void
+}) {
   const payload = node.metadata.generationPayload
   if (!payload) return null
   const status = node.metadata.status ?? 'idle'
+  const jobStatus = node.metadata.generationJobStatus
   const serializedPayload = serializeCanvasGenerationPayload(payload)
 
   return (
@@ -1488,6 +1605,10 @@ function GenerationTaskBody({ node, onRetry }: { node: CanvasNode; onRetry: (nod
         <span>数量 {payload.count}</span>
       </div>
       <div className="generation-task-meta">
+        <span>Adapter {jobStatus ? jobStatusLabels[jobStatus] : '未提交'}</span>
+        {node.metadata.generationJobId ? <span>Job {node.metadata.generationJobId.slice(0, 8)}</span> : null}
+      </div>
+      <div className="generation-task-meta">
         <span>文本 {payload.summary.text}</span>
         <span>图片 {payload.summary.image}</span>
         <span>视频 {payload.summary.video}</span>
@@ -1499,6 +1620,12 @@ function GenerationTaskBody({ node, onRetry }: { node: CanvasNode; onRetry: (nod
         <pre>{serializedPayload}</pre>
       </details>
       <div className="generation-task-actions">
+        <button data-canvas-input disabled={status === 'loading'} onClick={() => onSubmit(node.id)}>
+          提交 Adapter
+        </button>
+        <button data-canvas-input disabled={!node.metadata.generationJobId} onClick={() => onRefresh(node.id)}>
+          刷新状态
+        </button>
         <button data-canvas-input onClick={() => void navigator.clipboard?.writeText(serializedPayload)}>
           复制 Payload
         </button>
