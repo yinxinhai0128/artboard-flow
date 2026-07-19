@@ -1124,6 +1124,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             node={toolbarNode}
             viewport={controller.project.viewport}
             onInfo={(node) => setInfoNodeId(node.id)}
+            onCreateGenerationTask={(node) => createGenerationTaskNode(node.id)}
+            onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
             onDownload={downloadNodeContent}
             onDelete={(node) => {
@@ -1362,6 +1364,8 @@ function NodeHoverToolbar({
   node,
   viewport,
   onInfo,
+  onCreateGenerationTask,
+  onRetryGenerationTask,
   onDuplicate,
   onDownload,
   onDelete,
@@ -1370,6 +1374,8 @@ function NodeHoverToolbar({
   node: CanvasNode | null
   viewport: { x: number; y: number; k: number }
   onInfo: (node: CanvasNode) => void
+  onCreateGenerationTask: (node: CanvasNode) => void
+  onRetryGenerationTask: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
   onDownload: (node: CanvasNode) => void
   onDelete: (node: CanvasNode) => void
@@ -1378,6 +1384,8 @@ function NodeHoverToolbar({
   if (!node) return null
   const left = viewport.x + (node.position.x + node.width / 2) * viewport.k
   const top = Math.max(12, viewport.y + node.position.y * viewport.k - 12)
+  const canCreateGenerationTask = node.type === 'config'
+  const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
 
   return (
     <div
@@ -1391,6 +1399,18 @@ function NodeHoverToolbar({
         <Info size={15} />
         信息
       </button>
+      {canCreateGenerationTask ? (
+        <button title="从配置创建生成任务" onClick={() => onCreateGenerationTask(node)}>
+          <Play size={15} />
+          生成
+        </button>
+      ) : null}
+      {canRetryGenerationTask ? (
+        <button title="重建生成任务" onClick={() => onRetryGenerationTask(node)}>
+          <RotateCcw size={15} />
+          重试
+        </button>
+      ) : null}
       <button title="复制节点" onClick={() => onDuplicate(node)}>
         <Copy size={15} />
         复制
