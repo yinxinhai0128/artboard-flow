@@ -267,6 +267,39 @@ function downloadNodeContent(node: CanvasNode) {
   anchor.click()
 }
 
+function nodeCopyPayload(node: CanvasNode) {
+  if (node.type === 'config') return node.metadata.composerContent || node.metadata.prompt || (node.metadata.generationPayload ? serializeCanvasGenerationPayload(node.metadata.generationPayload) : '')
+  if (node.type === 'text') return node.metadata.content || node.metadata.prompt || ''
+  return node.metadata.prompt || node.metadata.content || ''
+}
+
+function canCopyNodePayload(node: CanvasNode) {
+  return Boolean(nodeCopyPayload(node).trim())
+}
+
+async function copyTextToClipboard(text: string) {
+  if (!text.trim()) return
+  try {
+    await navigator.clipboard.writeText(text)
+    return
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    textarea.style.top = '0'
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+    document.execCommand('copy')
+    textarea.remove()
+  }
+}
+
+function copyNodePayload(node: CanvasNode) {
+  return copyTextToClipboard(nodeCopyPayload(node))
+}
+
 export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: CanvasWorkspaceProps) {
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -344,6 +377,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     () => contextMenu?.type === 'connection' ? getConnectionNodePair(controller.project, contextMenu.connectionId) : null,
     [contextMenu, controller.project],
   )
+  const contextNode = contextMenu?.type === 'node' ? nodesById.get(contextMenu.nodeId) ?? null : null
 
   const clientPoint = useCallback((event: { clientX: number; clientY: number }) => {
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -1436,6 +1470,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
+            onCopyContent={(node) => void copyNodePayload(node)}
             onUpload={openMediaUpload}
             onDownload={downloadNodeContent}
             onDelete={(node) => {
@@ -1461,10 +1496,15 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       {contextMenu ? (
         <CanvasContextMenuView
           menu={contextMenu}
+          node={contextNode}
           connectionPair={contextConnectionPair}
           onClose={() => setContextMenu(null)}
           onDuplicate={() => {
             if (contextMenu.type === 'node') controller.duplicateNode(contextMenu.nodeId)
+            setContextMenu(null)
+          }}
+          onCopyContent={() => {
+            if (contextNode) void copyNodePayload(contextNode)
             setContextMenu(null)
           }}
           onFocusNode={(node) => {
@@ -1736,16 +1776,20 @@ function NodeCreateMenu({
 
 function CanvasContextMenuView({
   menu,
+  node,
   connectionPair,
   onClose,
   onDuplicate,
+  onCopyContent,
   onFocusNode,
   onDelete,
 }: {
   menu: NonNullable<CanvasContextMenu>
+  node: CanvasNode | null
   connectionPair: ConnectionNodePair | null
   onClose: () => void
   onDuplicate: () => void
+  onCopyContent: () => void
   onFocusNode: (node: CanvasNode) => void
   onDelete: () => void
 }) {
@@ -1762,9 +1806,16 @@ function CanvasContextMenuView({
       onPointerDown={(event) => event.stopPropagation()}
     >
       {menu.type === 'node' ? (
-        <button onClick={onDuplicate}>
-          <Copy size={15} /> 复制节点
-        </button>
+        <>
+          <button onClick={onDuplicate}>
+            <Copy size={15} /> 复制节点
+          </button>
+          {node && canCopyNodePayload(node) ? (
+            <button onClick={onCopyContent}>
+              <FileJson size={15} /> 复制内容
+            </button>
+          ) : null}
+        </>
       ) : null}
       {menu.type === 'connection' && connectionPair ? (
         <div className="connection-menu-details">
@@ -1793,6 +1844,7 @@ function NodeHoverToolbar({
   onRetryGenerationTask,
   onStartConnection,
   onDuplicate,
+  onCopyContent,
   onUpload,
   onDownload,
   onDelete,
@@ -1805,6 +1857,7 @@ function NodeHoverToolbar({
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
+  onCopyContent: (node: CanvasNode) => void
   onUpload: (node: CanvasNode) => void
   onDownload: (node: CanvasNode) => void
   onDelete: (node: CanvasNode) => void
@@ -1850,8 +1903,14 @@ function NodeHoverToolbar({
       ) : null}
       <button title="复制节点" onClick={() => onDuplicate(node)}>
         <Copy size={15} />
-        复制
+        复制节点
       </button>
+      {canCopyNodePayload(node) ? (
+        <button title="复制节点正文、提示词或媒体地址" onClick={() => onCopyContent(node)}>
+          <FileJson size={15} />
+          复制内容
+        </button>
+      ) : null}
       {canUpload ? (
         <button title={node.metadata.content ? '替换媒体内容' : '上传媒体内容'} onClick={() => onUpload(node)}>
           <Upload size={15} />
