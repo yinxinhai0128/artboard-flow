@@ -1,4 +1,5 @@
 import { sourcePort, targetPort } from './geometry'
+import { CONFIG_REFERENCE_PATTERN } from './generation'
 import type { CanvasConnection, CanvasProject, Point } from './types'
 
 export type ConnectionDropTarget = {
@@ -72,13 +73,45 @@ export function findConnectionDropTarget(
 
 export function deleteSelectionFromProject(project: CanvasProject, nodeIds: string[], connectionId: string | null): CanvasProject {
   const selected = new Set(nodeIds)
+  const removedConnection = connectionId ? project.connections.find((connection) => connection.id === connectionId) : null
+  const removedInputByConfig = new Map<string, Set<string>>()
+  if (removedConnection) {
+    const target = project.nodes.find((node) => node.id === removedConnection.toNodeId)
+    if (target?.type === 'config') removedInputByConfig.set(target.id, new Set([removedConnection.fromNodeId]))
+  }
+  const deletedNodeIds = new Set(nodeIds)
+  const nextNodes = project.nodes
+    .filter((node) => !selected.has(node.id))
+    .map((node) => {
+      if (node.type !== 'config' || !node.metadata.composerContent) return node
+      const scopedRemovedIds = removedInputByConfig.get(node.id)
+      const removedIds = deletedNodeIds.size ? new Set([...deletedNodeIds, ...(scopedRemovedIds || [])]) : scopedRemovedIds
+      if (!removedIds?.size) return node
+      return {
+        ...node,
+        metadata: {
+          ...node.metadata,
+          composerContent: removeNodeReferences(node.metadata.composerContent, removedIds),
+        },
+      }
+    })
+
   return {
     ...project,
-    nodes: project.nodes.filter((node) => !selected.has(node.id)),
+    nodes: nextNodes,
     connections: project.connections.filter(
       (connection) => !selected.has(connection.fromNodeId) && !selected.has(connection.toNodeId) && connection.id !== connectionId,
     ),
   }
+}
+
+function removeNodeReferences(content: string, nodeIds: Set<string>) {
+  return content
+    .replace(CONFIG_REFERENCE_PATTERN, (token, nodeId: string) => (nodeIds.has(nodeId) ? '' : token))
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export function addConnectionToProject(project: CanvasProject, connection: CanvasConnection): CanvasProject {

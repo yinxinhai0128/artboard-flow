@@ -59,6 +59,48 @@ describe('canvas document operations', () => {
     expect(next.connections.map((connection) => connection.id)).toEqual(['ab', 'ca'])
   })
 
+  it('removes deleted node references from config composers', () => {
+    const source = {
+      ...project,
+      nodes: [
+        baseNode('prompt'),
+        baseNode('keep'),
+        { ...configNode('config'), metadata: { composerContent: '生成 @[node:prompt] 并保留 @[node:keep]' } },
+      ],
+      connections: [
+        { id: 'prompt-config', fromNodeId: 'prompt', toNodeId: 'config' },
+        { id: 'keep-config', fromNodeId: 'keep', toNodeId: 'config' },
+      ],
+    }
+
+    const next = deleteSelectionFromProject(source, ['prompt'], null)
+    const config = next.nodes.find((node) => node.id === 'config')
+
+    expect(config?.metadata.composerContent).toBe('生成 并保留 @[node:keep]')
+  })
+
+  it('removes disconnected input references only from the target config composer', () => {
+    const source = {
+      ...project,
+      nodes: [
+        baseNode('prompt'),
+        { ...configNode('config-a'), metadata: { composerContent: 'A @[node:prompt]' } },
+        { ...configNode('config-b'), metadata: { composerContent: 'B @[node:prompt]' } },
+      ],
+      connections: [
+        { id: 'prompt-config-a', fromNodeId: 'prompt', toNodeId: 'config-a' },
+        { id: 'prompt-config-b', fromNodeId: 'prompt', toNodeId: 'config-b' },
+      ],
+    }
+
+    const next = deleteSelectionFromProject(source, [], 'prompt-config-a')
+    const configA = next.nodes.find((node) => node.id === 'config-a')
+    const configB = next.nodes.find((node) => node.id === 'config-b')
+
+    expect(configA?.metadata.composerContent).toBe('A')
+    expect(configB?.metadata.composerContent).toBe('B @[node:prompt]')
+  })
+
   it('adds a new connection when both nodes exist', () => {
     const source = { ...project, connections: [] }
     const next = addConnectionToProject(source, { id: 'new-edge', fromNodeId: 'a', toNodeId: 'b' })
