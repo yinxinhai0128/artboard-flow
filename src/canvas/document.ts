@@ -48,6 +48,15 @@ export function normalizeConnectionForProject(
   return { fromNodeId: first.id, toNodeId: second.id }
 }
 
+export function resolveConnectionToNode(
+  project: CanvasProject,
+  draft: { nodeId: string; handleType: 'source' | 'target' },
+  targetNodeId: string,
+): Omit<CanvasConnection, 'id'> | null {
+  if (draft.nodeId === targetNodeId) return null
+  return normalizeConnectionForProject(project, draft.nodeId, targetNodeId, draft.handleType)
+}
+
 export function findConnectionDropTarget(
   project: CanvasProject,
   world: Point,

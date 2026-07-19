@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, pasteClipboardIntoProject, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, pasteClipboardIntoProject, resolveConnectionToNode, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -345,6 +345,18 @@ describe('canvas document operations', () => {
     expect(normalizeConnectionForProject(source, 'config', 'prompt', 'source')).toBeNull()
     expect(normalizeConnectionForProject(source, 'prompt', 'image', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
     expect(normalizeConnectionForProject(source, 'config', 'config-2', 'source')).toBeNull()
+  })
+
+  it('resolves direct node clicks while a connection is armed', () => {
+    const source = {
+      ...project,
+      nodes: [baseNode('prompt'), imageNode('image'), configNode('config'), configNode('config-2')],
+      connections: [],
+    }
+
+    expect(resolveConnectionToNode(source, { nodeId: 'prompt', handleType: 'source' }, 'image')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
+    expect(resolveConnectionToNode(source, { nodeId: 'config', handleType: 'target' }, 'prompt')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
+    expect(resolveConnectionToNode(source, { nodeId: 'config', handleType: 'source' }, 'config-2')).toBeNull()
   })
 
   it('finds connection drop targets by node body, handle radius, and invalid nearby nodes', () => {

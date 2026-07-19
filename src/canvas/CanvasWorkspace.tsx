@@ -5,7 +5,7 @@ import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDr
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
+import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, resolveConnectionToNode, type ConnectionNodePair, type NodeRelations } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -728,7 +728,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const finishConnectionToNode = useCallback(
     (toNodeId: string) => {
       const draft = connectionDraftRef.current
-      if (!draft || draft.nodeId === toNodeId) return false
+      if (!draft || !resolveConnectionToNode(controller.project, draft, toNodeId)) return false
       controller.connectNodes(draft.nodeId, toNodeId, draft.handleType)
       setActiveConnectionDraft(null)
       return true
@@ -850,19 +850,19 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       const draft = connectionDraftRef.current
       if (draft) {
         const dropTarget = draft.targetNodeId ? { nodeId: draft.targetNodeId, isNearNode: true, blockedNodeId: null } : findConnectionDropTargetFromEvent(event, draft)
-        if (dropTarget.nodeId && dropTarget.nodeId !== draft.nodeId) {
+        const dx = event.clientX - draft.startScreen.x
+        const dy = event.clientY - draft.startScreen.y
+        const isClickArmed = Math.hypot(dx, dy) < 6
+        if (isClickArmed) {
+          setActiveConnectionDraft({ ...draft, to: clientWorld(event), targetNodeId: undefined, blockedNodeId: undefined })
+        } else if (dropTarget.nodeId && dropTarget.nodeId !== draft.nodeId) {
           controller.connectNodes(draft.nodeId, dropTarget.nodeId, draft.handleType)
           setActiveConnectionDraft(null)
         } else if (dropTarget.isNearNode) {
           setActiveConnectionDraft(null)
         } else {
-          const dx = event.clientX - draft.startScreen.x
-          const dy = event.clientY - draft.startScreen.y
-          const isClickArmed = Math.hypot(dx, dy) < 6
-          if (!isClickArmed) {
-            setPendingConnectionCreate({ nodeId: draft.nodeId, handleType: draft.handleType, position: clientWorld(event) })
-            setActiveConnectionDraft(null)
-          }
+          setPendingConnectionCreate({ nodeId: draft.nodeId, handleType: draft.handleType, position: clientWorld(event) })
+          setActiveConnectionDraft(null)
         }
       }
       if (drag?.type === 'node') {
@@ -1753,7 +1753,6 @@ function CanvasNodeView({
   onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: string) => void
 }) {
   const Icon = nodeIcons[node.type]
-  const isValidConnectionTarget = connectionTargetState === 'valid'
   const hasSplitChildren = splitOutputCount > 0
   const isSplitCollapsed = hasSplitChildren && Boolean(node.metadata.splitChildrenCollapsed)
   const isSplitChild = Boolean(node.metadata.splitSourceNodeId)
@@ -1768,7 +1767,7 @@ function CanvasNodeView({
       onContextMenu={(event) => onContextMenu(event, node.id)}
       onPointerDownCapture={(event) => onInputPointerDown(event, node)}
       onPointerDown={(event) => {
-        if (isValidConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
+        if (isConnecting && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
           event.preventDefault()
           event.stopPropagation()
           onFinishConnectionToNode(node.id)
