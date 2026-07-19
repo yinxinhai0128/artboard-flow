@@ -39,6 +39,7 @@ describe('canvas geometry', () => {
   })
 
   it('creates a cubic bezier path for a connection', () => {
-    expect(connectionPath({ x: 10, y: 20 }, { x: 210, y: 80 })).toBe('M 10 20 C 100 20, 120 80, 210 80')
+    expect(connectionPath({ x: 10, y: 20 }, { x: 210, y: 80 })).toBe('M 10 20 C 110 20, 110 80, 210 80')
+    expect(connectionPath({ x: 10, y: 20 }, { x: 50, y: 80 })).toBe('M 10 20 C 60 20, 0 80, 50 80')
   })
 })

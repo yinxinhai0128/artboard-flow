@@ -534,10 +534,17 @@ button:disabled {
   cursor: pointer;
 }
 
-.connection-path.related,
+.connection-path.related {
+  stroke: var(--blue);
+  stroke-width: 2.5;
+  stroke-opacity: 0.72;
+}
+
 .connection-path.selected {
   stroke: var(--blue);
-  stroke-width: 3;
+  stroke-width: 3.25;
+  stroke-opacity: 1;
+  filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.55));
 }
 
 .connection-path.draft {

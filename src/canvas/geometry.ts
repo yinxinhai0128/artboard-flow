@@ -29,8 +29,7 @@ export function targetPort(node: CanvasNode): Point {
 }
 
 export function connectionPath(start: Point, end: Point): string {
-  const distance = Math.max(80, Math.abs(end.x - start.x))
-  const curve = distance * 0.45
+  const curve = Math.max(Math.abs(end.x - start.x) * 0.5, 50)
   return `M ${start.x} ${start.y} C ${start.x + curve} ${start.y}, ${end.x - curve} ${end.y}, ${end.x} ${end.y}`
 }
 
