@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, Download, FileJson, Image, Info, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
+import { Copy, Download, FileJson, HelpCircle, Image, Info, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -205,6 +205,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
   const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null)
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
   const visibleNodes = useMemo(
@@ -638,6 +639,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         setContextMenu(null)
         setToolbarNodeId(null)
         setInfoNodeId(null)
+        setShortcutsOpen(false)
         controller.clearSelection()
       }
     }
@@ -1089,6 +1091,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             >
               <RotateCcw size={16} />
             </button>
+            <button title="快捷键" onClick={() => setShortcutsOpen(true)}>
+              <HelpCircle size={16} />
+            </button>
             <span>{Math.round(controller.project.viewport.k * 100)}%</span>
           </div>
 
@@ -1135,6 +1140,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         }}
         onClose={() => setInfoNodeId(null)}
       />
+      <ShortcutHelpModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {contextMenu ? (
         <CanvasContextMenuView
           menu={contextMenu}
@@ -1155,6 +1161,50 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           }}
         />
       ) : null}
+    </div>
+  )
+}
+
+function ShortcutHelpModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null
+  return (
+    <div className="shortcut-help-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="shortcut-help-modal" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>画布操作</span>
+            <h2>快捷键</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="shortcut-help-list">
+          <ShortcutHelpRow keys={['拖动画布', '中键拖动']} value="平移视图" />
+          <ShortcutHelpRow keys={['滚轮', '缩放滑杆']} value="缩放画布" />
+          <ShortcutHelpRow keys={['Ctrl / Cmd', '拖动']} value="框选多个节点" />
+          <ShortcutHelpRow keys={['Shift / Ctrl / Cmd', '点击']} value="追加选择节点" />
+          <ShortcutHelpRow keys={['Ctrl / Cmd', 'A']} value="全选节点" />
+          <ShortcutHelpRow keys={['Ctrl / Cmd', 'C / V']} value="复制 / 粘贴节点，或粘贴剪贴板文本/图片" />
+          <ShortcutHelpRow keys={['Ctrl / Cmd', 'Z']} value="撤销" />
+          <ShortcutHelpRow keys={['Ctrl / Cmd', 'Shift', 'Z']} value="重做" />
+          <ShortcutHelpRow keys={['Ctrl / Cmd', 'Y']} value="重做" />
+          <ShortcutHelpRow keys={['Delete / Backspace']} value="删除选中" />
+          <ShortcutHelpRow keys={['Esc']} value="取消选择并关闭浮层" />
+          <ShortcutHelpRow keys={['拖入图片/视频/文件']} value="上传到画布生成节点" />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function ShortcutHelpRow({ keys, value }: { keys: string[]; value: string }) {
+  return (
+    <div className="shortcut-help-row">
+      <div>
+        {keys.map((key) => (
+          <kbd key={key}>{key}</kbd>
+        ))}
+      </div>
+      <span>{value}</span>
     </div>
   )
 }
