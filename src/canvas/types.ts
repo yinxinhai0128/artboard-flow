@@ -78,6 +78,8 @@ export type CanvasNode = {
     generationPayload?: CanvasGenerationPayload
     generationOutputs?: CanvasGenerationJobResult[]
     activeOutputIndex?: number
+    splitSourceNodeId?: string
+    splitOutputIndex?: number
     generationJobId?: string
     generationJobStatus?: CanvasGenerationJobStatus
     submittedAt?: string

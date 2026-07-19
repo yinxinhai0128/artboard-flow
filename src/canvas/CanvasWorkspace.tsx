@@ -310,6 +310,14 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     })
     return counts
   }, [controller.project.connections, controller.project.nodes])
+  const splitOutputCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    controller.project.nodes.forEach((node) => {
+      const sourceId = node.metadata.splitSourceNodeId
+      if (sourceId) counts.set(sourceId, (counts.get(sourceId) ?? 0) + 1)
+    })
+    return counts
+  }, [controller.project.nodes])
   const generationContextByConfigId = useMemo(() => {
     const contexts = new Map<string, CanvasGenerationContext>()
     controller.project.nodes.forEach((node) => {
@@ -894,6 +902,51 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [],
   )
 
+  const splitGenerationOutputs = useCallback(
+    (node: CanvasNode) => {
+      const outputs = generationOutputsForNode(node)
+      if (outputs.length <= 1 || node.type === 'config' || node.type === 'text') return
+      const existingIndexes = new Set(
+        controller.project.nodes
+          .filter((item) => item.metadata.splitSourceNodeId === node.id)
+          .map((item) => item.metadata.splitOutputIndex)
+          .filter((index): index is number => Number.isInteger(index)),
+      )
+      outputs.forEach((output, index) => {
+        if (existingIndexes.has(index)) return
+        const yOffset = index * Math.min(node.height + 36, 240)
+        controller.addConnectedNode(
+          node.type,
+          node.id,
+          'source',
+          { x: node.position.x + node.width + 120, y: node.position.y + yOffset },
+          {
+            title: `${node.title || nodeKindLabels[node.type]} · 结果 ${index + 1}`,
+            width: node.width,
+            height: node.height,
+            metadata: {
+              content: output.content,
+              status: 'success',
+              prompt: node.metadata.prompt,
+              mimeType: output.mimeType,
+              bytes: output.bytes,
+              naturalWidth: output.naturalWidth,
+              naturalHeight: output.naturalHeight,
+              splitSourceNodeId: node.id,
+              splitOutputIndex: index,
+              model: node.metadata.model,
+              size: node.metadata.size,
+              count: node.metadata.count,
+              generatedAt: node.metadata.generatedAt,
+            },
+          },
+        )
+      })
+      setToolbarNodeId(node.id)
+    },
+    [controller],
+  )
+
   const createGenerationTaskNode = useCallback(
     (configNodeId: string) => {
       const configNode = nodesById.get(configNodeId)
@@ -1254,6 +1307,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onRetryGenerationTask={retryGenerationTaskNode}
                 onSubmitGenerationTask={submitGenerationTaskNode}
                 onRefreshGenerationTask={refreshGenerationTaskNode}
+                splitOutputCount={splitOutputCounts.get(node.id) ?? 0}
+                onSplitGenerationOutputs={splitGenerationOutputs}
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnecting={Boolean(connectionDraft)}
@@ -1466,6 +1521,8 @@ function CanvasNodeView({
   onRetryGenerationTask,
   onSubmitGenerationTask,
   onRefreshGenerationTask,
+  splitOutputCount,
+  onSplitGenerationOutputs,
   onHoverStart,
   onFinishConnectionToNode,
   isConnecting,
@@ -1487,6 +1544,8 @@ function CanvasNodeView({
   onRetryGenerationTask: (nodeId: string) => void
   onSubmitGenerationTask: (nodeId: string) => void
   onRefreshGenerationTask: (nodeId: string) => void
+  splitOutputCount: number
+  onSplitGenerationOutputs: (node: CanvasNode) => void
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnecting: boolean
@@ -1540,6 +1599,8 @@ function CanvasNodeView({
         onRetryGenerationTask={onRetryGenerationTask}
         onSubmitGenerationTask={onSubmitGenerationTask}
         onRefreshGenerationTask={onRefreshGenerationTask}
+        splitOutputCount={splitOutputCount}
+        onSplitGenerationOutputs={onSplitGenerationOutputs}
       />
       {node.type !== 'config' ? (
         <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
@@ -1879,13 +1940,18 @@ function selectGenerationOutput(output: CanvasGenerationJobResult, index: number
 function GenerationOutputSwitcher({
   node,
   onUpdate,
+  splitOutputCount,
+  onSplit,
 }: {
   node: CanvasNode
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
+  splitOutputCount: number
+  onSplit: (node: CanvasNode) => void
 }) {
   const outputs = generationOutputsForNode(node)
   if (outputs.length <= 1) return null
   const activeIndex = Math.min(Math.max(node.metadata.activeOutputIndex ?? 0, 0), outputs.length - 1)
+  const hasSplitAllOutputs = splitOutputCount >= outputs.length
 
   return (
     <div className="generation-output-switcher" data-canvas-input>
@@ -1899,6 +1965,14 @@ function GenerationOutputSwitcher({
           {index + 1}
         </button>
       ))}
+      <button
+        className="split-action"
+        disabled={hasSplitAllOutputs}
+        title={hasSplitAllOutputs ? '已拆分为独立节点' : '拆分为独立节点'}
+        onClick={() => onSplit(node)}
+      >
+        {hasSplitAllOutputs ? '已拆分' : '拆分'}
+      </button>
     </div>
   )
 }
@@ -1912,6 +1986,8 @@ function NodeBody({
   onRetryGenerationTask,
   onSubmitGenerationTask,
   onRefreshGenerationTask,
+  splitOutputCount,
+  onSplitGenerationOutputs,
 }: {
   node: CanvasNode
   generationContext: CanvasGenerationContext | null
@@ -1921,6 +1997,8 @@ function NodeBody({
   onRetryGenerationTask: (nodeId: string) => void
   onSubmitGenerationTask: (nodeId: string) => void
   onRefreshGenerationTask: (nodeId: string) => void
+  splitOutputCount: number
+  onSplitGenerationOutputs: (node: CanvasNode) => void
 }) {
   const shouldRenderGenerationTask = Boolean(node.metadata.generationPayload)
     && (!node.metadata.content || node.metadata.status === 'loading' || node.metadata.status === 'error')
@@ -1934,7 +2012,7 @@ function NodeBody({
         {node.metadata.content ? (
           <>
             <img src={node.metadata.content} alt={node.title} />
-            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} />
           </>
         ) : (
           <span>{node.metadata.prompt ? `已创建图片生成任务：${node.metadata.prompt}` : '图片结果或参考图会显示在这里'}</span>
@@ -1948,7 +2026,7 @@ function NodeBody({
         {node.metadata.content ? (
           <>
             <video src={node.metadata.content} controls />
-            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} />
           </>
         ) : (
           <span>{node.metadata.prompt ? `已创建视频生成任务：${node.metadata.prompt}` : '视频结果、首帧或参考视频会显示在这里'}</span>
@@ -1965,7 +2043,7 @@ function NodeBody({
             <strong>{node.title || '音频节点'}</strong>
             <span>{node.metadata.mimeType || 'audio'}</span>
             <audio src={node.metadata.content} controls data-canvas-input />
-            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} />
           </div>
         ) : (
           <span>音频素材、配音或音乐参考会显示在这里</span>

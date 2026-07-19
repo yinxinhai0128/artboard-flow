@@ -1148,6 +1148,19 @@ button:disabled {
   background: var(--blue);
 }
 
+.generation-output-switcher button.split-action {
+  min-width: 42px;
+  color: #061018;
+  background: rgba(105, 226, 255, 0.9);
+}
+
+.generation-output-switcher button:disabled {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: default;
+  opacity: 0.64;
+}
+
 .config-body {
   display: grid;
   gap: 10px;
