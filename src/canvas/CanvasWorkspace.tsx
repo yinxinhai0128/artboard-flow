@@ -1021,6 +1021,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnecting={Boolean(connectionDraft)}
+                connectionOrigin={connectionDraft?.nodeId === node.id}
                 connectionTargetState={
                   connectionDraft?.targetNodeId === node.id
                     ? 'valid'
@@ -1172,6 +1173,7 @@ function CanvasNodeView({
   onHoverStart,
   onFinishConnectionToNode,
   isConnecting,
+  connectionOrigin,
   connectionTargetState,
   onContextMenu,
 }: {
@@ -1192,6 +1194,7 @@ function CanvasNodeView({
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnecting: boolean
+  connectionOrigin: boolean
   connectionTargetState: 'valid' | 'blocked' | null
   onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: string) => void
 }) {
@@ -1200,7 +1203,7 @@ function CanvasNodeView({
   return (
     <article
       data-node-id={node.id}
-      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
+      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionOrigin ? 'connection-origin' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
       onMouseEnter={() => onHoverStart(node.id)}
       onContextMenu={(event) => onContextMenu(event, node.id)}

@@ -882,6 +882,7 @@ button:disabled {
 
 .canvas-node {
   position: absolute;
+  z-index: 10;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(24, 24, 27, 0.96);
@@ -890,21 +891,33 @@ button:disabled {
   overflow: visible;
 }
 
+.canvas-node:hover {
+  z-index: 40;
+}
+
 .canvas-node.selected {
+  z-index: 50;
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.16), 0 16px 42px rgba(0, 0, 0, 0.36);
 }
 
 .canvas-node.related:not(.selected) {
+  z-index: 20;
   border-color: rgba(125, 211, 252, 0.45);
 }
 
+.canvas-node.connection-origin {
+  z-index: 60;
+}
+
 .canvas-node.connection-target-valid {
+  z-index: 65;
   border-color: rgba(134, 239, 172, 0.75);
   box-shadow: 0 0 0 2px rgba(134, 239, 172, 0.14), 0 16px 42px rgba(0, 0, 0, 0.36);
 }
 
 .canvas-node.connection-target-blocked {
+  z-index: 65;
   border-color: rgba(248, 113, 113, 0.62);
   box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.1), 0 16px 42px rgba(0, 0, 0, 0.28);
 }
