@@ -3,7 +3,7 @@ import { Copy, Download, FileJson, Image, Info, Minus, MousePointer2, Play, Plus
 import { connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { buildCanvasGenerationContext, buildCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
+import { buildCanvasGenerationContext, buildCanvasGenerationPayload, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -131,6 +131,19 @@ function appendReferenceToken(value: string | undefined, input: CanvasGeneration
   const current = value ?? ''
   if (current.includes(token)) return current
   return current.trim() ? `${current.trimEnd()} ${token}` : token
+}
+
+const statusLabels: Record<NonNullable<CanvasNode['metadata']['status']>, string> = {
+  idle: '待接入',
+  loading: '运行中',
+  success: '已完成',
+  error: '失败',
+}
+
+function payloadModeLabel(mode: CanvasGenerationContext['mode']) {
+  if (mode === 'video') return '生视频'
+  if (mode === 'text') return '生文本'
+  return '生图'
 }
 
 function canDownloadNode(node: CanvasNode) {
@@ -702,15 +715,6 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
       const outputType = context.mode === 'video' ? 'video' : context.mode === 'text' ? 'text' : 'image'
       const outputTitle = context.mode === 'video' ? '视频生成任务' : context.mode === 'text' ? '文本生成任务' : '图片生成任务'
-      const payload = [
-        `模式：${context.mode}`,
-        `模型：${context.model}`,
-        `尺寸：${context.size}`,
-        `数量：${context.count}`,
-        `输入：文本 ${context.summary.text} / 图片 ${context.summary.image} / 视频 ${context.summary.video}`,
-        '',
-        context.prompt || '无提示词',
-      ].join('\n')
       const generatedAt = new Date().toISOString()
       const generationPayload = buildCanvasGenerationPayload(context, generatedAt)
       const outputNode = controller.addConnectedNode(
@@ -725,7 +729,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           metadata: {
             status: 'idle',
             prompt: context.prompt,
-            content: outputType === 'text' ? payload : '',
+            content: '',
             generationPayload,
             model: context.model,
             size: context.size,
@@ -744,6 +748,23 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }, false)
     },
     [controller, nodesById],
+  )
+
+  const retryGenerationTaskNode = useCallback(
+    (taskNodeId: string) => {
+      const sourceConfigId = controller.project.connections.find((connection) => connection.toNodeId === taskNodeId && nodesById.get(connection.fromNodeId)?.type === 'config')?.fromNodeId
+      if (!sourceConfigId) {
+        controller.updateNode(taskNodeId, {
+          metadata: {
+            status: 'error',
+            errorDetails: '找不到这个任务节点对应的配置节点，请从配置节点重新创建任务。',
+          },
+        })
+        return
+      }
+      createGenerationTaskNode(sourceConfigId)
+    },
+    [controller, createGenerationTaskNode, nodesById],
   )
 
   return (
@@ -942,6 +963,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onCaptureHistory={controller.captureHistory}
                 generationContext={node.type === 'config' ? generationContextByConfigId.get(node.id) ?? null : null}
                 onCreateGenerationTask={createGenerationTaskNode}
+                onRetryGenerationTask={retryGenerationTaskNode}
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnectionTarget={Boolean(connectionDraft && connectionDraft.nodeId !== node.id)}
@@ -1067,6 +1089,7 @@ function CanvasNodeView({
   onCaptureHistory,
   generationContext,
   onCreateGenerationTask,
+  onRetryGenerationTask,
   onHoverStart,
   onFinishConnectionToNode,
   isConnectionTarget,
@@ -1083,6 +1106,7 @@ function CanvasNodeView({
   onCaptureHistory: () => void
   generationContext: CanvasGenerationContext | null
   onCreateGenerationTask: (nodeId: string) => void
+  onRetryGenerationTask: (nodeId: string) => void
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnectionTarget: boolean
@@ -1124,7 +1148,7 @@ function CanvasNodeView({
           onChange={(event) => onUpdate(node.id, { title: event.target.value }, false)}
         />
       </header>
-      <NodeBody node={node} generationContext={generationContext} onUpdate={onUpdate} onCaptureHistory={onCaptureHistory} onCreateGenerationTask={onCreateGenerationTask} />
+      <NodeBody node={node} generationContext={generationContext} onUpdate={onUpdate} onCaptureHistory={onCaptureHistory} onCreateGenerationTask={onCreateGenerationTask} onRetryGenerationTask={onRetryGenerationTask} />
       <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
       {resizeCorners.map((corner) => (
         <button
@@ -1316,13 +1340,18 @@ function NodeBody({
   onUpdate,
   onCaptureHistory,
   onCreateGenerationTask,
+  onRetryGenerationTask,
 }: {
   node: CanvasNode
   generationContext: CanvasGenerationContext | null
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   onCaptureHistory: () => void
   onCreateGenerationTask: (nodeId: string) => void
+  onRetryGenerationTask: (nodeId: string) => void
 }) {
+  if (node.metadata.generationPayload && !node.metadata.content) {
+    return <GenerationTaskBody node={node} onRetry={onRetryGenerationTask} />
+  }
   if (node.type === 'image') {
     return (
       <div className="node-body media-body">
@@ -1438,6 +1467,46 @@ function NodeBody({
       onFocus={onCaptureHistory}
       onChange={(event) => onUpdate(node.id, { metadata: { content: event.target.value } }, false)}
     />
+  )
+}
+
+function GenerationTaskBody({ node, onRetry }: { node: CanvasNode; onRetry: (nodeId: string) => void }) {
+  const payload = node.metadata.generationPayload
+  if (!payload) return null
+  const status = node.metadata.status ?? 'idle'
+  const serializedPayload = serializeCanvasGenerationPayload(payload)
+
+  return (
+    <div className="node-body generation-task-body" onWheel={(event) => event.stopPropagation()}>
+      <div className="generation-task-header">
+        <span className={`generation-status ${status}`}>{statusLabels[status]}</span>
+        <strong>{payloadModeLabel(payload.mode)}任务</strong>
+      </div>
+      <div className="generation-task-meta">
+        <span>模型 {payload.model}</span>
+        <span>尺寸 {payload.size}</span>
+        <span>数量 {payload.count}</span>
+      </div>
+      <div className="generation-task-meta">
+        <span>文本 {payload.summary.text}</span>
+        <span>图片 {payload.summary.image}</span>
+        <span>视频 {payload.summary.video}</span>
+      </div>
+      <p className="generation-task-prompt">{payload.prompt || '无提示词'}</p>
+      {node.metadata.errorDetails ? <em>{node.metadata.errorDetails}</em> : null}
+      <details>
+        <summary>查看 Payload</summary>
+        <pre>{serializedPayload}</pre>
+      </details>
+      <div className="generation-task-actions">
+        <button data-canvas-input onClick={() => void navigator.clipboard?.writeText(serializedPayload)}>
+          复制 Payload
+        </button>
+        <button data-canvas-input onClick={() => onRetry(node.id)}>
+          重建任务
+        </button>
+      </div>
+    </div>
   )
 }
 

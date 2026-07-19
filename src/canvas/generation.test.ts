@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload } from './generation'
+import { buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, serializeCanvasGenerationPayload } from './generation'
 import type { CanvasConnection, CanvasNode } from './types'
 
 const configNode: CanvasNode = {
@@ -161,6 +161,10 @@ describe('canvas generation context', () => {
         },
       },
     ])
+    expect(JSON.parse(serializeCanvasGenerationPayload(payload))).toMatchObject({
+      prompt: '只参考 图片1，不要使用视频。',
+      inputs: [{ nodeId: 'image', type: 'image' }],
+    })
   })
 
   it('reports an unready context when config has no prompt and no usable upstream input', () => {

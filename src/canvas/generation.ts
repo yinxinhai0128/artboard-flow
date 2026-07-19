@@ -112,6 +112,10 @@ export function buildCanvasGenerationPayload(context: CanvasGenerationContext, c
   }
 }
 
+export function serializeCanvasGenerationPayload(payload: CanvasGenerationPayload) {
+  return JSON.stringify(payload, null, 2)
+}
+
 function generationInputFromNode(node: CanvasNode): CanvasGenerationInput | null {
   if (node.type === 'config') return null
   if (node.type === 'text') {
