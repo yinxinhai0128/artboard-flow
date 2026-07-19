@@ -111,7 +111,7 @@ function normalizeConnections(value, nodes) {
     const from = nodesById.get(fromNodeId)
     const to = nodesById.get(toNodeId)
     if (!from || !to || from.type === 'group' || to.type === 'group') return []
-    if (from.type === 'config' && to.type === 'config') return []
+    if (from.type === 'config') return []
     const key = `${fromNodeId}->${toNodeId}`
     if (seen.has(key)) return []
     seen.add(key)

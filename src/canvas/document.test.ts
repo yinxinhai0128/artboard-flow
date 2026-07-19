@@ -305,6 +305,7 @@ describe('canvas document operations', () => {
     expect(normalizeConnectionForProject(source, 'prompt', 'config', 'source')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
     expect(normalizeConnectionForProject(source, 'prompt', 'config', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
     expect(normalizeConnectionForProject(source, 'config', 'prompt', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
+    expect(normalizeConnectionForProject(source, 'config', 'prompt', 'source')).toBeNull()
     expect(normalizeConnectionForProject(source, 'prompt', 'image', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
     expect(normalizeConnectionForProject(source, 'config', 'config-2', 'source')).toBeNull()
   })
@@ -327,13 +328,14 @@ describe('canvas document operations', () => {
     expect(findConnectionDropTarget(source, { x: 900, y: 300 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: null, isNearNode: false, blockedNodeId: null })
   })
 
-  it('prevents config-to-config connections in the document layer', () => {
+  it('prevents config nodes from acting as connection sources in the document layer', () => {
     const source = {
       ...project,
-      nodes: [configNode('config-a'), configNode('config-b')],
+      nodes: [configNode('config-a'), configNode('config-b'), imageNode('image')],
       connections: [],
     }
 
     expect(addConnectionToProject(source, { id: 'config-edge', fromNodeId: 'config-a', toNodeId: 'config-b' }).connections).toHaveLength(0)
+    expect(addConnectionToProject(source, { id: 'config-image', fromNodeId: 'config-a', toNodeId: 'image' }).connections).toHaveLength(0)
   })
 })
