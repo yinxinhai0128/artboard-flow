@@ -17,9 +17,9 @@ type CanvasWorkspaceProps = {
 type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 type DragState =
-  | { type: 'pan'; start: Point; viewportStart: Point }
-  | { type: 'node'; start: Point; nodeIds: string[] }
-  | { type: 'resize'; start: Point; node: CanvasNode; corner: ResizeCorner }
+  | { type: 'pan'; start: Point; viewportStart: Point; historyCaptured: boolean }
+  | { type: 'node'; start: Point; nodeIds: string[]; historyCaptured: boolean }
+  | { type: 'resize'; start: Point; node: CanvasNode; corner: ResizeCorner; historyCaptured: boolean }
   | null
 
 type CanvasContextMenu =
@@ -638,8 +638,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       })
       return
     }
-    controller.captureHistory()
-    dragRef.current = { type: 'pan', start: { x: event.clientX, y: event.clientY }, viewportStart: { x: controller.project.viewport.x, y: controller.project.viewport.y } }
+    dragRef.current = { type: 'pan', start: { x: event.clientX, y: event.clientY }, viewportStart: { x: controller.project.viewport.x, y: controller.project.viewport.y }, historyCaptured: false }
     if (isPrimaryButton) controller.clearSelection()
   }
 
@@ -692,8 +691,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const nodeIds = nextNodeSelection(controller.selectedNodeIds, node.id, additive)
     controller.selectNode(node.id, additive)
     if (!nodeIds.includes(node.id)) return
-    controller.captureHistory()
-    dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds: expandNodeIdsForMovement(controller.project.nodes, nodeIds) }
+    dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds: expandNodeIdsForMovement(controller.project.nodes, nodeIds), historyCaptured: false }
   }
 
   const selectNodeFromInput = (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => {
@@ -710,14 +708,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => {
     event.preventDefault()
     event.stopPropagation()
-    controller.captureHistory()
-    dragRef.current = { type: 'resize', start: { x: event.clientX, y: event.clientY }, node, corner }
+    dragRef.current = { type: 'resize', start: { x: event.clientX, y: event.clientY }, node, corner, historyCaptured: false }
   }
 
   const startConnection = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, handleType: 'source' | 'target') => {
     event.preventDefault()
     event.stopPropagation()
-    controller.captureHistory()
     setPendingConnectionCreate(null)
     setNodeCreatePosition(null)
     setContextMenu(null)
@@ -745,7 +741,6 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     (node: CanvasNode) => {
       if (node.type === 'config' || node.type === 'group') return
       const anchor = sourcePort(node)
-      controller.captureHistory()
       setPendingConnectionCreate(null)
       setNodeCreatePosition(null)
       setContextMenu(null)
@@ -782,6 +777,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }
       if (!drag) return
       if (drag.type === 'pan') {
+        const changed = event.clientX !== drag.start.x || event.clientY !== drag.start.y
+        if (changed && !drag.historyCaptured) {
+          controller.captureHistory()
+          dragRef.current = { ...drag, historyCaptured: true }
+        }
         controller.setViewport({
           ...controller.project.viewport,
           x: drag.viewportStart.x + event.clientX - drag.start.x,
@@ -793,6 +793,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           x: (event.clientX - drag.start.x) / controller.project.viewport.k,
           y: (event.clientY - drag.start.y) / controller.project.viewport.k,
         }
+        const changed = delta.x !== 0 || delta.y !== 0
+        if (changed && !drag.historyCaptured) {
+          controller.captureHistory()
+        }
         controller.moveNodes(drag.nodeIds, {
           x: delta.x,
           y: delta.y,
@@ -801,11 +805,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           drag.nodeIds.includes(node.id) ? { ...node, position: { x: node.position.x + delta.x, y: node.position.y + delta.y } } : node,
         )
         setDropTargetGroupId(findGroupDropTarget(previewNodes, drag.nodeIds)?.id ?? null)
-        dragRef.current = { ...drag, start: { x: event.clientX, y: event.clientY } }
+        dragRef.current = { ...drag, start: { x: event.clientX, y: event.clientY }, historyCaptured: drag.historyCaptured || changed }
       }
       if (drag.type === 'resize') {
         const dx = (event.clientX - drag.start.x) / controller.project.viewport.k
         const dy = (event.clientY - drag.start.y) / controller.project.viewport.k
+        const changed = dx !== 0 || dy !== 0
         const fromLeft = drag.corner.includes('left')
         const fromTop = drag.corner.includes('top')
         const minWidth = 160
@@ -829,6 +834,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             width = minWidth
             height = width / ratio
           }
+        }
+        if (changed && !drag.historyCaptured) {
+          controller.captureHistory()
+          dragRef.current = { ...drag, historyCaptured: true }
         }
         controller.updateNode(
           drag.node.id,
