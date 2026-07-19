@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
+import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -117,6 +117,24 @@ function isAudioFile(file: File) {
   return file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(file.name)
 }
 
+function isUploadableMediaNode(node: CanvasNode) {
+  return node.type === 'image' || node.type === 'video' || node.type === 'audio'
+}
+
+function mediaUploadAccept(node: CanvasNode) {
+  if (node.type === 'image') return 'image/*'
+  if (node.type === 'video') return 'video/*'
+  if (node.type === 'audio') return 'audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac'
+  return ''
+}
+
+function fileMatchesMediaNode(file: File, node: CanvasNode) {
+  if (node.type === 'image') return file.type.startsWith('image/')
+  if (node.type === 'video') return file.type.startsWith('video/')
+  if (node.type === 'audio') return isAudioFile(file)
+  return false
+}
+
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -211,6 +229,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const titleInputRef = useRef<HTMLInputElement | null>(null)
+  const mediaUploadInputRef = useRef<HTMLInputElement | null>(null)
+  const mediaUploadTargetNodeIdRef = useRef<string | null>(null)
   const dragRef = useRef<DragState>(null)
   const connectionDraftRef = useRef<ConnectionDraft | null>(null)
   const focusAnimationRef = useRef<number | null>(null)
@@ -230,6 +250,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [miniMapOpen, setMiniMapOpen] = useState(true)
+  const [mediaUploadInputAccept, setMediaUploadInputAccept] = useState('image/*,video/*,audio/*')
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
   const visibleNodes = useMemo(
@@ -409,6 +430,47 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       return false
     }
   }, [addClipboardFileNode, addClipboardTextNode])
+
+  const openMediaUpload = useCallback((node: CanvasNode) => {
+    if (!isUploadableMediaNode(node)) return
+    mediaUploadTargetNodeIdRef.current = node.id
+    setMediaUploadInputAccept(mediaUploadAccept(node))
+    window.requestAnimationFrame(() => {
+      if (mediaUploadInputRef.current) {
+        mediaUploadInputRef.current.value = ''
+        mediaUploadInputRef.current.click()
+      }
+    })
+  }, [])
+
+  const handleMediaUploadChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0]
+      event.currentTarget.value = ''
+      const nodeId = mediaUploadTargetNodeIdRef.current
+      mediaUploadTargetNodeIdRef.current = null
+      if (!file || !nodeId) return
+
+      const node = controller.project.nodes.find((item) => item.id === nodeId)
+      if (!node || !fileMatchesMediaNode(file, node)) {
+        window.alert('请选择与当前节点类型匹配的媒体文件。')
+        return
+      }
+
+      const imported = await canvasNodeFromFile(file, node.position)
+      controller.updateNode(node.id, {
+        title: imported.title ?? node.title,
+        width: imported.width ?? node.width,
+        height: imported.height ?? node.height,
+        metadata: {
+          ...imported.metadata,
+          errorDetails: '',
+        },
+      })
+      setToolbarNodeId(node.id)
+    },
+    [controller],
+  )
 
   const saveTitle = () => {
     controller.renameProject(titleDraft)
@@ -951,6 +1013,13 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       </header>
 
       <div className="canvas-shell">
+        <input
+          ref={mediaUploadInputRef}
+          className="visually-hidden"
+          type="file"
+          accept={mediaUploadInputAccept}
+          onChange={(event) => void handleMediaUploadChange(event)}
+        />
         {sidePanelOpen ? (
           <aside className="node-side-panel" data-toolbar>
             <div className="node-side-panel-header">
@@ -1212,6 +1281,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
+            onUpload={openMediaUpload}
             onDownload={downloadNodeContent}
             onDelete={(node) => {
               controller.deleteNode(node.id)
@@ -1536,6 +1606,7 @@ function NodeHoverToolbar({
   onRetryGenerationTask,
   onStartConnection,
   onDuplicate,
+  onUpload,
   onDownload,
   onDelete,
   onKeep,
@@ -1547,6 +1618,7 @@ function NodeHoverToolbar({
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
+  onUpload: (node: CanvasNode) => void
   onDownload: (node: CanvasNode) => void
   onDelete: (node: CanvasNode) => void
   onKeep: (nodeId: string) => void
@@ -1557,6 +1629,7 @@ function NodeHoverToolbar({
   const canCreateGenerationTask = node.type === 'config'
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config'
+  const canUpload = isUploadableMediaNode(node)
 
   return (
     <div
@@ -1592,6 +1665,12 @@ function NodeHoverToolbar({
         <Copy size={15} />
         复制
       </button>
+      {canUpload ? (
+        <button title={node.metadata.content ? '替换媒体内容' : '上传媒体内容'} onClick={() => onUpload(node)}>
+          <Upload size={15} />
+          {node.metadata.content ? '替换' : '上传'}
+        </button>
+      ) : null}
       {canDownloadNode(node) ? (
         <button title="下载节点内容" onClick={() => onDownload(node)}>
           <Download size={15} />
