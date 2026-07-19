@@ -626,7 +626,6 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     setNodeCreatePosition(null)
     setPendingConnectionCreate(null)
     if (connectionDraftRef.current) {
-      setActiveConnectionDraft(null)
       return
     }
     const startWorld = clientWorld(event)
