@@ -377,9 +377,13 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   }
 
   const handleCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
+    const isPrimaryButton = event.button === 0
+    const isMiddleButton = event.button === 1
+    if (!isPrimaryButton && !isMiddleButton) return
     const target = event.target as HTMLElement
-    if (target.closest('[data-node-id], [data-connection-id], [data-toolbar], [data-minimap]')) return
+    if (target.closest('[data-toolbar], [data-minimap], [data-canvas-input]')) return
+    if (isPrimaryButton && target.closest('[data-node-id], [data-connection-id]')) return
+    event.preventDefault()
     setContextMenu(null)
     setToolbarNodeId(null)
     setNodeCreatePosition(null)
@@ -389,7 +393,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       return
     }
     const startWorld = clientWorld(event)
-    if (event.ctrlKey || event.metaKey) {
+    if (isPrimaryButton && (event.ctrlKey || event.metaKey)) {
       setSelectionBox({
         start: startWorld,
         current: startWorld,
@@ -400,7 +404,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     }
     controller.captureHistory()
     dragRef.current = { type: 'pan', start: { x: event.clientX, y: event.clientY }, viewportStart: { x: controller.project.viewport.x, y: controller.project.viewport.y } }
-    controller.clearSelection()
+    if (isPrimaryButton) controller.clearSelection()
   }
 
   const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -936,6 +940,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           className={`canvas-stage ${controller.project.backgroundMode} ${spacePressed ? 'space-pan' : ''}`}
           style={canvasStageStyle}
           onPointerDown={handleCanvasPointerDown}
+          onAuxClick={(event) => event.preventDefault()}
           onDoubleClick={handleCanvasDoubleClick}
           onWheel={handleWheel}
           onDragOver={(event) => event.preventDefault()}
