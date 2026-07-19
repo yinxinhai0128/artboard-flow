@@ -5,7 +5,7 @@ import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDr
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { expandNodeIdsForMovement, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
+import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -329,6 +329,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
   const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null)
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
+  const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null)
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null)
 
@@ -750,7 +751,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   )
 
   useEffect(() => {
-    const move = (event: PointerEvent) => {
+    const move = (event: PointerEvent | MouseEvent) => {
       const drag = dragRef.current
       if (connectionDraft) {
         setConnectionDraft((value) => {
@@ -778,10 +779,18 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         })
       }
       if (drag.type === 'node') {
-        controller.moveNodes(drag.nodeIds, {
+        const delta = {
           x: (event.clientX - drag.start.x) / controller.project.viewport.k,
           y: (event.clientY - drag.start.y) / controller.project.viewport.k,
+        }
+        controller.moveNodes(drag.nodeIds, {
+          x: delta.x,
+          y: delta.y,
         })
+        const previewNodes = controller.project.nodes.map((node) =>
+          drag.nodeIds.includes(node.id) ? { ...node, position: { x: node.position.x + delta.x, y: node.position.y + delta.y } } : node,
+        )
+        setDropTargetGroupId(findGroupDropTarget(previewNodes, drag.nodeIds)?.id ?? null)
         dragRef.current = { ...drag, start: { x: event.clientX, y: event.clientY } }
       }
       if (drag.type === 'resize') {
@@ -825,7 +834,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         )
       }
     }
-    const up = (event: PointerEvent) => {
+    const up = (event: PointerEvent | MouseEvent) => {
       const drag = dragRef.current
       const draft = connectionDraftRef.current
       if (draft) {
@@ -848,14 +857,19 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (drag?.type === 'node') {
         controller.syncDraggedNodeGroups(drag.nodeIds)
       }
+      setDropTargetGroupId(null)
       dragRef.current = null
       setSelectionBox(null)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
     }
   }, [clientWorld, connectionDraft, controller, findConnectionDropTargetFromEvent, nodesById, selectionBox, setActiveConnectionDraft])
 
@@ -1416,6 +1430,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnecting={Boolean(connectionDraft)}
                 connectionOrigin={connectionDraft?.nodeId === node.id}
+                groupDropTarget={dropTargetGroupId === node.id}
                 connectionTargetState={
                   connectionDraft?.targetNodeId === node.id
                     ? 'valid'
@@ -1675,6 +1690,7 @@ function CanvasNodeView({
   onFinishConnectionToNode,
   isConnecting,
   connectionOrigin,
+  groupDropTarget,
   connectionTargetState,
   onContextMenu,
 }: {
@@ -1700,6 +1716,7 @@ function CanvasNodeView({
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnecting: boolean
   connectionOrigin: boolean
+  groupDropTarget: boolean
   connectionTargetState: 'valid' | 'blocked' | null
   onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: string) => void
 }) {
@@ -1712,7 +1729,7 @@ function CanvasNodeView({
     <article
       data-node-id={node.id}
       data-split-count={hasSplitChildren ? `${splitOutputCount} 个结果` : undefined}
-      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${hasSplitChildren ? 'split-root' : ''} ${isSplitCollapsed ? 'split-collapsed' : ''} ${isSplitChild ? 'split-child' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionOrigin ? 'connection-origin' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
+      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${hasSplitChildren ? 'split-root' : ''} ${isSplitCollapsed ? 'split-collapsed' : ''} ${isSplitChild ? 'split-child' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionOrigin ? 'connection-origin' : ''} ${groupDropTarget ? 'group-drop-target' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
       onMouseEnter={() => onHoverStart(node.id)}
       onMouseLeave={() => onHoverEnd(node.id)}
@@ -2318,7 +2335,7 @@ function NodeBody({
       <div className="node-body media-body">
         {node.metadata.content ? (
           <>
-            <img src={node.metadata.content} alt={node.title} />
+            <img src={node.metadata.content} alt={node.title} draggable={false} onDragStart={(event) => event.preventDefault()} />
             <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} onToggleSplit={onToggleSplitOutputs} />
           </>
         ) : (
@@ -2332,7 +2349,7 @@ function NodeBody({
       <div className="node-body media-body">
         {node.metadata.content ? (
           <>
-            <video src={node.metadata.content} controls />
+            <video src={node.metadata.content} controls draggable={false} onDragStart={(event) => event.preventDefault()} />
             <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} onToggleSplit={onToggleSplitOutputs} />
           </>
         ) : (

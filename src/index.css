@@ -1211,6 +1211,30 @@ button:disabled {
   background: rgba(14, 165, 233, 0.08);
 }
 
+.canvas-node.group.group-drop-target {
+  z-index: 48;
+  border-color: rgba(134, 239, 172, 0.82);
+  background: rgba(34, 197, 94, 0.1);
+  box-shadow: 0 0 0 2px rgba(134, 239, 172, 0.18), inset 0 0 0 999px rgba(34, 197, 94, 0.05), 0 18px 46px rgba(0, 0, 0, 0.2);
+}
+
+.canvas-node.group.group-drop-target::after {
+  content: '松手加入分组';
+  position: absolute;
+  left: 50%;
+  top: -34px;
+  z-index: 20;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(134, 239, 172, 0.92);
+  color: #052e16;
+  font-size: 12px;
+  font-weight: 900;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .canvas-node:hover {
   z-index: 40;
 }

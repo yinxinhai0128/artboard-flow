@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, normalizeConnectionForProject, splitChildIdsForNode, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -135,10 +135,37 @@ describe('canvas document operations', () => {
 
     expect(findContainingGroupId(source.nodes[1], source.nodes)).toBe('group')
 
-    const next = syncNodeGroupMembership(source, ['inside', 'outside'])
+    const movedInside = syncNodeGroupMembership(source, ['inside'])
+    const movedOutside = syncNodeGroupMembership(source, ['outside'])
 
-    expect(next.nodes.find((node) => node.id === 'inside')?.metadata.groupId).toBe('group')
-    expect(next.nodes.find((node) => node.id === 'outside')?.metadata.groupId).toBeUndefined()
+    expect(movedInside.nodes.find((node) => node.id === 'inside')?.metadata.groupId).toBe('group')
+    expect(movedOutside.nodes.find((node) => node.id === 'outside')?.metadata.groupId).toBeUndefined()
+  })
+
+  it('detects group drop targets and snaps moved nodes inside group padding', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...groupNode('group'), position: { x: 100, y: 100 }, width: 300, height: 240 },
+        { ...baseNode('moving'), position: { x: 340, y: 250 }, width: 100, height: 80 },
+        { ...baseNode('other'), position: { x: 520, y: 160 } },
+      ],
+      connections: [],
+    }
+
+    const group = source.nodes[0]
+
+    expect(nodeBounds([source.nodes[1]])).toEqual({ left: 340, top: 250, right: 440, bottom: 330 })
+    expect(findGroupDropTarget(source.nodes, ['moving'])?.id).toBe('group')
+
+    const snapped = snapNodesIntoGroup(source, ['moving'], group)
+    const moving = snapped.nodes.find((node) => node.id === 'moving')!
+
+    expect(moving.metadata.groupId).toBe('group')
+    expect(moving.position.x).toBe(276)
+    expect(moving.position.y).toBe(236)
+    expect(moving.position.x + moving.width).toBeLessThanOrEqual(group.position.x + group.width - 24)
+    expect(moving.position.y + moving.height).toBeLessThanOrEqual(group.position.y + group.height - 24)
   })
 
   it('deletes a selected connection without removing nodes', () => {

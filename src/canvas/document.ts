@@ -149,9 +149,70 @@ export function findContainingGroupId(node: CanvasNode, nodes: CanvasNode[]) {
     )?.id
 }
 
+export function nodeBounds(nodes: CanvasNode[]) {
+  return nodes.reduce(
+    (bounds, node) => ({
+      left: Math.min(bounds.left, node.position.x),
+      top: Math.min(bounds.top, node.position.y),
+      right: Math.max(bounds.right, node.position.x + node.width),
+      bottom: Math.max(bounds.bottom, node.position.y + node.height),
+    }),
+    { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+  )
+}
+
+export function findGroupDropTarget(nodes: CanvasNode[], nodeIds: string[]) {
+  const movingIds = new Set(nodeIds)
+  if (nodes.some((node) => movingIds.has(node.id) && node.type === 'group')) return null
+  const movingNodes = nodes.filter((node) => movingIds.has(node.id) && node.type !== 'group')
+  if (!movingNodes.length) return null
+
+  return (
+    [...nodes].reverse().find((group) => {
+      if (group.type !== 'group' || movingIds.has(group.id)) return false
+      return movingNodes.some((node) => {
+        const centerX = node.position.x + node.width / 2
+        const centerY = node.position.y + node.height / 2
+        return centerX >= group.position.x && centerX <= group.position.x + group.width && centerY >= group.position.y && centerY <= group.position.y + group.height
+      })
+    }) ?? null
+  )
+}
+
+export function snapNodesIntoGroup(project: CanvasProject, nodeIds: string[], group: CanvasNode): CanvasProject {
+  const movingIds = new Set(nodeIds)
+  const movingNodes = project.nodes.filter((node) => movingIds.has(node.id) && node.type !== 'group')
+  if (!movingNodes.length) return project
+
+  const pad = 24
+  const bounds = nodeBounds(movingNodes)
+  const left = group.position.x + pad
+  const top = group.position.y + pad
+  const right = group.position.x + group.width - pad
+  const bottom = group.position.y + group.height - pad
+  const dx = bounds.right - bounds.left > right - left ? left - bounds.left : bounds.left < left ? left - bounds.left : bounds.right > right ? right - bounds.right : 0
+  const dy = bounds.bottom - bounds.top > bottom - top ? top - bounds.top : bounds.top < top ? top - bounds.top : bounds.bottom > bottom ? bottom - bounds.bottom : 0
+  let changed = false
+
+  const nodes = project.nodes.map((node) => {
+    if (!movingIds.has(node.id) || node.type === 'group') return node
+    const nextPosition = { x: node.position.x + dx, y: node.position.y + dy }
+    const positionChanged = nextPosition.x !== node.position.x || nextPosition.y !== node.position.y
+    if (!positionChanged && node.metadata.groupId === group.id) return node
+    changed = true
+    return { ...node, position: nextPosition, metadata: { ...node.metadata, groupId: group.id } }
+  })
+
+  return changed ? { ...project, nodes } : project
+}
+
 export function syncNodeGroupMembership(project: CanvasProject, nodeIds: string[]): CanvasProject {
   const movingIds = new Set(nodeIds)
   if (!project.nodes.some((node) => movingIds.has(node.id) && node.type !== 'group')) return project
+
+  const targetGroup = findGroupDropTarget(project.nodes, nodeIds)
+  if (targetGroup) return snapNodesIntoGroup(project, nodeIds, targetGroup)
+
   let changed = false
   const nodes = project.nodes.map((node) => {
     if (!movingIds.has(node.id) || node.type === 'group') return node
