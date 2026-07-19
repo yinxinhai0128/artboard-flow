@@ -29,10 +29,68 @@ export async function readCanvasProjectsFile(file: File): Promise<CanvasProject[
     ? await readProjectsJsonFromZip(file)
     : await file.text()
   const parsed = JSON.parse(text) as unknown
-  if (isExportFile(parsed)) return parsed.projects.map((item) => item.project)
-  if (isProjectArray(parsed)) return parsed
-  if (isProject(parsed)) return [parsed]
+  if (isExportFile(parsed)) return parsed.projects.map((item) => sanitizeImportedProject(item.project))
+  if (isProjectArray(parsed)) return parsed.map(sanitizeImportedProject)
+  if (isProject(parsed)) return [sanitizeImportedProject(parsed)]
   throw new Error('INVALID_CANVAS_EXPORT')
+}
+
+function sanitizeImportedProject(project: CanvasProject): CanvasProject {
+  const nodes = sanitizeImportedNodeRelationships(project.nodes)
+  return {
+    ...project,
+    nodes,
+    connections: sanitizeImportedConnections(project.connections, nodes),
+  }
+}
+
+function sanitizeImportedNodeRelationships(nodes: CanvasProject['nodes']) {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
+  return nodes.map((node) => {
+    const metadata = { ...node.metadata }
+    let changed = false
+
+    const groupId = typeof metadata.groupId === 'string' ? metadata.groupId : ''
+    const group = groupId ? nodesById.get(groupId) : null
+    if (groupId && (!group || group.type !== 'group' || group.id === node.id || node.type === 'group')) {
+      delete metadata.groupId
+      changed = true
+    }
+
+    const splitSourceNodeId = typeof metadata.splitSourceNodeId === 'string' ? metadata.splitSourceNodeId : ''
+    const splitSource = splitSourceNodeId ? nodesById.get(splitSourceNodeId) : null
+    if (
+      splitSourceNodeId &&
+      (!splitSource ||
+        splitSource.id === node.id ||
+        splitSource.type === 'group' ||
+        splitSource.type === 'config' ||
+        splitSource.type === 'text')
+    ) {
+      delete metadata.splitSourceNodeId
+      delete metadata.splitOutputIndex
+      changed = true
+    }
+
+    return changed ? { ...node, metadata } : node
+  })
+}
+
+function sanitizeImportedConnections(connections: CanvasProject['connections'], nodes: CanvasProject['nodes']) {
+  const nodeIds = new Set(nodes.map((node) => node.id))
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
+  const seen = new Set<string>()
+  return connections.filter((connection) => {
+    if (!nodeIds.has(connection.fromNodeId) || !nodeIds.has(connection.toNodeId) || connection.fromNodeId === connection.toNodeId) return false
+    const from = nodesById.get(connection.fromNodeId)
+    const to = nodesById.get(connection.toNodeId)
+    if (!from || !to || from.type === 'group' || to.type === 'group') return false
+    if (from.type === 'config') return false
+    const key = `${connection.fromNodeId}->${connection.toNodeId}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function isExportFile(value: unknown): value is ArtboardFlowExportFile {
