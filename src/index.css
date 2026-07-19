@@ -648,7 +648,7 @@ button:disabled {
 .canvas-context-menu {
   position: fixed;
   z-index: 100;
-  min-width: 142px;
+  min-width: 176px;
   display: grid;
   gap: 4px;
   padding: 6px;
@@ -657,6 +657,31 @@ button:disabled {
   background: rgba(18, 18, 18, 0.97);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
   color: var(--text);
+}
+
+.connection-menu-details {
+  display: grid;
+  gap: 5px;
+  padding: 6px 7px 4px;
+}
+
+.connection-menu-details > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.connection-menu-details > strong {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-menu-details button {
+  padding: 6px 8px;
+  color: var(--subtle);
 }
 
 .canvas-context-menu .danger {

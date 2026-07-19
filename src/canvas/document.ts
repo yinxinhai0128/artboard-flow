@@ -13,6 +13,12 @@ export type NodeRelations = {
   outgoing: Array<{ connectionId: string; node: CanvasNode }>
 }
 
+export type ConnectionNodePair = {
+  connection: CanvasConnection
+  from: CanvasNode
+  to: CanvasNode
+}
+
 export const CONNECTION_HANDLE_HIT_RADIUS = 40
 export const CONNECTION_NODE_HIT_PADDING = 32
 
@@ -103,6 +109,14 @@ export function getNodeRelations(project: CanvasProject, nodeId: string): NodeRe
   })
 
   return { incoming, outgoing }
+}
+
+export function getConnectionNodePair(project: CanvasProject, connectionId: string): ConnectionNodePair | null {
+  const connection = project.connections.find((item) => item.id === connectionId)
+  if (!connection) return null
+  const from = project.nodes.find((node) => node.id === connection.fromNodeId)
+  const to = project.nodes.find((node) => node.id === connection.toNodeId)
+  return from && to ? { connection, from, to } : null
 }
 
 export function deleteSelectionFromProject(project: CanvasProject, nodeIds: string[], connectionId: string | null): CanvasProject {

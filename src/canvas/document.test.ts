@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, findConnectionDropTarget, getNodeRelations, nextNodeSelection, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, nextNodeSelection, normalizeConnectionForProject } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -69,6 +69,16 @@ describe('canvas document operations', () => {
 
     expect(relations.incoming.map((item) => [item.connectionId, item.node.id])).toEqual([['ab', 'a']])
     expect(relations.outgoing.map((item) => [item.connectionId, item.node.id])).toEqual([['bc', 'c']])
+  })
+
+  it('returns both endpoint nodes for a connection', () => {
+    const pair = getConnectionNodePair(project, 'ab')
+
+    expect(pair?.connection.id).toBe('ab')
+    expect(pair?.from.id).toBe('a')
+    expect(pair?.to.id).toBe('b')
+    expect(getConnectionNodePair(project, 'missing')).toBeNull()
+    expect(getConnectionNodePair({ ...project, nodes: project.nodes.filter((node) => node.id !== 'a') }, 'ab')).toBeNull()
   })
 
   it('removes deleted node references from config composers', () => {

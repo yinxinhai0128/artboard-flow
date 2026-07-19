@@ -5,7 +5,7 @@ import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, Selec
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { findConnectionDropTarget, getNodeRelations, nextNodeSelection, type NodeRelations } from './document'
+import { findConnectionDropTarget, getConnectionNodePair, getNodeRelations, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -231,6 +231,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const infoNodeRelations = useMemo(
     () => infoNode ? getNodeRelations(controller.project, infoNode.id) : { incoming: [], outgoing: [] },
     [controller.project, infoNode],
+  )
+  const contextConnectionPair = useMemo(
+    () => contextMenu?.type === 'connection' ? getConnectionNodePair(controller.project, contextMenu.connectionId) : null,
+    [contextMenu, controller.project],
   )
 
   const clientPoint = useCallback((event: { clientX: number; clientY: number }) => {
@@ -1124,9 +1128,14 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       {contextMenu ? (
         <CanvasContextMenuView
           menu={contextMenu}
+          connectionPair={contextConnectionPair}
           onClose={() => setContextMenu(null)}
           onDuplicate={() => {
             if (contextMenu.type === 'node') controller.duplicateNode(contextMenu.nodeId)
+            setContextMenu(null)
+          }}
+          onFocusNode={(node) => {
+            focusNode(node)
             setContextMenu(null)
           }}
           onDelete={() => {
@@ -1309,13 +1318,17 @@ function NodeCreateMenu({
 
 function CanvasContextMenuView({
   menu,
+  connectionPair,
   onClose,
   onDuplicate,
+  onFocusNode,
   onDelete,
 }: {
   menu: NonNullable<CanvasContextMenu>
+  connectionPair: ConnectionNodePair | null
   onClose: () => void
   onDuplicate: () => void
+  onFocusNode: (node: CanvasNode) => void
   onDelete: () => void
 }) {
   useEffect(() => {
@@ -1334,6 +1347,18 @@ function CanvasContextMenuView({
         <button onClick={onDuplicate}>
           <Copy size={15} /> 复制节点
         </button>
+      ) : null}
+      {menu.type === 'connection' && connectionPair ? (
+        <div className="connection-menu-details">
+          <span>连接</span>
+          <strong>{connectionPair.from.title || '未命名节点'} → {connectionPair.to.title || '未命名节点'}</strong>
+          <button onClick={() => onFocusNode(connectionPair.from)}>
+            聚焦起点
+          </button>
+          <button onClick={() => onFocusNode(connectionPair.to)}>
+            聚焦终点
+          </button>
+        </div>
       ) : null}
       <button className="danger" onClick={onDelete}>
         <Trash2 size={15} /> 删除{menu.type === 'node' ? '节点' : '连线'}
