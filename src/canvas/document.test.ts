@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsWithSplitChildren, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, normalizeConnectionForProject, splitChildIdsForNode } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, normalizeConnectionForProject, splitChildIdsForNode } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -20,6 +20,13 @@ const configNode = (id: string): CanvasNode => ({
 const imageNode = (id: string): CanvasNode => ({
   ...baseNode(id),
   type: 'image',
+})
+
+const groupNode = (id: string): CanvasNode => ({
+  ...baseNode(id),
+  type: 'group',
+  width: 300,
+  height: 240,
 })
 
 const project: CanvasProject = {
@@ -91,6 +98,28 @@ describe('canvas document operations', () => {
 
     expect(next.nodes.map((node) => node.id)).toEqual(['other'])
     expect(next.connections).toEqual([])
+  })
+
+  it('expands group nodes for movement without deleting their children', () => {
+    const source = {
+      ...project,
+      nodes: [
+        groupNode('group'),
+        { ...baseNode('a'), metadata: { groupId: 'group' } },
+        { ...baseNode('b'), metadata: { groupId: 'group' } },
+        baseNode('outside'),
+      ],
+      connections: [],
+    }
+
+    expect(groupChildIdsForNode(source.nodes, 'group')).toEqual(['a', 'b'])
+    expect(expandNodeIdsForMovement(source.nodes, ['group'])).toEqual(['group', 'a', 'b'])
+
+    const next = deleteSelectionFromProject(source, ['group'], null)
+
+    expect(next.nodes.map((node) => node.id)).toEqual(['a', 'b', 'outside'])
+    expect(next.nodes.find((node) => node.id === 'a')?.metadata.groupId).toBeUndefined()
+    expect(next.nodes.find((node) => node.id === 'b')?.metadata.groupId).toBeUndefined()
   })
 
   it('deletes a selected connection without removing nodes', () => {

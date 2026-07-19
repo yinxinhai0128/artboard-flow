@@ -1,10 +1,10 @@
-import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, NodeKind } from './types'
+import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasResourceNodeKind } from './types'
 
 export const CONFIG_REFERENCE_PATTERN = /@\[node:([^\]]+)\]/g
 
 export type CanvasGenerationInput = {
   nodeId: string
-  type: Exclude<NodeKind, 'config'>
+  type: CanvasResourceNodeKind
   title: string
   preview: string
   hasContent: boolean
@@ -18,7 +18,7 @@ export type CanvasGenerationInput = {
   }
 }
 
-export type CanvasGenerationSummary = Record<Exclude<NodeKind, 'config'>, number>
+export type CanvasGenerationSummary = Record<CanvasResourceNodeKind, number>
 
 export type CanvasGenerationContext = {
   configNodeId: string
@@ -166,7 +166,7 @@ export function metadataFromGenerationJob(job: CanvasGenerationJob, current: Can
 }
 
 function generationInputFromNode(node: CanvasNode): CanvasGenerationInput | null {
-  if (node.type === 'config') return null
+  if (node.type === 'config' || node.type === 'group') return null
   if (node.type === 'text') {
     const text = node.metadata.content || node.metadata.prompt || ''
     if (!text.trim()) return null

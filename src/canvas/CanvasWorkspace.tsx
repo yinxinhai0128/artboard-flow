@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Copy, Download, Eye, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { Compass, Copy, Download, Eye, FileJson, Group, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
 import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { expandNodeIdsWithSplitChildren, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
+import { expandNodeIdsForMovement, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -39,6 +39,7 @@ const nodeIcons = {
   video: Video,
   audio: Music2,
   config: Settings2,
+  group: Group,
 }
 
 const nodeKindLabels: Record<NodeKind, string> = {
@@ -47,6 +48,7 @@ const nodeKindLabels: Record<NodeKind, string> = {
   video: '视频',
   audio: '音频',
   config: '配置',
+  group: '组',
 }
 
 const resizeCorners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -682,14 +684,16 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
   const handleNodePointerDown = (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => {
     if (event.button !== 0) return
-    if ((event.target as HTMLElement).closest('[data-node-control], [data-canvas-input]')) return
+    const target = event.target as HTMLElement
+    if (target.closest('[data-node-control]')) return
+    if (node.type !== 'group' && target.closest('[data-canvas-input]')) return
     event.stopPropagation()
     const additive = event.shiftKey || event.ctrlKey || event.metaKey
     const nodeIds = nextNodeSelection(controller.selectedNodeIds, node.id, additive)
     controller.selectNode(node.id, additive)
     if (!nodeIds.includes(node.id)) return
     controller.captureHistory()
-    dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds: expandNodeIdsWithSplitChildren(controller.project.nodes, nodeIds) }
+    dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds: expandNodeIdsForMovement(controller.project.nodes, nodeIds) }
   }
 
   const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => {
@@ -728,7 +732,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
   const startConnectionFromToolbar = useCallback(
     (node: CanvasNode) => {
-      if (node.type === 'config') return
+      if (node.type === 'config' || node.type === 'group') return
       const anchor = sourcePort(node)
       controller.captureHistory()
       setPendingConnectionCreate(null)
@@ -1506,6 +1510,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             position={selectionToolbarPosition}
             count={controller.selectedNodeIds.length}
             onDeselect={controller.clearSelection}
+            onGroup={controller.groupSelection}
             onCopy={controller.copySelection}
             onDuplicate={() => {
               controller.copySelection()
@@ -1718,14 +1723,16 @@ function CanvasNodeView({
         onPointerDown(event, node)
       }}
     >
-      <button
-        className="port target-port"
-        title="从此输入端反向连线"
-        data-label="输入"
-        data-node-control
-        onPointerDown={(event) => onStartConnection(event, node.id, 'target')}
-        onPointerUp={(event) => onFinishConnection(event, node.id)}
-      />
+      {node.type !== 'group' ? (
+        <button
+          className="port target-port"
+          title="从此输入端反向连线"
+          data-label="输入"
+          data-node-control
+          onPointerDown={(event) => onStartConnection(event, node.id, 'target')}
+          onPointerUp={(event) => onFinishConnection(event, node.id)}
+        />
+      ) : null}
       <header>
         <span className="node-icon">
           <Icon size={15} />
@@ -1750,7 +1757,7 @@ function CanvasNodeView({
         onSplitGenerationOutputs={onSplitGenerationOutputs}
         onToggleSplitOutputs={onToggleSplitOutputs}
       />
-      {node.type !== 'config' ? (
+      {node.type !== 'config' && node.type !== 'group' ? (
         <button className="port source-port" title="从此节点连线" data-label="输出" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
       ) : null}
       {resizeCorners.map((corner) => (
@@ -1908,6 +1915,7 @@ function SelectionToolbar({
   position,
   count,
   onDeselect,
+  onGroup,
   onCopy,
   onDuplicate,
   onDelete,
@@ -1915,6 +1923,7 @@ function SelectionToolbar({
   position: Point | null
   count: number
   onDeselect: () => void
+  onGroup: () => void
   onCopy: () => void
   onDuplicate: () => void
   onDelete: () => void
@@ -1926,6 +1935,10 @@ function SelectionToolbar({
       <button onClick={onDeselect}>
         <MousePointer2 size={15} />
         取消
+      </button>
+      <button onClick={onGroup}>
+        <Group size={15} />
+        成组
       </button>
       <button onClick={onCopy}>
         <Copy size={15} />
@@ -1977,7 +1990,7 @@ function NodeHoverToolbar({
   const top = Math.max(12, viewport.y + node.position.y * viewport.k - 12)
   const canCreateGenerationTask = node.type === 'config'
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
-  const canStartConnection = node.type !== 'config'
+  const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canUpload = isUploadableMediaNode(node)
 
   return (
@@ -2286,6 +2299,15 @@ function NodeBody({
 
   if (shouldRenderGenerationTask) {
     return <GenerationTaskBody node={node} onRetry={onRetryGenerationTask} onSubmit={onSubmitGenerationTask} onRefresh={onRefreshGenerationTask} />
+  }
+  if (node.type === 'group') {
+    return (
+      <div className="node-body group-body">
+        <Group size={22} />
+        <strong>分组容器</strong>
+        <span>拖动组可整体移动内部节点，删除组会解除分组。</span>
+      </div>
+    )
   }
   if (node.type === 'image') {
     return (

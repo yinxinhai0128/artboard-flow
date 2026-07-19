@@ -1,4 +1,6 @@
-export type NodeKind = 'text' | 'image' | 'video' | 'audio' | 'config'
+export type NodeKind = 'text' | 'image' | 'video' | 'audio' | 'config' | 'group'
+
+export type CanvasResourceNodeKind = Exclude<NodeKind, 'config' | 'group'>
 
 export type CanvasGenerationMode = 'image' | 'video' | 'text'
 
@@ -8,10 +10,10 @@ export type CanvasGenerationPayload = {
   size: string
   count: number
   prompt: string
-  summary: Record<Exclude<NodeKind, 'config'>, number>
+  summary: Record<CanvasResourceNodeKind, number>
   inputs: Array<{
     nodeId: string
-    type: Exclude<NodeKind, 'config'>
+    type: CanvasResourceNodeKind
     title: string
     text?: string
     media?: {
@@ -86,6 +88,7 @@ export type CanvasNode = {
     submittedAt?: string
     generatedAt?: string
     outputNodeId?: string
+    groupId?: string
     model?: string
     size?: string
     count?: number

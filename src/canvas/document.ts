@@ -37,6 +37,7 @@ export function normalizeConnectionForProject(
   const first = project.nodes.find((node) => node.id === firstNodeId)
   const second = project.nodes.find((node) => node.id === secondNodeId)
   if (!first || !second || first.id === second.id) return null
+  if (first.type === 'group' || second.type === 'group') return null
   if (first.type === 'config' && second.type === 'config') return null
   if (second.type === 'config') return { fromNodeId: first.id, toNodeId: second.id }
   if (first.type === 'config' && firstHandleType === 'target') return { fromNodeId: second.id, toNodeId: first.id }
@@ -126,9 +127,21 @@ export function splitChildIdsForNode(nodes: CanvasNode[], nodeId: string) {
     .map((node) => node.id)
 }
 
+export function groupChildIdsForNode(nodes: CanvasNode[], nodeId: string) {
+  return nodes
+    .filter((node) => node.metadata.groupId === nodeId)
+    .map((node) => node.id)
+}
+
 export function expandNodeIdsWithSplitChildren(nodes: CanvasNode[], nodeIds: string[]) {
   const expanded = new Set(nodeIds)
   nodeIds.forEach((nodeId) => splitChildIdsForNode(nodes, nodeId).forEach((childId) => expanded.add(childId)))
+  return Array.from(expanded)
+}
+
+export function expandNodeIdsForMovement(nodes: CanvasNode[], nodeIds: string[]) {
+  const expanded = new Set(expandNodeIdsWithSplitChildren(nodes, nodeIds))
+  nodeIds.forEach((nodeId) => groupChildIdsForNode(nodes, nodeId).forEach((childId) => expanded.add(childId)))
   return Array.from(expanded)
 }
 
@@ -148,6 +161,7 @@ export function isSplitConnectionHidden(connection: CanvasConnection, nodes: Can
 export function deleteSelectionFromProject(project: CanvasProject, nodeIds: string[], connectionId: string | null): CanvasProject {
   const expandedNodeIds = expandNodeIdsWithSplitChildren(project.nodes, nodeIds)
   const selected = new Set(expandedNodeIds)
+  const selectedGroups = new Set(project.nodes.filter((node) => selected.has(node.id) && node.type === 'group').map((node) => node.id))
   const removedConnection = connectionId ? project.connections.find((connection) => connection.id === connectionId) : null
   const removedInputByConfig = new Map<string, Set<string>>()
   if (removedConnection) {
@@ -158,6 +172,10 @@ export function deleteSelectionFromProject(project: CanvasProject, nodeIds: stri
   const nextNodes = project.nodes
     .filter((node) => !selected.has(node.id))
     .map((node) => {
+      const groupId = node.metadata.groupId
+      if (groupId && selectedGroups.has(groupId)) {
+        return { ...node, metadata: { ...node.metadata, groupId: undefined } }
+      }
       if (node.type !== 'config' || !node.metadata.composerContent) return node
       const scopedRemovedIds = removedInputByConfig.get(node.id)
       const removedIds = deletedNodeIds.size ? new Set([...deletedNodeIds, ...(scopedRemovedIds || [])]) : scopedRemovedIds
@@ -194,6 +212,7 @@ export function addConnectionToProject(project: CanvasProject, connection: Canva
   const source = project.nodes.find((node) => node.id === connection.fromNodeId)
   const target = project.nodes.find((node) => node.id === connection.toNodeId)
   if (!source || !target) return project
+  if (source.type === 'group' || target.type === 'group') return project
   if (source.type === 'config' && target.type === 'config') return project
   const exists = project.connections.some((current) => current.fromNodeId === connection.fromNodeId && current.toNodeId === connection.toNodeId)
   if (exists) return project

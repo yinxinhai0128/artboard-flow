@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasConnection, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
-import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsWithSplitChildren, nextNodeSelection, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject } from './document'
 
 const createId = () => crypto.randomUUID()
 
@@ -11,6 +11,7 @@ const nodeDefaults: Record<NodeKind, { title: string; width: number; height: num
   video: { title: '视频节点', width: 320, height: 220, content: '' },
   audio: { title: '音频节点', width: 300, height: 170, content: '' },
   config: { title: '配置节点', width: 300, height: 300, content: '模型、比例、数量等生成参数会放在这里。' },
+  group: { title: '组', width: 360, height: 260, content: '' },
 }
 
 function createNode(type: NodeKind, position: Point, patch: Partial<CanvasNode> = {}): CanvasNode {
@@ -161,7 +162,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     (ids: string[], delta: Point, recordHistory = false) => {
       commit(
         (current) => {
-          const selected = new Set(expandNodeIdsWithSplitChildren(current.nodes, ids))
+          const selected = new Set(expandNodeIdsForMovement(current.nodes, ids))
           return {
             ...current,
             nodes: current.nodes.map((node) =>
@@ -212,6 +213,38 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     },
     [commit],
   )
+
+  const groupSelection = useCallback(() => {
+    const selectedNodes = localProject.nodes.filter((node) => selectedNodeIds.includes(node.id) && node.type !== 'group')
+    if (selectedNodes.length < 2) return
+    const paddingX = 34
+    const paddingTop = 58
+    const paddingBottom = 34
+    const left = Math.min(...selectedNodes.map((node) => node.position.x))
+    const top = Math.min(...selectedNodes.map((node) => node.position.y))
+    const right = Math.max(...selectedNodes.map((node) => node.position.x + node.width))
+    const bottom = Math.max(...selectedNodes.map((node) => node.position.y + node.height))
+    const group = createNode('group', { x: left - paddingX, y: top - paddingTop }, {
+      title: `分组 ${selectedNodes.length}`,
+      width: right - left + paddingX * 2,
+      height: bottom - top + paddingTop + paddingBottom,
+      metadata: { content: '', status: 'idle' },
+    })
+    const childIds = new Set(selectedNodes.map((node) => node.id))
+    commit((current) => ({
+      ...current,
+      nodes: [
+        group,
+        ...current.nodes.map((node) => (
+          childIds.has(node.id)
+            ? { ...node, metadata: { ...node.metadata, groupId: group.id } }
+            : node
+        )),
+      ],
+    }))
+    setSelectedNodeIds([group.id])
+    setSelectedConnectionId(null)
+  }, [commit, localProject.nodes, selectedNodeIds])
 
   const setViewport = useCallback(
     (viewport: Viewport, recordHistory = false) => {
@@ -274,6 +307,10 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
       id: idMap.get(node.id)!,
       title: `${node.title} 副本`,
       position: { x: node.position.x + 36, y: node.position.y + 36 },
+      metadata: {
+        ...node.metadata,
+        groupId: node.metadata.groupId && idMap.has(node.metadata.groupId) ? idMap.get(node.metadata.groupId) : node.metadata.groupId,
+      },
     }))
     const connections = clipboard.connections.map((connection) => ({
       id: createId(),
@@ -331,6 +368,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     deleteNode,
     deleteConnection,
     connectNodes,
+    groupSelection,
     setViewport,
     setBackgroundMode,
     selectNode,

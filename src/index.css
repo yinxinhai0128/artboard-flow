@@ -1197,6 +1197,20 @@ button:disabled {
   overflow: visible;
 }
 
+.canvas-node.group {
+  z-index: 4;
+  border: 1.5px dashed rgba(148, 163, 184, 0.58);
+  background: rgba(15, 23, 42, 0.18);
+  box-shadow: inset 0 0 0 999px rgba(148, 163, 184, 0.035), 0 18px 46px rgba(0, 0, 0, 0.16);
+}
+
+.canvas-node.group:hover,
+.canvas-node.group.selected {
+  z-index: 45;
+  border-color: rgba(125, 211, 252, 0.76);
+  background: rgba(14, 165, 233, 0.08);
+}
+
 .canvas-node:hover {
   z-index: 40;
 }
@@ -1351,6 +1365,20 @@ button:disabled {
 
 .audio-body {
   align-items: stretch;
+}
+
+.group-body {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.group-body strong {
+  color: var(--text);
+  font-size: 14px;
 }
 
 .audio-player {
