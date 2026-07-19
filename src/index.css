@@ -1192,12 +1192,18 @@ button:disabled {
   grid-template-columns: 34px minmax(0, 1fr) auto;
   gap: 2px 8px;
   padding: 7px 8px;
+  border: 1px solid transparent;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.16);
 }
 
 .config-input-list div.is-empty {
   opacity: 0.58;
+}
+
+.config-input-list div.is-referenced {
+  border-color: rgba(125, 211, 252, 0.38);
+  background: rgba(14, 165, 233, 0.12);
 }
 
 .config-input-list span {
@@ -1234,6 +1240,12 @@ button:disabled {
 .config-input-list button:hover {
   background: rgba(96, 165, 250, 0.18);
   border-color: rgba(96, 165, 250, 0.42);
+}
+
+.config-input-list button.is-active {
+  color: #bae6fd;
+  background: rgba(14, 165, 233, 0.2);
+  border-color: rgba(125, 211, 252, 0.48);
 }
 
 .config-input-list strong {

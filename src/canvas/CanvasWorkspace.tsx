@@ -169,10 +169,29 @@ function nodePreview(node: CanvasNode) {
 }
 
 function appendReferenceToken(value: string | undefined, input: CanvasGenerationInput) {
-  const token = `@[node:${input.nodeId}]`
+  const token = referenceToken(input)
   const current = value ?? ''
   if (current.includes(token)) return current
   return current.trim() ? `${current.trimEnd()} ${token}` : token
+}
+
+function referenceToken(input: CanvasGenerationInput) {
+  return `@[node:${input.nodeId}]`
+}
+
+function hasReferenceToken(value: string | undefined, input: CanvasGenerationInput) {
+  return Boolean(value?.includes(referenceToken(input)))
+}
+
+function removeReferenceToken(value: string | undefined, input: CanvasGenerationInput) {
+  const token = referenceToken(input)
+  return (value ?? '')
+    .split(token)
+    .join('')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 const statusLabels: Record<NonNullable<CanvasNode['metadata']['status']>, string> = {
@@ -1839,12 +1858,14 @@ function NodeBody({
     const context = generationContext
     const inputs = context?.inputs ?? []
     const summary = context?.summary ?? { text: 0, image: 0, video: 0, audio: 0 }
+    const composerValue = node.metadata.composerContent ?? node.metadata.prompt ?? ''
+    const hasExplicitReferences = inputs.some((input) => hasReferenceToken(composerValue, input))
     return (
       <div className="node-body config-body" onWheel={(event) => event.stopPropagation()}>
         <section className="config-inputs">
           <div className="config-inputs-header">
             <strong>上游输入</strong>
-            <span>{inputs.length ? `${inputs.length} 个节点` : '等待连接'}</span>
+            <span>{inputs.length ? `${context?.selectedInputs.length ?? inputs.length} / ${inputs.length} 个已纳入` : '等待连接'}</span>
           </div>
           <div className="config-input-chips">
             <span>文本 {summary.text}</span>
@@ -1854,19 +1875,27 @@ function NodeBody({
           </div>
           {inputs.length ? (
             <div className="config-input-list">
-              {inputs.slice(0, 4).map((input) => (
-                <div key={input.nodeId} className={input.hasContent ? '' : 'is-empty'}>
-                  <span>{nodeKindLabels[input.type]}</span>
-                  <strong>{input.title || '未命名节点'}</strong>
-                  <small>{input.preview}</small>
-                  <button
-                    data-canvas-input
-                    onClick={() => onUpdate(node.id, { metadata: { composerContent: appendReferenceToken(node.metadata.composerContent ?? node.metadata.prompt, input) } }, false)}
-                  >
-                    引用
-                  </button>
-                </div>
-              ))}
+              {inputs.slice(0, 4).map((input) => {
+                const referenced = hasReferenceToken(composerValue, input)
+                const included = !hasExplicitReferences || referenced
+                return (
+                  <div key={input.nodeId} className={`${input.hasContent ? '' : 'is-empty'} ${referenced ? 'is-referenced' : ''}`}>
+                    <span>{nodeKindLabels[input.type]}</span>
+                    <strong>{input.title || '未命名节点'}</strong>
+                    <small>{included ? (referenced ? '已显式引用' : '默认纳入') : '未纳入'} · {input.preview}</small>
+                    <button
+                      data-canvas-input
+                      className={referenced ? 'is-active' : ''}
+                      onClick={() => {
+                        const next = referenced ? removeReferenceToken(composerValue, input) : appendReferenceToken(composerValue, input)
+                        onUpdate(node.id, { metadata: { composerContent: next } }, false)
+                      }}
+                    >
+                      {referenced ? '移除引用' : '引用'}
+                    </button>
+                  </div>
+                )
+              })}
               {inputs.length > 4 ? <em>还有 {inputs.length - 4} 个上游输入</em> : null}
             </div>
           ) : (
@@ -1909,7 +1938,7 @@ function NodeBody({
           提示词
           <textarea
             data-canvas-input
-            value={node.metadata.composerContent ?? node.metadata.prompt ?? ''}
+            value={composerValue}
             placeholder="输入任务提示词；点击上游输入的“引用”可精确选择文本、图片或视频。"
             onFocus={onCaptureHistory}
             onChange={(event) => onUpdate(node.id, { metadata: { composerContent: event.target.value } }, false)}
