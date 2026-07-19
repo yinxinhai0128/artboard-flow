@@ -266,6 +266,15 @@ export function pasteClipboardIntoProject(
       if (nextGroupId) metadata.groupId = nextGroupId
       else delete metadata.groupId
     }
+    const splitSourceNodeId = node.metadata.splitSourceNodeId
+    if (splitSourceNodeId) {
+      const nextSplitSourceNodeId = idMap.get(splitSourceNodeId)
+      if (nextSplitSourceNodeId) metadata.splitSourceNodeId = nextSplitSourceNodeId
+      else {
+        delete metadata.splitSourceNodeId
+        delete metadata.splitOutputIndex
+      }
+    }
     return {
       ...node,
       id: idMap.get(node.id)!,

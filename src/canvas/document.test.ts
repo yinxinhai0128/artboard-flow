@@ -207,6 +207,43 @@ describe('canvas document operations', () => {
     expect(node?.metadata.groupId).toBeUndefined()
   })
 
+  it('remaps split output relationships when copied with their source node', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...imageNode('root'), position: { x: 100, y: 100 }, metadata: { splitChildrenCollapsed: true } },
+        { ...imageNode('child'), position: { x: 240, y: 100 }, metadata: { splitSourceNodeId: 'root', splitOutputIndex: 0 } },
+      ],
+      connections: [],
+    }
+    const clipboard = copySelectionToClipboard(source, ['root', 'child'])
+    const ids = ['root-copy', 'child-copy']
+    const pasted = pasteClipboardIntoProject(source, clipboard, () => ids.shift()!)
+    const child = pasted?.project.nodes.find((node) => node.id === 'child-copy')
+
+    expect(child?.metadata.splitSourceNodeId).toBe('root-copy')
+    expect(child?.metadata.splitOutputIndex).toBe(0)
+    expect(isHiddenSplitChild(child!, pasted!.project.nodes)).toBe(true)
+  })
+
+  it('clears stale split output relationships when only split children are pasted', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...imageNode('root'), position: { x: 100, y: 100 }, metadata: { splitChildrenCollapsed: true } },
+        { ...imageNode('child'), position: { x: 240, y: 100 }, metadata: { splitSourceNodeId: 'root', splitOutputIndex: 0 } },
+      ],
+      connections: [],
+    }
+    const clipboard = copySelectionToClipboard(source, ['child'])
+    const pasted = pasteClipboardIntoProject(source, clipboard, () => 'child-copy')
+    const child = pasted?.project.nodes.find((node) => node.id === 'child-copy')
+
+    expect(child?.metadata.splitSourceNodeId).toBeUndefined()
+    expect(child?.metadata.splitOutputIndex).toBeUndefined()
+    expect(isHiddenSplitChild(child!, pasted!.project.nodes)).toBe(false)
+  })
+
   it('deletes a selected connection without removing nodes', () => {
     const next = deleteSelectionFromProject(project, [], 'bc')
 
