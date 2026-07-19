@@ -751,6 +751,7 @@ button:disabled {
 
 .node-info-grid div,
 .node-info-content,
+.node-info-relations section,
 .node-info-json {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -772,14 +773,65 @@ button:disabled {
 }
 
 .node-info-content,
+.node-info-relations,
 .node-info-json {
   margin: 0 20px 14px;
 }
 
 .node-info-content strong,
+.node-info-relations strong,
 .node-info-json strong {
   color: var(--subtle);
   font-size: 12px;
+}
+
+.node-info-relations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.node-info-relations section > div {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.node-info-relations button {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-info-relations button:hover {
+  background: rgba(96, 165, 250, 0.14);
+}
+
+.node-info-relations button span,
+.node-info-relations p {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.node-info-relations button strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-info-relations p {
+  margin-top: 8px;
 }
 
 .node-info-content p {

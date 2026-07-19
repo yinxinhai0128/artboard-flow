@@ -1,11 +1,16 @@
 import { sourcePort, targetPort } from './geometry'
 import { CONFIG_REFERENCE_PATTERN } from './generation'
-import type { CanvasConnection, CanvasProject, Point } from './types'
+import type { CanvasConnection, CanvasNode, CanvasProject, Point } from './types'
 
 export type ConnectionDropTarget = {
   nodeId: string | null
   isNearNode: boolean
   blockedNodeId: string | null
+}
+
+export type NodeRelations = {
+  incoming: Array<{ connectionId: string; node: CanvasNode }>
+  outgoing: Array<{ connectionId: string; node: CanvasNode }>
 }
 
 export const CONNECTION_HANDLE_HIT_RADIUS = 40
@@ -79,6 +84,25 @@ export function findConnectionDropTarget(
   })
 
   return { nodeId: bestNodeId, isNearNode, blockedNodeId: bestNodeId ? null : bestBlockedNodeId }
+}
+
+export function getNodeRelations(project: CanvasProject, nodeId: string): NodeRelations {
+  const nodesById = new Map(project.nodes.map((node) => [node.id, node]))
+  const incoming: NodeRelations['incoming'] = []
+  const outgoing: NodeRelations['outgoing'] = []
+
+  project.connections.forEach((connection) => {
+    if (connection.toNodeId === nodeId) {
+      const node = nodesById.get(connection.fromNodeId)
+      if (node) incoming.push({ connectionId: connection.id, node })
+    }
+    if (connection.fromNodeId === nodeId) {
+      const node = nodesById.get(connection.toNodeId)
+      if (node) outgoing.push({ connectionId: connection.id, node })
+    }
+  })
+
+  return { incoming, outgoing }
 }
 
 export function deleteSelectionFromProject(project: CanvasProject, nodeIds: string[], connectionId: string | null): CanvasProject {

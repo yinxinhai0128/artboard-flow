@@ -5,7 +5,7 @@ import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, Selec
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { findConnectionDropTarget, nextNodeSelection } from './document'
+import { findConnectionDropTarget, getNodeRelations, nextNodeSelection, type NodeRelations } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -228,6 +228,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const selectedSingleNodeId = controller.selectedNodeIds.length === 1 ? controller.selectedNodeIds[0] : null
   const toolbarNode = (selectedSingleNodeId ? nodesById.get(selectedSingleNodeId) : null) ?? (toolbarNodeId ? nodesById.get(toolbarNodeId) : null) ?? null
   const infoNode = infoNodeId ? nodesById.get(infoNodeId) ?? null : null
+  const infoNodeRelations = useMemo(
+    () => infoNode ? getNodeRelations(controller.project, infoNode.id) : { incoming: [], outgoing: [] },
+    [controller.project, infoNode],
+  )
 
   const clientPoint = useCallback((event: { clientX: number; clientY: number }) => {
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -1110,6 +1114,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       <NodeInfoModal
         node={infoNode}
         relationCounts={infoNode ? relationCounts.get(infoNode.id) ?? { incoming: 0, outgoing: 0 } : { incoming: 0, outgoing: 0 }}
+        relations={infoNodeRelations}
+        onFocusNode={(node) => {
+          focusNode(node)
+          setInfoNodeId(null)
+        }}
         onClose={() => setInfoNodeId(null)}
       />
       {contextMenu ? (
@@ -1405,10 +1414,14 @@ function NodeHoverToolbar({
 function NodeInfoModal({
   node,
   relationCounts,
+  relations,
+  onFocusNode,
   onClose,
 }: {
   node: CanvasNode | null
   relationCounts: { incoming: number; outgoing: number }
+  relations: NodeRelations
+  onFocusNode: (node: CanvasNode) => void
   onClose: () => void
 }) {
   if (!node) return null
@@ -1441,12 +1454,46 @@ function NodeInfoModal({
             <p>{node.type === 'text' ? node.metadata.content : node.metadata.mimeType || '媒体内容已载入'}</p>
           </div>
         ) : null}
+        <div className="node-info-relations">
+          <RelationList title="上游节点" emptyText="没有上游输入" relations={relations.incoming} onFocusNode={onFocusNode} />
+          <RelationList title="下游节点" emptyText="没有下游输出" relations={relations.outgoing} onFocusNode={onFocusNode} />
+        </div>
         <div className="node-info-json">
           <strong>Metadata JSON</strong>
           <pre>{metadata}</pre>
         </div>
       </section>
     </div>
+  )
+}
+
+function RelationList({
+  title,
+  emptyText,
+  relations,
+  onFocusNode,
+}: {
+  title: string
+  emptyText: string
+  relations: NodeRelations['incoming']
+  onFocusNode: (node: CanvasNode) => void
+}) {
+  return (
+    <section>
+      <strong>{title}</strong>
+      {relations.length ? (
+        <div>
+          {relations.map((relation) => (
+            <button key={relation.connectionId} onClick={() => onFocusNode(relation.node)}>
+              <span>{nodeKindLabels[relation.node.type]}</span>
+              <strong>{relation.node.title || '未命名节点'}</strong>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p>{emptyText}</p>
+      )}
+    </section>
   )
 }
 
