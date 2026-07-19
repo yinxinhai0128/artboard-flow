@@ -30,6 +30,14 @@ type PendingConnectionCreate = {
   position: Point
 } | null
 
+type GenerationInput = {
+  nodeId: string
+  type: Exclude<NodeKind, 'config'>
+  title: string
+  preview: string
+  hasContent: boolean
+}
+
 const nodeIcons = {
   text: Type,
   image: Image,
@@ -125,6 +133,30 @@ function nodePreview(node: CanvasNode) {
   return node.metadata.content ? '已载入内容' : `空${nodeKindLabels[node.type]}节点`
 }
 
+function generationInputFromNode(node: CanvasNode): GenerationInput | null {
+  if (node.type === 'config') return null
+  const preview = node.type === 'text'
+    ? node.metadata.content || node.metadata.prompt || ''
+    : node.metadata.content
+      ? node.metadata.mimeType || '已载入媒体内容'
+      : ''
+  return {
+    nodeId: node.id,
+    type: node.type,
+    title: node.title,
+    preview: preview || `空${nodeKindLabels[node.type]}节点`,
+    hasContent: Boolean(preview),
+  }
+}
+
+function inputSummary(inputs: GenerationInput[]) {
+  const summary = { text: 0, image: 0, video: 0 } satisfies Record<Exclude<NodeKind, 'config'>, number>
+  inputs.forEach((input) => {
+    summary[input.type] += 1
+  })
+  return summary
+}
+
 function canDownloadNode(node: CanvasNode) {
   return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video'))
 }
@@ -187,6 +219,22 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (to) to.incoming += 1
     })
     return counts
+  }, [controller.project.connections, controller.project.nodes])
+  const generationInputsByConfigId = useMemo(() => {
+    const inputs = new Map<string, GenerationInput[]>()
+    const nodeMap = new Map(controller.project.nodes.map((node) => [node.id, node]))
+    controller.project.nodes.forEach((node) => {
+      if (node.type === 'config') inputs.set(node.id, [])
+    })
+    controller.project.connections.forEach((connection) => {
+      const target = nodeMap.get(connection.toNodeId)
+      const source = nodeMap.get(connection.fromNodeId)
+      if (!target || target.type !== 'config' || !source) return
+      const input = generationInputFromNode(source)
+      if (!input) return
+      inputs.set(target.id, [...(inputs.get(target.id) ?? []), input])
+    })
+    return inputs
   }, [controller.project.connections, controller.project.nodes])
   const selectedSingleNodeId = controller.selectedNodeIds.length === 1 ? controller.selectedNodeIds[0] : null
   const toolbarNode = (selectedSingleNodeId ? nodesById.get(selectedSingleNodeId) : null) ?? (toolbarNodeId ? nodesById.get(toolbarNodeId) : null) ?? null
@@ -864,6 +912,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onFinishConnection={finishConnection}
                 onUpdate={controller.updateNode}
                 onCaptureHistory={controller.captureHistory}
+                generationInputs={node.type === 'config' ? generationInputsByConfigId.get(node.id) ?? [] : []}
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnectionTarget={Boolean(connectionDraft && connectionDraft.nodeId !== node.id)}
@@ -987,6 +1036,7 @@ function CanvasNodeView({
   onFinishConnection,
   onUpdate,
   onCaptureHistory,
+  generationInputs,
   onHoverStart,
   onFinishConnectionToNode,
   isConnectionTarget,
@@ -1001,6 +1051,7 @@ function CanvasNodeView({
   onFinishConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   onCaptureHistory: () => void
+  generationInputs: GenerationInput[]
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnectionTarget: boolean
@@ -1042,7 +1093,7 @@ function CanvasNodeView({
           onChange={(event) => onUpdate(node.id, { title: event.target.value }, false)}
         />
       </header>
-      <NodeBody node={node} onUpdate={onUpdate} onCaptureHistory={onCaptureHistory} />
+      <NodeBody node={node} generationInputs={generationInputs} onUpdate={onUpdate} onCaptureHistory={onCaptureHistory} />
       <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
       {resizeCorners.map((corner) => (
         <button
@@ -1230,10 +1281,12 @@ function InfoField({ label, value }: { label: string; value: string }) {
 
 function NodeBody({
   node,
+  generationInputs,
   onUpdate,
   onCaptureHistory,
 }: {
   node: CanvasNode
+  generationInputs: GenerationInput[]
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   onCaptureHistory: () => void
 }) {
@@ -1252,8 +1305,34 @@ function NodeBody({
     )
   }
   if (node.type === 'config') {
+    const summary = inputSummary(generationInputs)
     return (
-      <div className="node-body config-body">
+      <div className="node-body config-body" onWheel={(event) => event.stopPropagation()}>
+        <section className="config-inputs">
+          <div className="config-inputs-header">
+            <strong>上游输入</strong>
+            <span>{generationInputs.length ? `${generationInputs.length} 个节点` : '等待连接'}</span>
+          </div>
+          <div className="config-input-chips">
+            <span>文本 {summary.text}</span>
+            <span>图片 {summary.image}</span>
+            <span>视频 {summary.video}</span>
+          </div>
+          {generationInputs.length ? (
+            <div className="config-input-list">
+              {generationInputs.slice(0, 4).map((input) => (
+                <div key={input.nodeId} className={input.hasContent ? '' : 'is-empty'}>
+                  <span>{nodeKindLabels[input.type]}</span>
+                  <strong>{input.title || '未命名节点'}</strong>
+                  <small>{input.preview}</small>
+                </div>
+              ))}
+              {generationInputs.length > 4 ? <em>还有 {generationInputs.length - 4} 个上游输入</em> : null}
+            </div>
+          ) : (
+            <p>把文本、图片或视频节点连到这里，配置节点会汇总为生成输入。</p>
+          )}
+        </section>
         <label>
           模型
           <input data-canvas-input value={node.metadata.model ?? '默认模型'} onFocus={onCaptureHistory} onChange={(event) => onUpdate(node.id, { metadata: { model: event.target.value } }, false)} />

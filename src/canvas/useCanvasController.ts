@@ -9,7 +9,7 @@ const nodeDefaults: Record<NodeKind, { title: string; width: number; height: num
   text: { title: '文本节点', width: 260, height: 180, content: '写下提示词、分镜说明或生成备注。' },
   image: { title: '图片节点', width: 280, height: 220, content: '' },
   video: { title: '视频节点', width: 320, height: 220, content: '' },
-  config: { title: '配置节点', width: 260, height: 190, content: '模型、比例、数量等生成参数会放在这里。' },
+  config: { title: '配置节点', width: 300, height: 300, content: '模型、比例、数量等生成参数会放在这里。' },
 }
 
 function createNode(type: NodeKind, position: Point, patch: Partial<CanvasNode> = {}): CanvasNode {

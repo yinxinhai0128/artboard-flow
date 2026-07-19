@@ -844,6 +844,8 @@ button:disabled {
   display: grid;
   gap: 10px;
   padding: 14px;
+  overflow: auto;
+  align-content: start;
 }
 
 .config-body label {
@@ -863,6 +865,88 @@ button:disabled {
   border-radius: 6px;
   padding: 6px 8px;
   outline: 0;
+}
+
+.config-inputs {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.config-inputs-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.config-inputs-header span {
+  color: var(--muted);
+}
+
+.config-input-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.config-input-chips span {
+  padding: 3px 6px;
+  border-radius: 7px;
+  color: var(--subtle);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+}
+
+.config-input-list {
+  display: grid;
+  gap: 6px;
+}
+
+.config-input-list div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 2px 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.config-input-list div.is-empty {
+  opacity: 0.58;
+}
+
+.config-input-list span {
+  grid-row: span 2;
+  align-self: center;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.config-input-list strong,
+.config-input-list small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-input-list strong {
+  font-size: 12px;
+}
+
+.config-input-list small,
+.config-input-list em,
+.config-inputs p {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
 }
 
 .port {
