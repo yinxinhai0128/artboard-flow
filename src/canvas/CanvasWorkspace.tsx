@@ -1084,6 +1084,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
           <MiniMap
             nodes={controller.project.nodes}
+            connections={controller.project.connections}
+            selectedNodeIds={controller.selectedNodeIds}
             viewport={controller.project.viewport}
             viewportSize={canvasSize}
             onViewportChange={controller.setViewport}
@@ -1663,11 +1665,15 @@ function GenerationTaskBody({
 
 function MiniMap({
   nodes,
+  connections,
+  selectedNodeIds,
   viewport,
   viewportSize,
   onViewportChange,
 }: {
   nodes: CanvasNode[]
+  connections: CanvasProject['connections']
+  selectedNodeIds: string[]
   viewport: { x: number; y: number; k: number }
   viewportSize: { width: number; height: number }
   onViewportChange: (viewport: { x: number; y: number; k: number }) => void
@@ -1686,10 +1692,16 @@ function MiniMap({
   const height = Math.max(1, bounds.maxY - bounds.minY)
   const scale = Math.min(170 / width, 110 / height)
   const offset = { x: 10 + (170 - width * scale) / 2, y: 10 + (110 - height * scale) / 2 }
+  const selectedIds = new Set(selectedNodeIds)
+  const nodeById = new Map(nodes.map((node) => [node.id, node]))
   const viewX = (-viewport.x / viewport.k - bounds.minX) * scale
   const viewY = (-viewport.y / viewport.k - bounds.minY) * scale
   const viewWidth = Math.min(170, (viewportSize.width / viewport.k) * scale)
   const viewHeight = Math.min(110, (viewportSize.height / viewport.k) * scale)
+  const nodeCenter = (node: CanvasNode) => ({
+    x: (node.position.x + node.width / 2 - bounds.minX) * scale + offset.x,
+    y: (node.position.y + node.height / 2 - bounds.minY) * scale + offset.y,
+  })
 
   const focusViewport = (event: React.PointerEvent<SVGSVGElement>) => {
     const rect = mapRef.current?.getBoundingClientRect()
@@ -1720,10 +1732,19 @@ function MiniMap({
       }}
     >
       <rect x="0" y="0" width="190" height="130" rx="8" />
+      {connections.map((connection) => {
+        const from = nodeById.get(connection.fromNodeId)
+        const to = nodeById.get(connection.toNodeId)
+        if (!from || !to) return null
+        const start = nodeCenter(from)
+        const end = nodeCenter(to)
+        const selected = selectedIds.has(from.id) || selectedIds.has(to.id)
+        return <line key={connection.id} className={`mini-connection ${selected ? 'selected' : ''}`} x1={start.x} y1={start.y} x2={end.x} y2={end.y} />
+      })}
       {nodes.map((node) => (
         <rect
           key={node.id}
-          className="mini-node"
+          className={`mini-node ${node.type} ${selectedIds.has(node.id) ? 'selected' : ''}`}
           x={(node.position.x - bounds.minX) * scale + offset.x}
           y={(node.position.y - bounds.minY) * scale + offset.y}
           width={Math.max(3, node.width * scale)}
