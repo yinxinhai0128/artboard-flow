@@ -1596,6 +1596,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           focusNode(node)
           setInfoNodeId(null)
         }}
+        onDeleteConnection={controller.deleteConnection}
         onClose={() => setInfoNodeId(null)}
       />
       <MediaPreviewModal node={previewNode} onClose={() => setPreviewNodeId(null)} />
@@ -2163,12 +2164,14 @@ function NodeInfoModal({
   relationCounts,
   relations,
   onFocusNode,
+  onDeleteConnection,
   onClose,
 }: {
   node: CanvasNode | null
   relationCounts: { incoming: number; outgoing: number }
   relations: NodeRelations
   onFocusNode: (node: CanvasNode) => void
+  onDeleteConnection: (connectionId: string) => void
   onClose: () => void
 }) {
   if (!node) return null
@@ -2202,8 +2205,8 @@ function NodeInfoModal({
           </div>
         ) : null}
         <div className="node-info-relations">
-          <RelationList title="上游节点" emptyText="没有上游输入" relations={relations.incoming} onFocusNode={onFocusNode} />
-          <RelationList title="下游节点" emptyText="没有下游输出" relations={relations.outgoing} onFocusNode={onFocusNode} />
+          <RelationList title="上游节点" emptyText="没有上游输入" relations={relations.incoming} onFocusNode={onFocusNode} onDeleteConnection={onDeleteConnection} />
+          <RelationList title="下游节点" emptyText="没有下游输出" relations={relations.outgoing} onFocusNode={onFocusNode} onDeleteConnection={onDeleteConnection} />
         </div>
         <div className="node-info-json">
           <strong>Metadata JSON</strong>
@@ -2219,11 +2222,13 @@ function RelationList({
   emptyText,
   relations,
   onFocusNode,
+  onDeleteConnection,
 }: {
   title: string
   emptyText: string
   relations: NodeRelations['incoming']
   onFocusNode: (node: CanvasNode) => void
+  onDeleteConnection: (connectionId: string) => void
 }) {
   return (
     <section>
@@ -2231,10 +2236,15 @@ function RelationList({
       {relations.length ? (
         <div>
           {relations.map((relation) => (
-            <button key={relation.connectionId} onClick={() => onFocusNode(relation.node)}>
-              <span>{nodeKindLabels[relation.node.type]}</span>
-              <strong>{relation.node.title || '未命名节点'}</strong>
-            </button>
+            <div className="node-info-relation-row" key={relation.connectionId}>
+              <button className="node-info-relation-focus" onClick={() => onFocusNode(relation.node)}>
+                <span>{nodeKindLabels[relation.node.type]}</span>
+                <strong>{relation.node.title || '未命名节点'}</strong>
+              </button>
+              <button className="node-info-relation-delete" data-relation-delete title="断开关系" onClick={() => onDeleteConnection(relation.connectionId)}>
+                断开
+              </button>
+            </div>
           ))}
         </div>
       ) : (
