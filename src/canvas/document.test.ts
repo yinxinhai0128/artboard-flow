@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, normalizeConnectionForProject } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -10,6 +10,16 @@ const baseNode = (id: string): CanvasNode => ({
   width: 100,
   height: 80,
   metadata: {},
+})
+
+const configNode = (id: string): CanvasNode => ({
+  ...baseNode(id),
+  type: 'config',
+})
+
+const imageNode = (id: string): CanvasNode => ({
+  ...baseNode(id),
+  type: 'image',
 })
 
 const project: CanvasProject = {
@@ -57,5 +67,29 @@ describe('canvas document operations', () => {
     expect(duplicate.connections).toHaveLength(3)
     expect(self.connections).toHaveLength(3)
     expect(missing.connections).toHaveLength(3)
+  })
+
+  it('normalizes connection direction around config nodes', () => {
+    const source = {
+      ...project,
+      nodes: [baseNode('prompt'), imageNode('image'), configNode('config'), configNode('config-2')],
+      connections: [],
+    }
+
+    expect(normalizeConnectionForProject(source, 'prompt', 'config', 'source')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
+    expect(normalizeConnectionForProject(source, 'prompt', 'config', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
+    expect(normalizeConnectionForProject(source, 'config', 'prompt', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
+    expect(normalizeConnectionForProject(source, 'prompt', 'image', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
+    expect(normalizeConnectionForProject(source, 'config', 'config-2', 'source')).toBeNull()
+  })
+
+  it('prevents config-to-config connections in the document layer', () => {
+    const source = {
+      ...project,
+      nodes: [configNode('config-a'), configNode('config-b')],
+      connections: [],
+    }
+
+    expect(addConnectionToProject(source, { id: 'config-edge', fromNodeId: 'config-a', toNodeId: 'config-b' }).connections).toHaveLength(0)
   })
 })

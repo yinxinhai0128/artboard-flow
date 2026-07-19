@@ -1216,7 +1216,9 @@ function CanvasNodeView({
         onSubmitGenerationTask={onSubmitGenerationTask}
         onRefreshGenerationTask={onRefreshGenerationTask}
       />
-      <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
+      {node.type !== 'config' ? (
+        <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
+      ) : null}
       {resizeCorners.map((corner) => (
         <button
           key={corner}

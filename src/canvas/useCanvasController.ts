@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasConnection, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
-import { addConnectionToProject, deleteSelectionFromProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, normalizeConnectionForProject } from './document'
 
 const createId = () => crypto.randomUUID()
 
@@ -104,14 +104,11 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   const addConnectedNode = useCallback(
     (type: NodeKind, nodeId: string, handleType: 'source' | 'target', position: Point, patch: Partial<CanvasNode> = {}) => {
       const node = createNode(type, position, patch)
-      const fromNodeId = handleType === 'source' ? nodeId : node.id
-      const toNodeId = handleType === 'source' ? node.id : nodeId
-      commit((current) =>
-        addConnectionToProject(
-          { ...current, nodes: [...current.nodes, node] },
-          { id: createId(), fromNodeId, toNodeId },
-        ),
-      )
+      commit((current) => {
+        const next = { ...current, nodes: [...current.nodes, node] }
+        const connection = normalizeConnectionForProject(next, nodeId, node.id, handleType)
+        return connection ? addConnectionToProject(next, { id: createId(), ...connection }) : next
+      })
       setSelectedNodeIds([node.id])
       setSelectedConnectionId(null)
       return node
@@ -206,9 +203,8 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   const connectNodes = useCallback(
     (nodeId: string, targetNodeId: string, handleType: 'source' | 'target' = 'source') => {
       commit((current) => {
-        const fromNodeId = handleType === 'source' ? nodeId : targetNodeId
-        const toNodeId = handleType === 'source' ? targetNodeId : nodeId
-        return addConnectionToProject(current, { id: createId(), fromNodeId, toNodeId })
+        const connection = normalizeConnectionForProject(current, nodeId, targetNodeId, handleType)
+        return connection ? addConnectionToProject(current, { id: createId(), ...connection }) : current
       })
     },
     [commit],
