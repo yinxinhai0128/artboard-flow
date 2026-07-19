@@ -101,12 +101,17 @@ function normalizeNodes(value) {
 function normalizeConnections(value, nodes) {
   if (!Array.isArray(value)) return []
   const nodeIds = new Set(nodes.map((node) => node.id))
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
   const seen = new Set()
   return value.flatMap((connection) => {
     if (!connection || typeof connection !== 'object') return []
     const fromNodeId = typeof connection.fromNodeId === 'string' ? connection.fromNodeId : ''
     const toNodeId = typeof connection.toNodeId === 'string' ? connection.toNodeId : ''
     if (!nodeIds.has(fromNodeId) || !nodeIds.has(toNodeId) || fromNodeId === toNodeId) return []
+    const from = nodesById.get(fromNodeId)
+    const to = nodesById.get(toNodeId)
+    if (!from || !to || from.type === 'group' || to.type === 'group') return []
+    if (from.type === 'config' && to.type === 'config') return []
     const key = `${fromNodeId}->${toNodeId}`
     if (seen.has(key)) return []
     seen.add(key)
