@@ -208,6 +208,27 @@ const jobStatusLabels = {
   failed: '失败',
 } satisfies Record<NonNullable<CanvasNode['metadata']['generationJobStatus']>, string>
 
+const activeGenerationJobStatuses = new Set<NonNullable<CanvasNode['metadata']['generationJobStatus']>>(['queued', 'running'])
+
+function isActiveGenerationJob(node: CanvasNode) {
+  const status = node.metadata.generationJobStatus
+  return Boolean(node.metadata.generationJobId && status && activeGenerationJobStatuses.has(status))
+}
+
+function hasGenerationMetadataChanged(current: CanvasNode['metadata'], next: Partial<CanvasNode['metadata']>) {
+  return (
+    current.status !== next.status ||
+    current.generationJobStatus !== next.generationJobStatus ||
+    current.content !== next.content ||
+    current.mimeType !== next.mimeType ||
+    current.bytes !== next.bytes ||
+    current.naturalWidth !== next.naturalWidth ||
+    current.naturalHeight !== next.naturalHeight ||
+    current.generatedAt !== next.generatedAt ||
+    current.errorDetails !== next.errorDetails
+  )
+}
+
 function payloadModeLabel(mode: CanvasGenerationContext['mode']) {
   if (mode === 'video') return '生视频'
   if (mode === 'text') return '生文本'
@@ -983,6 +1004,43 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     },
     [controller, nodesById],
   )
+
+  useEffect(() => {
+    const activeTasks = controller.project.nodes.filter(isActiveGenerationJob)
+    if (!activeTasks.length) return
+
+    let cancelled = false
+    const refreshActiveTasks = async () => {
+      await Promise.all(
+        activeTasks.map(async (taskNode) => {
+          const jobId = taskNode.metadata.generationJobId
+          if (!jobId) return
+          try {
+            const job = await canvasApi.getGenerationJob(jobId)
+            if (cancelled) return
+            const latestNode = nodesById.get(taskNode.id)
+            if (!latestNode) return
+            const metadata = metadataFromGenerationJob(job, latestNode.metadata)
+            if (hasGenerationMetadataChanged(latestNode.metadata, metadata)) {
+              controller.updateNode(taskNode.id, { metadata }, false)
+            }
+          } catch {
+            // 自动轮询不把临时网络错误写成节点失败；用户仍可手动刷新查看详细错误。
+          }
+        }),
+      )
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshActiveTasks()
+    }, 2500)
+    void refreshActiveTasks()
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [controller, controller.project.nodes, nodesById])
 
   return (
     <div className="workspace">
