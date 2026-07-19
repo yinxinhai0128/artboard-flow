@@ -119,15 +119,42 @@ export function getConnectionNodePair(project: CanvasProject, connectionId: stri
   return from && to ? { connection, from, to } : null
 }
 
+export function splitChildIdsForNode(nodes: CanvasNode[], nodeId: string) {
+  return nodes
+    .filter((node) => node.metadata.splitSourceNodeId === nodeId)
+    .toSorted((a, b) => (a.metadata.splitOutputIndex ?? 0) - (b.metadata.splitOutputIndex ?? 0))
+    .map((node) => node.id)
+}
+
+export function expandNodeIdsWithSplitChildren(nodes: CanvasNode[], nodeIds: string[]) {
+  const expanded = new Set(nodeIds)
+  nodeIds.forEach((nodeId) => splitChildIdsForNode(nodes, nodeId).forEach((childId) => expanded.add(childId)))
+  return Array.from(expanded)
+}
+
+export function isHiddenSplitChild(node: CanvasNode, nodes: CanvasNode[]) {
+  const sourceId = node.metadata.splitSourceNodeId
+  if (!sourceId) return false
+  const source = nodes.find((item) => item.id === sourceId)
+  return Boolean(source?.metadata.splitChildrenCollapsed)
+}
+
+export function isSplitConnectionHidden(connection: CanvasConnection, nodes: CanvasNode[]) {
+  const from = nodes.find((node) => node.id === connection.fromNodeId)
+  const to = nodes.find((node) => node.id === connection.toNodeId)
+  return Boolean((from && isHiddenSplitChild(from, nodes)) || (to && isHiddenSplitChild(to, nodes)))
+}
+
 export function deleteSelectionFromProject(project: CanvasProject, nodeIds: string[], connectionId: string | null): CanvasProject {
-  const selected = new Set(nodeIds)
+  const expandedNodeIds = expandNodeIdsWithSplitChildren(project.nodes, nodeIds)
+  const selected = new Set(expandedNodeIds)
   const removedConnection = connectionId ? project.connections.find((connection) => connection.id === connectionId) : null
   const removedInputByConfig = new Map<string, Set<string>>()
   if (removedConnection) {
     const target = project.nodes.find((node) => node.id === removedConnection.toNodeId)
     if (target?.type === 'config') removedInputByConfig.set(target.id, new Set([removedConnection.fromNodeId]))
   }
-  const deletedNodeIds = new Set(nodeIds)
+  const deletedNodeIds = new Set(expandedNodeIds)
   const nextNodes = project.nodes
     .filter((node) => !selected.has(node.id))
     .map((node) => {

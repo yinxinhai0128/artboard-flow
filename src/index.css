@@ -1051,6 +1051,31 @@ button:disabled {
   border-color: rgba(125, 211, 252, 0.45);
 }
 
+.canvas-node.split-root::before {
+  content: attr(data-split-count);
+  position: absolute;
+  right: 10px;
+  top: 50px;
+  z-index: 18;
+  padding: 4px 8px;
+  border: 1px solid rgba(105, 226, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(12, 12, 12, 0.68);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.canvas-node.split-root.split-collapsed {
+  box-shadow: 14px 12px 0 rgba(255, 255, 255, 0.05), 28px 24px 0 rgba(255, 255, 255, 0.03), 0 16px 42px rgba(0, 0, 0, 0.36);
+}
+
+.canvas-node.split-child {
+  border-color: rgba(105, 226, 255, 0.24);
+}
+
 .canvas-node.connection-origin {
   z-index: 60;
 }

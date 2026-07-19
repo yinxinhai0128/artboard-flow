@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasConnection, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
-import { addConnectionToProject, deleteSelectionFromProject, nextNodeSelection, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsWithSplitChildren, nextNodeSelection, normalizeConnectionForProject } from './document'
 
 const createId = () => crypto.randomUUID()
 
@@ -159,19 +159,21 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
 
   const moveNodes = useCallback(
     (ids: string[], delta: Point, recordHistory = false) => {
-      const selected = new Set(ids)
       commit(
-        (current) => ({
-          ...current,
-          nodes: current.nodes.map((node) =>
-            selected.has(node.id)
-              ? {
-                  ...node,
-                  position: { x: node.position.x + delta.x, y: node.position.y + delta.y },
-                }
-              : node,
-          ),
-        }),
+        (current) => {
+          const selected = new Set(expandNodeIdsWithSplitChildren(current.nodes, ids))
+          return {
+            ...current,
+            nodes: current.nodes.map((node) =>
+              selected.has(node.id)
+                ? {
+                    ...node,
+                    position: { x: node.position.x + delta.x, y: node.position.y + delta.y },
+                  }
+                : node,
+            ),
+          }
+        },
         { history: recordHistory },
       )
     },

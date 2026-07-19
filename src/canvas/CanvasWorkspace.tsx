@@ -5,7 +5,7 @@ import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDr
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { findConnectionDropTarget, getConnectionNodePair, getNodeRelations, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
+import { expandNodeIdsWithSplitChildren, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, type ConnectionNodePair, type NodeRelations } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -295,9 +295,17 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [mediaUploadInputAccept, setMediaUploadInputAccept] = useState('image/*,video/*,audio/*')
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
+  const renderableNodes = useMemo(
+    () => controller.project.nodes.filter((node) => !isHiddenSplitChild(node, controller.project.nodes)),
+    [controller.project.nodes],
+  )
+  const renderableConnections = useMemo(
+    () => controller.project.connections.filter((connection) => !isSplitConnectionHidden(connection, controller.project.nodes)),
+    [controller.project.connections, controller.project.nodes],
+  )
   const visibleNodes = useMemo(
-    () => visibleNodesInViewport(controller.project.nodes, controller.project.viewport, canvasSize),
-    [canvasSize, controller.project.nodes, controller.project.viewport],
+    () => visibleNodesInViewport(renderableNodes, controller.project.viewport, canvasSize),
+    [canvasSize, controller.project.viewport, renderableNodes],
   )
   const relationCounts = useMemo(() => {
     const counts = new Map<string, { incoming: number; outgoing: number }>()
@@ -375,9 +383,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   }, [])
 
   const findConnectionDropTargetFromEvent = useCallback(
-    (event: { clientX: number; clientY: number }, draft: Pick<ConnectionDraft, 'nodeId' | 'handleType'>) =>
-      findConnectionDropTarget(controller.project, clientWorld(event), draft, controller.project.viewport.k),
-    [clientWorld, controller.project],
+    (event: { clientX: number; clientY: number }, draft: Pick<ConnectionDraft, 'nodeId' | 'handleType'>) => {
+      const projectForHitTesting = { ...controller.project, nodes: renderableNodes, connections: renderableConnections }
+      return findConnectionDropTarget(projectForHitTesting, clientWorld(event), draft, controller.project.viewport.k)
+    },
+    [clientWorld, controller.project, renderableConnections, renderableNodes],
   )
 
   const zoomAt = useCallback(
@@ -607,7 +617,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     controller.selectNode(node.id, additive)
     if (!nodeIds.includes(node.id)) return
     controller.captureHistory()
-    dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds }
+    dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds: expandNodeIdsWithSplitChildren(controller.project.nodes, nodeIds) }
   }
 
   const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => {
@@ -947,6 +957,15 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const toggleSplitOutputs = useCallback(
+    (node: CanvasNode) => {
+      if (!splitOutputCounts.get(node.id)) return
+      controller.updateNode(node.id, { metadata: { splitChildrenCollapsed: !node.metadata.splitChildrenCollapsed } })
+      setToolbarNodeId(node.id)
+    },
+    [controller, splitOutputCounts],
+  )
+
   const createGenerationTaskNode = useCallback(
     (configNodeId: string) => {
       const configNode = nodesById.get(configNodeId)
@@ -1243,8 +1262,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             }}
           >
             <svg className="connections-layer" viewBox="-50000 -50000 100000 100000">
-              {controller.project.connections.map((connection) => {
-                const endpoints = connectionEndpoints(connection, controller.project.nodes)
+              {renderableConnections.map((connection) => {
+                const endpoints = connectionEndpoints(connection, renderableNodes)
                 if (!endpoints) return null
                 const related = controller.selectedNodeIds.includes(connection.fromNodeId) || controller.selectedNodeIds.includes(connection.toNodeId)
                 const selected = controller.selectedConnectionId === connection.id
@@ -1310,6 +1329,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onRefreshGenerationTask={refreshGenerationTaskNode}
                 splitOutputCount={splitOutputCounts.get(node.id) ?? 0}
                 onSplitGenerationOutputs={splitGenerationOutputs}
+                onToggleSplitOutputs={toggleSplitOutputs}
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnecting={Boolean(connectionDraft)}
@@ -1400,8 +1420,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
           {miniMapOpen ? (
             <MiniMap
-              nodes={controller.project.nodes}
-              connections={controller.project.connections}
+              nodes={renderableNodes}
+              connections={renderableConnections}
               selectedNodeIds={controller.selectedNodeIds}
               viewport={controller.project.viewport}
               viewportSize={canvasSize}
@@ -1542,6 +1562,7 @@ function CanvasNodeView({
   onRefreshGenerationTask,
   splitOutputCount,
   onSplitGenerationOutputs,
+  onToggleSplitOutputs,
   onHoverStart,
   onFinishConnectionToNode,
   isConnecting,
@@ -1565,6 +1586,7 @@ function CanvasNodeView({
   onRefreshGenerationTask: (nodeId: string) => void
   splitOutputCount: number
   onSplitGenerationOutputs: (node: CanvasNode) => void
+  onToggleSplitOutputs: (node: CanvasNode) => void
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnecting: boolean
@@ -1574,10 +1596,14 @@ function CanvasNodeView({
 }) {
   const Icon = nodeIcons[node.type]
   const isValidConnectionTarget = connectionTargetState === 'valid'
+  const hasSplitChildren = splitOutputCount > 0
+  const isSplitCollapsed = hasSplitChildren && Boolean(node.metadata.splitChildrenCollapsed)
+  const isSplitChild = Boolean(node.metadata.splitSourceNodeId)
   return (
     <article
       data-node-id={node.id}
-      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionOrigin ? 'connection-origin' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
+      data-split-count={hasSplitChildren ? `${splitOutputCount} 个结果` : undefined}
+      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${hasSplitChildren ? 'split-root' : ''} ${isSplitCollapsed ? 'split-collapsed' : ''} ${isSplitChild ? 'split-child' : ''} ${isConnecting ? 'connection-active' : ''} ${connectionOrigin ? 'connection-origin' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
       onMouseEnter={() => onHoverStart(node.id)}
       onContextMenu={(event) => onContextMenu(event, node.id)}
@@ -1621,6 +1647,7 @@ function CanvasNodeView({
         onRefreshGenerationTask={onRefreshGenerationTask}
         splitOutputCount={splitOutputCount}
         onSplitGenerationOutputs={onSplitGenerationOutputs}
+        onToggleSplitOutputs={onToggleSplitOutputs}
       />
       {node.type !== 'config' ? (
         <button className="port source-port" title="从此节点连线" data-label="输出" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
@@ -1962,11 +1989,13 @@ function GenerationOutputSwitcher({
   onUpdate,
   splitOutputCount,
   onSplit,
+  onToggleSplit,
 }: {
   node: CanvasNode
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   splitOutputCount: number
   onSplit: (node: CanvasNode) => void
+  onToggleSplit: (node: CanvasNode) => void
 }) {
   const outputs = generationOutputsForNode(node)
   if (outputs.length <= 1) return null
@@ -1985,14 +2014,23 @@ function GenerationOutputSwitcher({
           {index + 1}
         </button>
       ))}
-      <button
-        className="split-action"
-        disabled={hasSplitAllOutputs}
-        title={hasSplitAllOutputs ? '已拆分为独立节点' : '拆分为独立节点'}
-        onClick={() => onSplit(node)}
-      >
-        {hasSplitAllOutputs ? '已拆分' : '拆分'}
-      </button>
+      {hasSplitAllOutputs ? (
+        <button
+          className="split-action"
+          title={node.metadata.splitChildrenCollapsed ? '展开拆分结果节点' : '收起拆分结果节点'}
+          onClick={() => onToggleSplit(node)}
+        >
+          {node.metadata.splitChildrenCollapsed ? '展开' : '收起'}
+        </button>
+      ) : (
+        <button
+          className="split-action"
+          title="拆分为独立节点"
+          onClick={() => onSplit(node)}
+        >
+          拆分
+        </button>
+      )}
     </div>
   )
 }
@@ -2008,6 +2046,7 @@ function NodeBody({
   onRefreshGenerationTask,
   splitOutputCount,
   onSplitGenerationOutputs,
+  onToggleSplitOutputs,
 }: {
   node: CanvasNode
   generationContext: CanvasGenerationContext | null
@@ -2019,6 +2058,7 @@ function NodeBody({
   onRefreshGenerationTask: (nodeId: string) => void
   splitOutputCount: number
   onSplitGenerationOutputs: (node: CanvasNode) => void
+  onToggleSplitOutputs: (node: CanvasNode) => void
 }) {
   const shouldRenderGenerationTask = Boolean(node.metadata.generationPayload)
     && (!node.metadata.content || node.metadata.status === 'loading' || node.metadata.status === 'error')
@@ -2032,7 +2072,7 @@ function NodeBody({
         {node.metadata.content ? (
           <>
             <img src={node.metadata.content} alt={node.title} />
-            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} onToggleSplit={onToggleSplitOutputs} />
           </>
         ) : (
           <span>{node.metadata.prompt ? `已创建图片生成任务：${node.metadata.prompt}` : '图片结果或参考图会显示在这里'}</span>
@@ -2046,7 +2086,7 @@ function NodeBody({
         {node.metadata.content ? (
           <>
             <video src={node.metadata.content} controls />
-            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} onToggleSplit={onToggleSplitOutputs} />
           </>
         ) : (
           <span>{node.metadata.prompt ? `已创建视频生成任务：${node.metadata.prompt}` : '视频结果、首帧或参考视频会显示在这里'}</span>
@@ -2063,7 +2103,7 @@ function NodeBody({
             <strong>{node.title || '音频节点'}</strong>
             <span>{node.metadata.mimeType || 'audio'}</span>
             <audio src={node.metadata.content} controls data-canvas-input />
-            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} />
+            <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} onToggleSplit={onToggleSplitOutputs} />
           </div>
         ) : (
           <span>音频素材、配音或音乐参考会显示在这里</span>

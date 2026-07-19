@@ -80,6 +80,7 @@ export type CanvasNode = {
     activeOutputIndex?: number
     splitSourceNodeId?: string
     splitOutputIndex?: number
+    splitChildrenCollapsed?: boolean
     generationJobId?: string
     generationJobStatus?: CanvasGenerationJobStatus
     submittedAt?: string

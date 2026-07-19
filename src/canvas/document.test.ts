@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, nextNodeSelection, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsWithSplitChildren, findConnectionDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, normalizeConnectionForProject, splitChildIdsForNode } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -50,6 +50,47 @@ describe('canvas document operations', () => {
 
     expect(next.nodes.map((node) => node.id)).toEqual(['a', 'c'])
     expect(next.connections.map((connection) => connection.id)).toEqual(['ca'])
+  })
+
+  it('treats split output children as a collapsible result group', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...imageNode('root'), metadata: { splitChildrenCollapsed: true } },
+        { ...imageNode('child-2'), metadata: { splitSourceNodeId: 'root', splitOutputIndex: 2 } },
+        { ...imageNode('child-1'), metadata: { splitSourceNodeId: 'root', splitOutputIndex: 1 } },
+      ],
+      connections: [
+        { id: 'root-child-1', fromNodeId: 'root', toNodeId: 'child-1' },
+        { id: 'child-2-a', fromNodeId: 'child-2', toNodeId: 'a' },
+      ],
+    }
+
+    expect(splitChildIdsForNode(source.nodes, 'root')).toEqual(['child-1', 'child-2'])
+    expect(expandNodeIdsWithSplitChildren(source.nodes, ['root'])).toEqual(['root', 'child-1', 'child-2'])
+    expect(isHiddenSplitChild(source.nodes[1], source.nodes)).toBe(true)
+    expect(isSplitConnectionHidden(source.connections[0], source.nodes)).toBe(true)
+    expect(isSplitConnectionHidden(source.connections[1], source.nodes)).toBe(true)
+  })
+
+  it('deletes split output children with their source node', () => {
+    const source = {
+      ...project,
+      nodes: [
+        imageNode('root'),
+        { ...imageNode('child'), metadata: { splitSourceNodeId: 'root', splitOutputIndex: 0 } },
+        imageNode('other'),
+      ],
+      connections: [
+        { id: 'root-child', fromNodeId: 'root', toNodeId: 'child' },
+        { id: 'child-other', fromNodeId: 'child', toNodeId: 'other' },
+      ],
+    }
+
+    const next = deleteSelectionFromProject(source, ['root'], null)
+
+    expect(next.nodes.map((node) => node.id)).toEqual(['other'])
+    expect(next.connections).toEqual([])
   })
 
   it('deletes a selected connection without removing nodes', () => {
