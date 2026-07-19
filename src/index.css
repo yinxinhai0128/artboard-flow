@@ -1277,6 +1277,32 @@ button:disabled {
 
 .canvas-node.connection-origin {
   z-index: 60;
+  border-color: rgba(125, 211, 252, 0.78);
+  box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.16), 0 0 0 14px rgba(125, 211, 252, 0.06), 0 16px 42px rgba(0, 0, 0, 0.36);
+}
+
+.canvas-node.connection-origin::after {
+  content: '连接起点';
+  position: absolute;
+  left: 50%;
+  bottom: -38px;
+  z-index: 20;
+  padding: 5px 9px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  border-radius: 999px;
+  background: rgba(8, 47, 73, 0.92);
+  color: #e0f2fe;
+  font-size: 12px;
+  font-weight: 900;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.canvas-node.connection-active:not(.connection-origin):not(.group) {
+  border-color: rgba(125, 211, 252, 0.36);
+  outline: 1px dashed rgba(125, 211, 252, 0.36);
+  outline-offset: 8px;
 }
 
 .canvas-node.connection-target-valid {
