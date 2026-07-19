@@ -1,4 +1,4 @@
-import type { CanvasConnection, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, NodeKind } from './types'
+import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, NodeKind } from './types'
 
 export const CONFIG_REFERENCE_PATTERN = /@\[node:([^\]]+)\]/g
 
@@ -114,6 +114,39 @@ export function buildCanvasGenerationPayload(context: CanvasGenerationContext, c
 
 export function serializeCanvasGenerationPayload(payload: CanvasGenerationPayload) {
   return JSON.stringify(payload, null, 2)
+}
+
+export function metadataFromGenerationJob(job: CanvasGenerationJob, current: CanvasNode['metadata'] = {}): Partial<CanvasNode['metadata']> {
+  const base: Partial<CanvasNode['metadata']> = {
+    generationJobId: job.id,
+    generationJobStatus: job.status,
+    submittedAt: current.submittedAt ?? job.createdAt,
+  }
+  if (job.status === 'failed') {
+    return {
+      ...base,
+      status: 'error',
+      errorDetails: job.error || '生成任务失败',
+    }
+  }
+  if (job.status === 'succeeded') {
+    return {
+      ...base,
+      status: 'success',
+      content: job.result?.content || current.content,
+      mimeType: job.result?.mimeType || current.mimeType,
+      bytes: job.result?.bytes || current.bytes,
+      naturalWidth: job.result?.naturalWidth || current.naturalWidth,
+      naturalHeight: job.result?.naturalHeight || current.naturalHeight,
+      generatedAt: job.updatedAt,
+      errorDetails: '',
+    }
+  }
+  return {
+    ...base,
+    status: 'loading',
+    errorDetails: '',
+  }
 }
 
 function generationInputFromNode(node: CanvasNode): CanvasGenerationInput | null {

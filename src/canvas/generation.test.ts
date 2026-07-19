@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, serializeCanvasGenerationPayload } from './generation'
-import type { CanvasConnection, CanvasNode } from './types'
+import { buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload } from './generation'
+import type { CanvasConnection, CanvasGenerationJob, CanvasNode } from './types'
 
 const configNode: CanvasNode = {
   id: 'config',
@@ -177,5 +177,46 @@ describe('canvas generation context', () => {
 
     expect(context.ready).toBe(false)
     expect(context.warnings).toEqual(['请先输入提示词，或连接有内容的文本、图片、视频节点。'])
+  })
+
+  it('maps adapter jobs into task node metadata consistently', () => {
+    const baseJob: CanvasGenerationJob = {
+      id: 'job-1',
+      projectId: 'project-1',
+      nodeId: 'node-1',
+      status: 'queued',
+      createdAt: '2026-07-19T10:00:00.000Z',
+      updatedAt: '2026-07-19T10:00:00.000Z',
+      payload: buildCanvasGenerationPayload(buildCanvasGenerationContext('config', [configNode, imageNode], [{ id: 'c1', fromNodeId: 'image', toNodeId: 'config' }])),
+      result: null,
+    }
+
+    expect(metadataFromGenerationJob(baseJob)).toMatchObject({
+      status: 'loading',
+      generationJobId: 'job-1',
+      generationJobStatus: 'queued',
+      submittedAt: '2026-07-19T10:00:00.000Z',
+      errorDetails: '',
+    })
+    expect(metadataFromGenerationJob({ ...baseJob, status: 'failed', error: 'provider timeout' })).toMatchObject({
+      status: 'error',
+      generationJobStatus: 'failed',
+      errorDetails: 'provider timeout',
+    })
+    expect(metadataFromGenerationJob({
+      ...baseJob,
+      status: 'succeeded',
+      updatedAt: '2026-07-19T10:05:00.000Z',
+      result: { content: 'data:image/png;base64,result', mimeType: 'image/png', naturalWidth: 32, naturalHeight: 18 },
+    })).toMatchObject({
+      status: 'success',
+      generationJobStatus: 'succeeded',
+      content: 'data:image/png;base64,result',
+      mimeType: 'image/png',
+      naturalWidth: 32,
+      naturalHeight: 18,
+      generatedAt: '2026-07-19T10:05:00.000Z',
+      errorDetails: '',
+    })
   })
 })

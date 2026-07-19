@@ -3,7 +3,7 @@ import { Copy, Download, FileJson, Image, Info, Minus, MousePointer2, Play, Plus
 import { connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { buildCanvasGenerationContext, buildCanvasGenerationPayload, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
+import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
 
 type CanvasWorkspaceProps = {
@@ -783,13 +783,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       try {
         const job = await canvasApi.submitGenerationJob(controller.project.id, taskNodeId, payload)
         controller.updateNode(taskNodeId, {
-          metadata: {
-            status: 'loading',
-            errorDetails: '',
-            generationJobId: job.id,
-            generationJobStatus: job.status,
-            submittedAt: job.createdAt,
-          },
+          metadata: metadataFromGenerationJob(job, taskNode.metadata),
         })
       } catch (error) {
         controller.updateNode(taskNodeId, {
@@ -810,37 +804,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!jobId) return
       try {
         const job = await canvasApi.getGenerationJob(jobId)
-        if (job.status === 'failed') {
-          controller.updateNode(taskNodeId, {
-            metadata: {
-              status: 'error',
-              generationJobStatus: job.status,
-              errorDetails: job.error || '生成任务失败',
-            },
-          })
-          return
-        }
-        if (job.status === 'succeeded') {
-          controller.updateNode(taskNodeId, {
-            metadata: {
-              status: 'success',
-              generationJobStatus: job.status,
-              content: job.result?.content || taskNode?.metadata.content,
-              mimeType: job.result?.mimeType || taskNode?.metadata.mimeType,
-              bytes: job.result?.bytes || taskNode?.metadata.bytes,
-              naturalWidth: job.result?.naturalWidth || taskNode?.metadata.naturalWidth,
-              naturalHeight: job.result?.naturalHeight || taskNode?.metadata.naturalHeight,
-              errorDetails: '',
-            },
-          })
-          return
-        }
         controller.updateNode(taskNodeId, {
-          metadata: {
-            status: 'loading',
-            generationJobStatus: job.status,
-            errorDetails: '',
-          },
+          metadata: metadataFromGenerationJob(job, taskNode.metadata),
         })
       } catch (error) {
         controller.updateNode(taskNodeId, {
