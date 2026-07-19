@@ -1058,6 +1058,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             {pendingConnectionCreate ? (
               <NodeCreateMenu
                 title="创建并连接"
+                variant="connection"
                 position={pendingConnectionCreate.position}
                 onCreate={(type) => {
                   controller.addConnectedNode(type, pendingConnectionCreate.nodeId, pendingConnectionCreate.handleType, pendingConnectionCreate.position)
@@ -1069,6 +1070,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             {nodeCreatePosition ? (
               <NodeCreateMenu
                 title="新建节点"
+                variant="standalone"
                 position={nodeCreatePosition}
                 onCreate={(type) => {
                   controller.addNode(type, nodeCreatePosition)
@@ -1262,21 +1264,56 @@ function CanvasNodeView({
 
 function NodeCreateMenu({
   title,
+  variant,
   position,
   onCreate,
   onClose,
 }: {
   title: string
+  variant: 'connection' | 'standalone'
   position: Point
   onCreate: (type: NodeKind) => void
   onClose: () => void
 }) {
+  const options: Array<{ type: NodeKind; Icon: typeof Type; label: string; description: string }> = [
+    {
+      type: 'text',
+      Icon: Type,
+      label: variant === 'connection' ? '文本生成' : '文本节点',
+      description: variant === 'connection' ? '脚本、分镜、提示词和文案' : '记录提示词、脚本或备注',
+    },
+    {
+      type: 'image',
+      Icon: Image,
+      label: variant === 'connection' ? '图片生成' : '图片节点',
+      description: variant === 'connection' ? '用上游内容生成或承接图片' : '放置图片结果或参考图',
+    },
+    {
+      type: 'video',
+      Icon: Video,
+      label: variant === 'connection' ? '视频生成' : '视频节点',
+      description: variant === 'connection' ? '用上游内容生成或承接视频' : '放置视频结果或参考视频',
+    },
+    {
+      type: 'config',
+      Icon: Settings2,
+      label: '配置节点',
+      description: '模型、尺寸、数量和输入顺序',
+    },
+  ]
+
   return (
     <div className="node-create-menu" data-toolbar style={{ left: position.x, top: position.y }} onPointerDown={(event) => event.stopPropagation()}>
       <div>{title}</div>
-      {(['text', 'image', 'video', 'config'] as const).map((type) => (
-        <button key={type} onClick={() => onCreate(type)}>
-          {type === 'text' ? '文本节点' : type === 'image' ? '图片节点' : type === 'video' ? '视频节点' : '配置节点'}
+      {options.map(({ type, Icon, label, description }) => (
+        <button className="node-create-option" key={type} onClick={() => onCreate(type)}>
+          <span className="node-create-icon">
+            <Icon size={17} />
+          </span>
+          <span>
+            <strong>{label}</strong>
+            <small>{description}</small>
+          </span>
         </button>
       ))}
       <button className="muted-menu-action" onClick={onClose}>

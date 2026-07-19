@@ -556,10 +556,10 @@ button:disabled {
 .node-create-menu {
   position: absolute;
   z-index: 80;
-  min-width: 154px;
+  min-width: 286px;
   display: grid;
   gap: 4px;
-  padding: 8px;
+  padding: 10px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: rgba(18, 18, 18, 0.96);
@@ -588,6 +588,45 @@ button:disabled {
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+}
+
+.node-create-menu .node-create-option {
+  min-height: 62px;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+  padding: 9px 10px;
+}
+
+.node-create-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--subtle);
+}
+
+.node-create-option span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.node-create-option strong {
+  font-size: 14px;
+}
+
+.node-create-option small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .node-create-menu button:hover,
