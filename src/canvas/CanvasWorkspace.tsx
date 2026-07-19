@@ -887,7 +887,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }
       if (mod && event.key.toLowerCase() === 'c') controller.copySelection()
       if (mod && event.key.toLowerCase() === 'v') {
-        if (controller.pasteSelection()) {
+        if (controller.pasteSelection(canvasCenterWorld())) {
           event.preventDefault()
           return
         }
@@ -924,7 +924,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('keyup', keyup)
     }
-  }, [controller, pasteSystemClipboard, setActiveConnectionDraft])
+  }, [canvasCenterWorld, controller, pasteSystemClipboard, setActiveConnectionDraft])
 
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {

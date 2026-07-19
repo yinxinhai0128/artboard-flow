@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BackgroundMode, CanvasConnection, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
+import type { BackgroundMode, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
-import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject, pasteClipboardIntoProject, syncNodeGroupMembership, type CanvasClipboard } from './document'
 
 const createId = () => crypto.randomUUID()
 
@@ -56,7 +56,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null)
   const [history, setHistory] = useState<{ past: Snapshot[]; future: Snapshot[] }>({ past: [], future: [] })
-  const clipboardRef = useRef<{ nodes: CanvasNode[]; connections: CanvasConnection[] } | null>(null)
+  const clipboardRef = useRef<CanvasClipboard | null>(null)
   const activeProjectIdRef = useRef(project.id)
 
   useEffect(() => {
@@ -298,38 +298,21 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   )
 
   const copySelection = useCallback(() => {
-    const selected = new Set(selectedNodeIds)
-    clipboardRef.current = {
-      nodes: localProject.nodes.filter((node) => selected.has(node.id)),
-      connections: localProject.connections.filter((connection) => selected.has(connection.fromNodeId) && selected.has(connection.toNodeId)),
-    }
-  }, [localProject.connections, localProject.nodes, selectedNodeIds])
+    clipboardRef.current = copySelectionToClipboard(localProject, selectedNodeIds)
+  }, [localProject, selectedNodeIds])
 
-  const pasteSelection = useCallback(() => {
+  const pasteSelection = useCallback((targetCenter?: Point) => {
     const clipboard = clipboardRef.current
-    if (!clipboard || clipboard.nodes.length === 0) return false
-    const idMap = new Map(clipboard.nodes.map((node) => [node.id, createId()]))
-    const nodes = clipboard.nodes.map((node) => ({
-      ...node,
-      id: idMap.get(node.id)!,
-      title: `${node.title} 副本`,
-      position: { x: node.position.x + 36, y: node.position.y + 36 },
-      metadata: {
-        ...node.metadata,
-        groupId: node.metadata.groupId && idMap.has(node.metadata.groupId) ? idMap.get(node.metadata.groupId) : node.metadata.groupId,
-      },
-    }))
-    const connections = clipboard.connections.map((connection) => ({
-      id: createId(),
-      fromNodeId: idMap.get(connection.fromNodeId)!,
-      toNodeId: idMap.get(connection.toNodeId)!,
-    }))
-    commit((current) => ({
-      ...current,
-      nodes: [...current.nodes, ...nodes],
-      connections: [...current.connections, ...connections],
-    }))
-    setSelectedNodeIds(nodes.map((node) => node.id))
+    if (!clipboard?.nodes.length) return false
+    let pastedNodeIds: string[] = []
+    commit((current) => {
+      const pasted = pasteClipboardIntoProject(current, clipboard, createId, targetCenter)
+      if (!pasted) return current
+      pastedNodeIds = pasted.nodeIds
+      return pasted.project
+    })
+    if (!pastedNodeIds.length) return false
+    setSelectedNodeIds(pastedNodeIds)
     setSelectedConnectionId(null)
     return true
   }, [commit])

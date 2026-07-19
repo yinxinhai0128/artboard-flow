@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, pasteClipboardIntoProject, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -166,6 +166,45 @@ describe('canvas document operations', () => {
     expect(moving.position.y).toBe(236)
     expect(moving.position.x + moving.width).toBeLessThanOrEqual(group.position.x + group.width - 24)
     expect(moving.position.y + moving.height).toBeLessThanOrEqual(group.position.y + group.height - 24)
+  })
+
+  it('pastes copied groups around a target center and remaps internal relations', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...groupNode('group'), position: { x: 100, y: 100 }, width: 300, height: 240 },
+        { ...baseNode('a'), position: { x: 150, y: 150 }, metadata: { groupId: 'group' } },
+        { ...baseNode('b'), position: { x: 280, y: 160 }, metadata: { groupId: 'group' } },
+        baseNode('outside'),
+      ],
+      connections: [{ id: 'a-b', fromNodeId: 'a', toNodeId: 'b' }],
+    }
+    const clipboard = copySelectionToClipboard(source, ['group', 'a', 'b'])
+    const ids = ['group-copy', 'a-copy', 'b-copy', 'a-b-copy']
+    const pasted = pasteClipboardIntoProject(source, clipboard, () => ids.shift()!, { x: 1000, y: 500 })
+
+    expect(pasted?.nodeIds).toEqual(['group-copy', 'a-copy', 'b-copy'])
+    expect(pasted?.project.nodes.find((node) => node.id === 'group-copy')?.position).toEqual({ x: 850, y: 380 })
+    expect(pasted?.project.nodes.find((node) => node.id === 'a-copy')?.metadata.groupId).toBe('group-copy')
+    expect(pasted?.project.nodes.find((node) => node.id === 'b-copy')?.metadata.groupId).toBe('group-copy')
+    expect(pasted?.project.connections.at(-1)).toEqual({ id: 'a-b-copy', fromNodeId: 'a-copy', toNodeId: 'b-copy' })
+  })
+
+  it('clears stale group membership when only group children are pasted', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...groupNode('group'), position: { x: 100, y: 100 }, width: 300, height: 240 },
+        { ...baseNode('a'), position: { x: 150, y: 150 }, metadata: { groupId: 'group' } },
+      ],
+      connections: [],
+    }
+    const clipboard = copySelectionToClipboard(source, ['a'])
+    const pasted = pasteClipboardIntoProject(source, clipboard, () => 'a-copy')
+    const node = pasted?.project.nodes.find((item) => item.id === 'a-copy')
+
+    expect(node?.position).toEqual({ x: 186, y: 186 })
+    expect(node?.metadata.groupId).toBeUndefined()
   })
 
   it('deletes a selected connection without removing nodes', () => {

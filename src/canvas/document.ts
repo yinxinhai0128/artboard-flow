@@ -19,6 +19,11 @@ export type ConnectionNodePair = {
   to: CanvasNode
 }
 
+export type CanvasClipboard = {
+  nodes: CanvasNode[]
+  connections: CanvasConnection[]
+}
+
 export const CONNECTION_HANDLE_HIT_RADIUS = 40
 export const CONNECTION_NODE_HIT_PADDING = 32
 
@@ -222,6 +227,69 @@ export function syncNodeGroupMembership(project: CanvasProject, nodeIds: string[
     return { ...node, metadata: { ...node.metadata, groupId } }
   })
   return changed ? { ...project, nodes } : project
+}
+
+export function copySelectionToClipboard(project: CanvasProject, nodeIds: string[]): CanvasClipboard | null {
+  const selected = new Set(nodeIds)
+  const nodes = project.nodes
+    .filter((node) => selected.has(node.id))
+    .map((node) => ({
+      ...node,
+      position: { ...node.position },
+      metadata: { ...node.metadata },
+    }))
+  if (!nodes.length) return null
+  return {
+    nodes,
+    connections: project.connections
+      .filter((connection) => selected.has(connection.fromNodeId) && selected.has(connection.toNodeId))
+      .map((connection) => ({ ...connection })),
+  }
+}
+
+export function pasteClipboardIntoProject(
+  project: CanvasProject,
+  clipboard: CanvasClipboard | null,
+  createId: () => string,
+  targetCenter?: Point,
+): { project: CanvasProject; nodeIds: string[] } | null {
+  if (!clipboard?.nodes.length) return null
+
+  const bounds = nodeBounds(clipboard.nodes)
+  const dx = targetCenter ? targetCenter.x - (bounds.left + bounds.right) / 2 : 36
+  const dy = targetCenter ? targetCenter.y - (bounds.top + bounds.bottom) / 2 : 36
+  const idMap = new Map(clipboard.nodes.map((node) => [node.id, createId()]))
+  const nodes = clipboard.nodes.map((node) => {
+    const groupId = node.metadata.groupId
+    const metadata = { ...node.metadata }
+    if (groupId) {
+      const nextGroupId = idMap.get(groupId)
+      if (nextGroupId) metadata.groupId = nextGroupId
+      else delete metadata.groupId
+    }
+    return {
+      ...node,
+      id: idMap.get(node.id)!,
+      title: node.title.endsWith(' 副本') ? node.title : `${node.title} 副本`,
+      position: { x: node.position.x + dx, y: node.position.y + dy },
+      metadata,
+    }
+  })
+  const connections = clipboard.connections.flatMap((connection) => {
+    const fromNodeId = idMap.get(connection.fromNodeId)
+    const toNodeId = idMap.get(connection.toNodeId)
+    if (!fromNodeId || !toNodeId) return []
+    return [{ ...connection, id: createId(), fromNodeId, toNodeId }]
+  })
+
+  return {
+    project: {
+      ...project,
+      nodes: [...project.nodes, ...nodes],
+      connections: [...project.connections, ...connections],
+    },
+    nodeIds: nodes.map((node) => node.id),
+  }
 }
 
 export function expandNodeIdsWithSplitChildren(nodes: CanvasNode[], nodeIds: string[]) {
