@@ -58,6 +58,20 @@ const videoNode: CanvasNode = {
   },
 }
 
+const audioNode: CanvasNode = {
+  id: 'audio',
+  type: 'audio',
+  title: '配音',
+  position: { x: 0, y: 0 },
+  width: 300,
+  height: 170,
+  metadata: {
+    content: 'data:audio/mpeg;base64,abc',
+    mimeType: 'audio/mpeg',
+    bytes: 256,
+  },
+}
+
 const emptyImageNode: CanvasNode = {
   ...imageNode,
   id: 'empty-image',
@@ -70,29 +84,32 @@ const connections: CanvasConnection[] = [
   { id: 'c2', fromNodeId: 'image', toNodeId: 'config' },
   { id: 'c3', fromNodeId: 'video', toNodeId: 'config' },
   { id: 'c4', fromNodeId: 'empty-image', toNodeId: 'config' },
+  { id: 'c5', fromNodeId: 'audio', toNodeId: 'config' },
 ]
 
 describe('canvas generation context', () => {
   it('collects only connected resource nodes that have usable content', () => {
-    const inputs = buildCanvasGenerationInputs('config', [configNode, textNode, imageNode, videoNode, emptyImageNode], connections)
+    const inputs = buildCanvasGenerationInputs('config', [configNode, textNode, imageNode, videoNode, audioNode, emptyImageNode], connections)
 
-    expect(inputs.map((input) => input.nodeId)).toEqual(['text', 'image', 'video'])
+    expect(inputs.map((input) => input.nodeId)).toEqual(['text', 'image', 'video', 'audio'])
     expect(inputs[0]).toMatchObject({ type: 'text', title: '分镜', text: '一只银色机械鸟飞过雪山。' })
     expect(inputs[1].media).toMatchObject({ mimeType: 'image/png', width: 64, height: 64 })
+    expect(inputs[3].media).toMatchObject({ mimeType: 'audio/mpeg', bytes: 256 })
   })
 
   it('builds a default context from config prompt plus all upstream resources', () => {
-    const context = buildCanvasGenerationContext('config', [configNode, textNode, imageNode, videoNode], connections)
+    const context = buildCanvasGenerationContext('config', [configNode, textNode, imageNode, videoNode, audioNode], connections)
 
     expect(context.ready).toBe(true)
     expect(context.mode).toBe('image')
     expect(context.model).toBe('image-model')
     expect(context.count).toBe(2)
     expect(context.prompt).toBe('主提示词\n\n一只银色机械鸟飞过雪山。')
-    expect(context.summary).toEqual({ text: 1, image: 1, video: 1 })
-    expect(context.selectedInputs.map((input) => input.nodeId)).toEqual(['text', 'image', 'video'])
+    expect(context.summary).toEqual({ text: 1, image: 1, video: 1, audio: 1 })
+    expect(context.selectedInputs.map((input) => input.nodeId)).toEqual(['text', 'image', 'video', 'audio'])
     expect(context.referenceImages).toHaveLength(1)
     expect(context.referenceVideos).toHaveLength(1)
+    expect(context.referenceAudios).toHaveLength(1)
   })
 
   it('does not treat config node help copy as generation prompt', () => {
@@ -121,7 +138,7 @@ describe('canvas generation context', () => {
 
     expect(context.prompt).toBe('把 图片1 的主体做成电影感镜头，并结合 【文本1】。\n\n【文本1】\n一只银色机械鸟飞过雪山。')
     expect(context.selectedInputs.map((input) => input.nodeId)).toEqual(['image', 'text'])
-    expect(context.summary).toEqual({ text: 1, image: 1, video: 0 })
+    expect(context.summary).toEqual({ text: 1, image: 1, video: 0, audio: 0 })
     expect(context.referenceImages).toHaveLength(1)
     expect(context.referenceVideos).toHaveLength(0)
   })
@@ -143,7 +160,7 @@ describe('canvas generation context', () => {
       size: '1024x1024',
       count: 2,
       prompt: '只参考 图片1，不要使用视频。',
-      summary: { text: 0, image: 1, video: 0 },
+      summary: { text: 0, image: 1, video: 0, audio: 0 },
       createdAt: '2026-07-19T10:00:00.000Z',
     })
     expect(payload.inputs).toEqual([

@@ -48,7 +48,7 @@ export function parseGenerationJob(row) {
 
 function normalizePayloadInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return []
-  if (input.type !== 'text' && input.type !== 'image' && input.type !== 'video') return []
+  if (input.type !== 'text' && input.type !== 'image' && input.type !== 'video' && input.type !== 'audio') return []
   return [{
     nodeId: typeof input.nodeId === 'string' ? input.nodeId : '',
     type: input.type,
@@ -77,6 +77,7 @@ function normalizeSummary(summary, inputs) {
       text: countNumber(summary.text),
       image: countNumber(summary.image),
       video: countNumber(summary.video),
+      audio: countNumber(summary.audio),
     }
   }
   return inputs.reduce(
@@ -84,7 +85,7 @@ function normalizeSummary(summary, inputs) {
       counts[input.type] += 1
       return counts
     },
-    { text: 0, image: 0, video: 0 },
+    { text: 0, image: 0, video: 0, audio: 0 },
   )
 }
 

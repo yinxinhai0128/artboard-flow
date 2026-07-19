@@ -40,7 +40,7 @@ await app.register(cors, {
 
 const nowIso = () => new Date().toISOString()
 const id = () => crypto.randomUUID()
-const NODE_TYPES = new Set(['text', 'image', 'video', 'config'])
+const NODE_TYPES = new Set(['text', 'image', 'video', 'audio', 'config'])
 const BACKGROUND_MODES = new Set(['dots', 'lines', 'blank'])
 
 function parseDocument(row) {

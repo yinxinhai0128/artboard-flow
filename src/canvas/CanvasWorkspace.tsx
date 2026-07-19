@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
+import { Compass, Copy, Download, FileJson, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -37,6 +37,7 @@ const nodeIcons = {
   text: Type,
   image: Image,
   video: Video,
+  audio: Music2,
   config: Settings2,
 }
 
@@ -44,6 +45,7 @@ const nodeKindLabels: Record<NodeKind, string> = {
   text: '文本',
   image: '图片',
   video: '视频',
+  audio: '音频',
   config: '配置',
 }
 
@@ -86,6 +88,22 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
       },
     }
   }
+  if (isAudioFile(file)) {
+    const content = await readFileAsDataUrl(file)
+    return {
+      type: 'audio',
+      title: file.name || '音频节点',
+      position,
+      width: 300,
+      height: 170,
+      metadata: {
+        content,
+        status: 'success',
+        mimeType: file.type || 'audio/mpeg',
+        bytes: file.size,
+      },
+    }
+  }
   const content = await file.text()
   return {
     type: 'text',
@@ -93,6 +111,10 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
     position,
     metadata: { content, status: 'success', mimeType: file.type || 'text/plain', bytes: file.size },
   }
+}
+
+function isAudioFile(file: File) {
+  return file.type.startsWith('audio/') || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(file.name)
 }
 
 function readFileAsDataUrl(file: File) {
@@ -156,7 +178,7 @@ function payloadModeLabel(mode: CanvasGenerationContext['mode']) {
 }
 
 function canDownloadNode(node: CanvasNode) {
-  return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video'))
+  return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video' || node.type === 'audio'))
 }
 
 function safeFileName(name: string) {
@@ -180,7 +202,7 @@ function downloadNodeContent(node: CanvasNode) {
     return
   }
   anchor.href = content
-  const extension = node.type === 'video' ? 'mp4' : node.metadata.mimeType?.split('/')[1]?.split(';')[0] || 'png'
+  const extension = node.type === 'video' ? 'mp4' : node.type === 'audio' ? node.metadata.mimeType?.split('/')[1]?.split(';')[0] || 'mp3' : node.metadata.mimeType?.split('/')[1]?.split(';')[0] || 'png'
   anchor.download = `${safeFileName(node.title)}.${extension}`
   anchor.click()
 }
@@ -946,7 +968,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               />
               <select value={sidePanelType} onChange={(event) => setSidePanelType(event.target.value as NodeKind | 'all')}>
                 <option value="all">全部类型</option>
-                {(['text', 'image', 'video', 'config'] as const).map((type) => (
+                {(['text', 'image', 'video', 'audio', 'config'] as const).map((type) => (
                   <option key={type} value={type}>{nodeKindLabels[type]}</option>
                 ))}
               </select>
@@ -988,6 +1010,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           </button>
           <button title="视频节点" onClick={() => addNodeNearCenter('video')}>
             <Video size={18} />
+          </button>
+          <button title="音频节点" onClick={() => addNodeNearCenter('audio')}>
+            <Music2 size={18} />
           </button>
           <button title="配置节点" onClick={() => addNodeNearCenter('config')}>
             <Settings2 size={18} />
@@ -1418,6 +1443,12 @@ function NodeCreateMenu({
       description: variant === 'connection' ? '用上游内容生成或承接视频' : '放置视频结果或参考视频',
     },
     {
+      type: 'audio',
+      Icon: Music2,
+      label: variant === 'connection' ? '音频参考' : '音频节点',
+      description: variant === 'connection' ? '承接配音、音乐或音频参考' : '放置配音、音乐或音频素材',
+    },
+    {
       type: 'config',
       Icon: Settings2,
       label: '配置节点',
@@ -1709,10 +1740,26 @@ function NodeBody({
       </div>
     )
   }
+  if (node.type === 'audio') {
+    return (
+      <div className="node-body media-body audio-body">
+        {node.metadata.content ? (
+          <div className="audio-player">
+            <Music2 size={28} />
+            <strong>{node.title || '音频节点'}</strong>
+            <span>{node.metadata.mimeType || 'audio'}</span>
+            <audio src={node.metadata.content} controls data-canvas-input />
+          </div>
+        ) : (
+          <span>音频素材、配音或音乐参考会显示在这里</span>
+        )}
+      </div>
+    )
+  }
   if (node.type === 'config') {
     const context = generationContext
     const inputs = context?.inputs ?? []
-    const summary = context?.summary ?? { text: 0, image: 0, video: 0 }
+    const summary = context?.summary ?? { text: 0, image: 0, video: 0, audio: 0 }
     return (
       <div className="node-body config-body" onWheel={(event) => event.stopPropagation()}>
         <section className="config-inputs">
@@ -1724,6 +1771,7 @@ function NodeBody({
             <span>文本 {summary.text}</span>
             <span>图片 {summary.image}</span>
             <span>视频 {summary.video}</span>
+            <span>音频 {summary.audio}</span>
           </div>
           {inputs.length ? (
             <div className="config-input-list">
@@ -1743,7 +1791,7 @@ function NodeBody({
               {inputs.length > 4 ? <em>还有 {inputs.length - 4} 个上游输入</em> : null}
             </div>
           ) : (
-            <p>把有内容的文本、图片或视频节点连到这里，配置节点会汇总为生成输入。</p>
+            <p>把有内容的文本、图片、视频或音频节点连到这里，配置节点会汇总为生成输入。</p>
           )}
         </section>
         <label>
@@ -1849,6 +1897,7 @@ function GenerationTaskBody({
         <span>文本 {payload.summary.text}</span>
         <span>图片 {payload.summary.image}</span>
         <span>视频 {payload.summary.video}</span>
+        <span>音频 {payload.summary.audio}</span>
       </div>
       <p className="generation-task-prompt">{payload.prompt || '无提示词'}</p>
       {node.metadata.errorDetails ? <em>{node.metadata.errorDetails}</em> : null}

@@ -12,7 +12,7 @@ describe('generation adapter normalization', () => {
       inputs: [
         { nodeId: 'text-1', type: 'text', title: 'Prompt', text: 'story' },
         { nodeId: 'image-1', type: 'image', title: 'Reference', media: { url: 'data:image/png;base64,abc', mimeType: 'image/png', width: 12, height: 8 } },
-        { nodeId: 'bad', type: 'audio', title: 'Ignored' },
+        { nodeId: 'audio-1', type: 'audio', title: 'Voice', media: { url: 'data:audio/mpeg;base64,abc', mimeType: 'audio/mpeg' } },
       ],
     })
 
@@ -22,9 +22,9 @@ describe('generation adapter normalization', () => {
       size: '1280x720',
       count: 15,
       prompt: 'make it cinematic',
-      summary: { text: 1, image: 1, video: 0 },
+      summary: { text: 1, image: 1, video: 0, audio: 1 },
     })
-    expect(payload.inputs).toHaveLength(2)
+    expect(payload.inputs).toHaveLength(3)
   })
 
   it('normalizes job statuses and external results', () => {

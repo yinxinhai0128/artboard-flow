@@ -31,12 +31,13 @@ export type CanvasGenerationContext = {
   selectedInputs: CanvasGenerationInput[]
   referenceImages: CanvasGenerationInput[]
   referenceVideos: CanvasGenerationInput[]
+  referenceAudios: CanvasGenerationInput[]
   summary: CanvasGenerationSummary
   ready: boolean
   warnings: string[]
 }
 
-const defaultSummary = (): CanvasGenerationSummary => ({ text: 0, image: 0, video: 0 })
+const defaultSummary = (): CanvasGenerationSummary => ({ text: 0, image: 0, video: 0, audio: 0 })
 
 export function buildCanvasGenerationInputs(configNodeId: string, nodes: CanvasNode[], connections: CanvasConnection[]) {
   const nodeMap = new Map(nodes.map((node) => [node.id, node]))
@@ -63,8 +64,9 @@ export function buildCanvasGenerationContext(configNodeId: string, nodes: Canvas
   const selectedInputs = composerContext ? composerContext.selectedInputs : inputs
   const referenceImages = selectedInputs.filter((input) => input.type === 'image' && input.media)
   const referenceVideos = selectedInputs.filter((input) => input.type === 'video' && input.media)
+  const referenceAudios = selectedInputs.filter((input) => input.type === 'audio' && input.media)
   const summary = summarizeInputs(selectedInputs)
-  const hasAnyReference = Boolean(summary.text || summary.image || summary.video)
+  const hasAnyReference = Boolean(summary.text || summary.image || summary.video || summary.audio)
   const ready = Boolean(prompt.trim() || hasAnyReference)
   const warnings = ready ? [] : ['请先输入提示词，或连接有内容的文本、图片、视频节点。']
 
@@ -79,6 +81,7 @@ export function buildCanvasGenerationContext(configNodeId: string, nodes: Canvas
     selectedInputs,
     referenceImages,
     referenceVideos,
+    referenceAudios,
     summary,
     ready,
     warnings,
@@ -231,5 +234,6 @@ function buildComposerPrompt(inputs: CanvasGenerationInput[], sourcePrompt: stri
 function generationLabel(type: CanvasGenerationInput['type'], index: number) {
   if (type === 'image') return `图片${index + 1}`
   if (type === 'video') return `视频${index + 1}`
+  if (type === 'audio') return `音频${index + 1}`
   return `文本${index + 1}`
 }

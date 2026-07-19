@@ -424,6 +424,10 @@ button:disabled {
   background: #fb923c;
 }
 
+.node-list-icon.audio {
+  background: #a855f7;
+}
+
 .node-list-icon.config {
   background: var(--blue);
 }
@@ -1057,10 +1061,35 @@ button:disabled {
 }
 
 .media-body img,
-.media-body video {
+.media-body video,
+.media-body audio {
   max-width: 100%;
   max-height: 100%;
   border-radius: 7px;
+}
+
+.audio-body {
+  align-items: stretch;
+}
+
+.audio-player {
+  display: grid;
+  gap: 10px;
+  place-items: center;
+  width: 100%;
+  color: var(--subtle);
+}
+
+.audio-player strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-player audio {
+  width: min(100%, 260px);
 }
 
 .config-body {
@@ -1583,6 +1612,10 @@ button:disabled {
 
 .mini-node.video {
   fill: rgba(168, 85, 247, 0.82);
+}
+
+.mini-node.audio {
+  fill: rgba(217, 70, 239, 0.82);
 }
 
 .mini-node.config {

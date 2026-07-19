@@ -1,4 +1,4 @@
-export type NodeKind = 'text' | 'image' | 'video' | 'config'
+export type NodeKind = 'text' | 'image' | 'video' | 'audio' | 'config'
 
 export type CanvasGenerationMode = 'image' | 'video' | 'text'
 
