@@ -37,6 +37,13 @@ const nodeIcons = {
   config: Settings2,
 }
 
+const nodeKindLabels: Record<NodeKind, string> = {
+  text: '文本',
+  image: '图片',
+  video: '视频',
+  config: '配置',
+}
+
 const resizeCorners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 
 async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<CanvasNode> & { type: NodeKind; position: Point }> {
@@ -111,6 +118,13 @@ function fitMediaSize(width: number, height: number, maxWidth: number, maxHeight
   }
 }
 
+function nodePreview(node: CanvasNode) {
+  if (node.type === 'text') return node.metadata.content || '空文本节点'
+  if (node.type === 'config') return `${node.metadata.model || '默认模型'} · ${node.metadata.size || '1024x1024'} · ${node.metadata.count || 1} 张`
+  if (node.metadata.mimeType) return node.metadata.mimeType
+  return node.metadata.content ? '已载入内容' : `空${nodeKindLabels[node.type]}节点`
+}
+
 export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: CanvasWorkspaceProps) {
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -126,8 +140,22 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [canvasSize, setCanvasSize] = useState({ width: 1200, height: 720 })
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(project.title)
+  const [sidePanelOpen, setSidePanelOpen] = useState(false)
+  const [sidePanelQuery, setSidePanelQuery] = useState('')
+  const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
+  const relationCounts = useMemo(() => {
+    const counts = new Map<string, { incoming: number; outgoing: number }>()
+    controller.project.nodes.forEach((node) => counts.set(node.id, { incoming: 0, outgoing: 0 }))
+    controller.project.connections.forEach((connection) => {
+      const from = counts.get(connection.fromNodeId)
+      const to = counts.get(connection.toNodeId)
+      if (from) from.outgoing += 1
+      if (to) to.incoming += 1
+    })
+    return counts
+  }, [controller.project.connections, controller.project.nodes])
 
   const clientPoint = useCallback((event: { clientX: number; clientY: number }) => {
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -575,6 +603,34 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     '--grid-x': `${controller.project.viewport.x % gridSize}px`,
     '--grid-y': `${controller.project.viewport.y % gridSize}px`,
   } as React.CSSProperties
+  const filteredPanelNodes = useMemo(() => {
+    const query = sidePanelQuery.trim().toLowerCase()
+    return controller.project.nodes.filter((node) => {
+      if (sidePanelType !== 'all' && node.type !== sidePanelType) return false
+      if (!query) return true
+      return [node.title, node.type, node.metadata.content, node.metadata.model, node.metadata.mimeType]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    })
+  }, [controller.project.nodes, sidePanelQuery, sidePanelType])
+
+  const focusNode = useCallback(
+    (node: CanvasNode) => {
+      const nextScale = Math.max(controller.project.viewport.k, 0.9)
+      controller.selectNode(node.id, false)
+      controller.setViewport(
+        {
+          x: canvasSize.width / 2 - (node.position.x + node.width / 2) * nextScale,
+          y: canvasSize.height / 2 - (node.position.y + node.height / 2) * nextScale,
+          k: nextScale,
+        },
+        true,
+      )
+    },
+    [canvasSize.height, canvasSize.width, controller],
+  )
 
   return (
     <div className="workspace">
@@ -608,6 +664,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           </p>
         </div>
         <div className="topbar-actions">
+          <button className="ghost-button" onClick={() => setSidePanelOpen((value) => !value)}>
+            {sidePanelOpen ? '收起节点面板' : '节点面板'}
+          </button>
           <button className="icon-button" title="撤销" disabled={!controller.canUndo} onClick={controller.undo}>
             <Undo2 size={17} />
           </button>
@@ -621,7 +680,54 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       </header>
 
       <div className="canvas-shell">
-        <aside className="canvas-toolbar" data-toolbar>
+        {sidePanelOpen ? (
+          <aside className="node-side-panel" data-toolbar>
+            <div className="node-side-panel-header">
+              <div>
+                <strong>画布节点</strong>
+                <span>{filteredPanelNodes.length} / {controller.project.nodes.length}</span>
+              </div>
+              <button onClick={() => setSidePanelOpen(false)}>收起</button>
+            </div>
+            <div className="node-side-panel-controls">
+              <input
+                value={sidePanelQuery}
+                placeholder="搜索标题、内容或类型"
+                onChange={(event) => setSidePanelQuery(event.target.value)}
+              />
+              <select value={sidePanelType} onChange={(event) => setSidePanelType(event.target.value as NodeKind | 'all')}>
+                <option value="all">全部类型</option>
+                {(['text', 'image', 'video', 'config'] as const).map((type) => (
+                  <option key={type} value={type}>{nodeKindLabels[type]}</option>
+                ))}
+              </select>
+            </div>
+            <div className="node-side-panel-list">
+              {filteredPanelNodes.length ? (
+                filteredPanelNodes.map((node) => {
+                  const counts = relationCounts.get(node.id) ?? { incoming: 0, outgoing: 0 }
+                  const selected = controller.selectedNodeIds.includes(node.id)
+                  return (
+                    <button key={node.id} className={`node-list-item ${selected ? 'active' : ''}`} onClick={() => focusNode(node)}>
+                      <span className={`node-list-icon ${node.type}`}>{nodeKindLabels[node.type].slice(0, 1)}</span>
+                      <span className="node-list-main">
+                        <span className="node-list-title">{node.title || '未命名节点'}</span>
+                        <span className="node-list-preview">{nodePreview(node)}</span>
+                        <span className="node-list-relations">
+                          输入 {counts.incoming} · 输出 {counts.outgoing}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })
+              ) : (
+                <div className="node-side-empty">没有匹配的节点</div>
+              )}
+            </div>
+          </aside>
+        ) : null}
+
+        <aside className={`canvas-toolbar ${sidePanelOpen ? 'with-side-panel' : ''}`} data-toolbar>
           <button title="选择工具">
             <MousePointer2 size={18} />
           </button>
