@@ -42,6 +42,7 @@ export type CanvasConnection = {
 
 export type CanvasProject = {
   id: string
+  schemaVersion?: number
   title: string
   createdAt: string
   updatedAt: string
@@ -62,6 +63,7 @@ export type ConnectionDraft = {
   fromNodeId: string
   to: Point
   startScreen: Point
+  targetNodeId?: string | null
 }
 
 export type Snapshot = Pick<CanvasProject, 'nodes' | 'connections' | 'backgroundMode' | 'viewport'>

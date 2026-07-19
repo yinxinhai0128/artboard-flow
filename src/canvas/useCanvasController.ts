@@ -12,6 +12,24 @@ const nodeDefaults: Record<NodeKind, { title: string; width: number; height: num
   config: { title: '配置节点', width: 260, height: 190, content: '模型、比例、数量等生成参数会放在这里。' },
 }
 
+function createNode(type: NodeKind, position: Point): CanvasNode {
+  const defaults = nodeDefaults[type]
+  return {
+    id: createId(),
+    type,
+    title: defaults.title,
+    position,
+    width: defaults.width,
+    height: defaults.height,
+    metadata: {
+      content: defaults.content,
+      status: 'idle',
+      count: type === 'config' ? 1 : undefined,
+      size: type === 'config' ? '1024x1024' : undefined,
+    },
+  }
+}
+
 function snapshot(project: CanvasProject): Snapshot {
   return {
     nodes: project.nodes,
@@ -54,8 +72,10 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   const commit = useCallback(
     (mutator: (project: CanvasProject) => CanvasProject, options: { history?: boolean } = { history: true }) => {
       setLocalProject((current) => {
+        const changed = mutator(current)
+        if (changed === current) return current
         const next = {
-          ...mutator(current),
+          ...changed,
           updatedAt: new Date().toISOString(),
         }
         if (options.history !== false) {
@@ -70,27 +90,47 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
 
   const addNode = useCallback(
     (type: NodeKind, position: Point) => {
-      const defaults = nodeDefaults[type]
-      const node: CanvasNode = {
-        id: createId(),
-        type,
-        title: defaults.title,
-        position,
-        width: defaults.width,
-        height: defaults.height,
-        metadata: {
-          content: defaults.content,
-          status: 'idle',
-          count: type === 'config' ? 1 : undefined,
-          size: type === 'config' ? '1024x1024' : undefined,
-        },
-      }
+      const node = createNode(type, position)
       commit((current) => ({ ...current, nodes: [...current.nodes, node] }))
       setSelectedNodeIds([node.id])
       setSelectedConnectionId(null)
       return node
     },
     [commit],
+  )
+
+  const addConnectedNode = useCallback(
+    (type: NodeKind, fromNodeId: string, position: Point) => {
+      const node = createNode(type, position)
+      commit((current) =>
+        addConnectionToProject(
+          { ...current, nodes: [...current.nodes, node] },
+          { id: createId(), fromNodeId, toNodeId: node.id },
+        ),
+      )
+      setSelectedNodeIds([node.id])
+      setSelectedConnectionId(null)
+      return node
+    },
+    [commit],
+  )
+
+  const duplicateNode = useCallback(
+    (id: string) => {
+      const source = localProject.nodes.find((node) => node.id === id)
+      if (!source) return
+      const node = {
+        ...source,
+        id: createId(),
+        title: `${source.title} 副本`,
+        position: { x: source.position.x + 36, y: source.position.y + 36 },
+        metadata: { ...source.metadata },
+      }
+      commit((current) => ({ ...current, nodes: [...current.nodes, node] }))
+      setSelectedNodeIds([node.id])
+      setSelectedConnectionId(null)
+    },
+    [commit, localProject.nodes],
   )
 
   const updateNode = useCallback(
@@ -132,6 +172,23 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     setSelectedNodeIds([])
     setSelectedConnectionId(null)
   }, [commit, selectedConnectionId, selectedNodeIds])
+
+  const deleteNode = useCallback(
+    (id: string) => {
+      commit((current) => deleteSelectionFromProject(current, [id], null))
+      setSelectedNodeIds((current) => current.filter((nodeId) => nodeId !== id))
+      setSelectedConnectionId(null)
+    },
+    [commit],
+  )
+
+  const deleteConnection = useCallback(
+    (id: string) => {
+      commit((current) => deleteSelectionFromProject(current, [], id))
+      setSelectedConnectionId((current) => (current === id ? null : current))
+    },
+    [commit],
+  )
 
   const connectNodes = useCallback(
     (fromNodeId: string, toNodeId: string) => {
@@ -253,9 +310,13 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     canUndo: history.past.length > 0,
     canRedo: history.future.length > 0,
     addNode,
+    addConnectedNode,
+    duplicateNode,
     updateNode,
     moveNodes,
     deleteSelection,
+    deleteNode,
+    deleteConnection,
     connectNodes,
     setViewport,
     setBackgroundMode,

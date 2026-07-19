@@ -27,6 +27,8 @@ await app.register(cors, {
 
 const nowIso = () => new Date().toISOString()
 const id = () => crypto.randomUUID()
+const NODE_TYPES = new Set(['text', 'image', 'video', 'config'])
+const BACKGROUND_MODES = new Set(['dots', 'lines', 'blank'])
 
 function parseDocument(row) {
   const document = JSON.parse(row.document_json)
@@ -42,20 +44,69 @@ function parseDocument(row) {
 function normalizeProject(input = {}) {
   const createdAt = typeof input.createdAt === 'string' ? input.createdAt : nowIso()
   const updatedAt = typeof input.updatedAt === 'string' ? input.updatedAt : nowIso()
+  const nodes = normalizeNodes(input.nodes)
   return {
+    schemaVersion: 1,
     id: typeof input.id === 'string' && input.id ? input.id : id(),
     title: typeof input.title === 'string' && input.title.trim() ? input.title.trim() : '未命名画布',
     createdAt,
     updatedAt,
-    nodes: Array.isArray(input.nodes) ? input.nodes : [],
-    connections: Array.isArray(input.connections) ? input.connections : [],
-    backgroundMode: ['dots', 'lines', 'blank'].includes(input.backgroundMode) ? input.backgroundMode : 'dots',
+    nodes,
+    connections: normalizeConnections(input.connections, nodes),
+    backgroundMode: BACKGROUND_MODES.has(input.backgroundMode) ? input.backgroundMode : 'dots',
     viewport: isViewport(input.viewport) ? input.viewport : { x: 0, y: 0, k: 1 },
   }
 }
 
 function isViewport(value) {
   return value && Number.isFinite(value.x) && Number.isFinite(value.y) && Number.isFinite(value.k)
+}
+
+function normalizeNodes(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  return value.flatMap((node) => {
+    if (!node || typeof node !== 'object') return []
+    const nodeId = typeof node.id === 'string' && node.id ? node.id : id()
+    if (seen.has(nodeId)) return []
+    seen.add(nodeId)
+    const type = NODE_TYPES.has(node.type) ? node.type : 'text'
+    const position = isPoint(node.position) ? node.position : { x: 0, y: 0 }
+    const metadata = node.metadata && typeof node.metadata === 'object' && !Array.isArray(node.metadata) ? node.metadata : {}
+    return [{
+      id: nodeId,
+      type,
+      title: typeof node.title === 'string' && node.title.trim() ? node.title.trim() : '未命名节点',
+      position,
+      width: Number.isFinite(node.width) ? Math.max(120, Math.min(1600, node.width)) : 260,
+      height: Number.isFinite(node.height) ? Math.max(90, Math.min(1200, node.height)) : 180,
+      metadata,
+    }]
+  })
+}
+
+function normalizeConnections(value, nodes) {
+  if (!Array.isArray(value)) return []
+  const nodeIds = new Set(nodes.map((node) => node.id))
+  const seen = new Set()
+  return value.flatMap((connection) => {
+    if (!connection || typeof connection !== 'object') return []
+    const fromNodeId = typeof connection.fromNodeId === 'string' ? connection.fromNodeId : ''
+    const toNodeId = typeof connection.toNodeId === 'string' ? connection.toNodeId : ''
+    if (!nodeIds.has(fromNodeId) || !nodeIds.has(toNodeId) || fromNodeId === toNodeId) return []
+    const key = `${fromNodeId}->${toNodeId}`
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [{
+      id: typeof connection.id === 'string' && connection.id ? connection.id : id(),
+      fromNodeId,
+      toNodeId,
+    }]
+  })
+}
+
+function isPoint(value) {
+  return value && Number.isFinite(value.x) && Number.isFinite(value.y)
 }
 
 function saveProject(project) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FileJson, Image, Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
-import { connectionEndpoints, connectionPath, screenToWorld, sourcePort } from './geometry'
+import { Copy, FileJson, Image, Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
+import { connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 
@@ -17,6 +17,16 @@ type DragState =
   | { type: 'resize'; start: Point; node: CanvasNode }
   | null
 
+type CanvasContextMenu =
+  | { type: 'node'; nodeId: string; screen: Point }
+  | { type: 'connection'; connectionId: string; screen: Point }
+  | null
+
+type PendingConnectionCreate = {
+  fromNodeId: string
+  position: Point
+} | null
+
 const nodeIcons = {
   text: Type,
   image: Image,
@@ -31,6 +41,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const connectionDraftRef = useRef<ConnectionDraft | null>(null)
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null)
+  const [pendingConnectionCreate, setPendingConnectionCreate] = useState<PendingConnectionCreate>(null)
+  const [nodeCreatePosition, setNodeCreatePosition] = useState<Point | null>(null)
+  const [contextMenu, setContextMenu] = useState<CanvasContextMenu>(null)
+  const [canvasSize, setCanvasSize] = useState({ width: 1200, height: 720 })
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
 
@@ -47,6 +61,43 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   useEffect(() => {
     connectionDraftRef.current = connectionDraft
   }, [connectionDraft])
+
+  useEffect(() => {
+    const element = canvasRef.current
+    if (!element) return
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect()
+      setCanvasSize({ width: rect.width, height: rect.height })
+    }
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  const findConnectionTarget = useCallback(
+    (event: { clientX: number; clientY: number }, fromNodeId: string) => {
+      const world = clientWorld(event)
+      const padding = 32 / controller.project.viewport.k
+      const target = [...controller.project.nodes]
+        .reverse()
+        .filter((node) => node.id !== fromNodeId)
+        .map((node) => {
+          const inside = world.x >= node.position.x && world.x <= node.position.x + node.width && world.y >= node.position.y && world.y <= node.position.y + node.height
+          const near =
+            world.x >= node.position.x - padding &&
+            world.x <= node.position.x + node.width + padding &&
+            world.y >= node.position.y - padding &&
+            world.y <= node.position.y + node.height + padding
+          if (!inside && !near) return null
+          return { node, priority: inside ? 0 : 1 }
+        })
+        .filter((item): item is { node: CanvasNode; priority: number } => Boolean(item))
+        .sort((a, b) => a.priority - b.priority)[0]?.node
+      return target?.id ?? null
+    },
+    [clientWorld, controller.project.nodes, controller.project.viewport.k],
+  )
 
   const zoomAt = useCallback(
     (screen: Point, nextScale: number) => {
@@ -73,6 +124,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     if (event.button !== 0) return
     const target = event.target as HTMLElement
     if (target.closest('[data-node-id], [data-connection-id], [data-toolbar], [data-minimap]')) return
+    setContextMenu(null)
+    setNodeCreatePosition(null)
+    setPendingConnectionCreate(null)
     if (connectionDraftRef.current) {
       setConnectionDraft(null)
       return
@@ -90,6 +144,14 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     controller.captureHistory()
     dragRef.current = { type: 'pan', start: { x: event.clientX, y: event.clientY }, viewportStart: { x: controller.project.viewport.x, y: controller.project.viewport.y } }
     controller.clearSelection()
+  }
+
+  const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement
+    if (target.closest('[data-node-id], [data-connection-id], [data-toolbar], [data-minimap]')) return
+    setContextMenu(null)
+    setPendingConnectionCreate(null)
+    setNodeCreatePosition(clientWorld(event))
   }
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
@@ -122,6 +184,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     event.preventDefault()
     event.stopPropagation()
     controller.captureHistory()
+    setPendingConnectionCreate(null)
+    setNodeCreatePosition(null)
+    setContextMenu(null)
     setConnectionDraft({ fromNodeId: nodeId, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
   }
 
@@ -146,7 +211,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const move = (event: PointerEvent) => {
       const drag = dragRef.current
       if (connectionDraft) {
-        setConnectionDraft((value) => (value ? { ...value, to: clientWorld(event) } : value))
+        setConnectionDraft((value) => {
+          if (!value) return value
+          const targetNodeId = findConnectionTarget(event, value.fromNodeId)
+          const targetNode = targetNodeId ? nodesById.get(targetNodeId) : null
+          return { ...value, targetNodeId, to: targetNode ? targetPort(targetNode) : clientWorld(event) }
+        })
       }
       if (selectionBox) {
         const next = { ...selectionBox, current: clientWorld(event) }
@@ -182,11 +252,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const up = (event: PointerEvent) => {
       const draft = connectionDraftRef.current
       if (draft) {
-        const targetNode = document
-          .elementsFromPoint(event.clientX, event.clientY)
-          .map((element) => element.closest<HTMLElement>('[data-node-id]'))
-          .find((element): element is HTMLElement => Boolean(element))
-        const targetNodeId = targetNode?.dataset.nodeId
+        const targetNodeId = draft.targetNodeId ?? findConnectionTarget(event, draft.fromNodeId)
         if (targetNodeId && targetNodeId !== draft.fromNodeId) {
           controller.connectNodes(draft.fromNodeId, targetNodeId)
           setConnectionDraft(null)
@@ -194,7 +260,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           const dx = event.clientX - draft.startScreen.x
           const dy = event.clientY - draft.startScreen.y
           const isClickArmed = Math.hypot(dx, dy) < 6
-          if (!isClickArmed) setConnectionDraft(null)
+          if (!isClickArmed) {
+            setPendingConnectionCreate({ fromNodeId: draft.fromNodeId, position: clientWorld(event) })
+            setConnectionDraft(null)
+          }
         }
       }
       dragRef.current = null
@@ -206,7 +275,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
-  }, [clientWorld, connectionDraft, controller, selectionBox])
+  }, [clientWorld, connectionDraft, controller, findConnectionTarget, nodesById, selectionBox])
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -233,6 +302,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (event.key === 'Delete' || event.key === 'Backspace') controller.deleteSelection()
       if (event.key === 'Escape') {
         setConnectionDraft(null)
+        setPendingConnectionCreate(null)
+        setNodeCreatePosition(null)
+        setContextMenu(null)
         controller.clearSelection()
       }
     }
@@ -255,6 +327,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         height: Math.abs(selectionBox.current.y - selectionBox.start.y),
       }
     : null
+  const gridSize = 48 * controller.project.viewport.k
+  const canvasStageStyle = {
+    '--grid-size': `${gridSize}px`,
+    '--grid-x': `${controller.project.viewport.x % gridSize}px`,
+    '--grid-y': `${controller.project.viewport.y % gridSize}px`,
+  } as React.CSSProperties
 
   return (
     <div className="workspace">
@@ -307,7 +385,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         <div
           ref={canvasRef}
           className={`canvas-stage ${controller.project.backgroundMode} ${spacePressed ? 'space-pan' : ''}`}
+          style={canvasStageStyle}
           onPointerDown={handleCanvasPointerDown}
+          onDoubleClick={handleCanvasDoubleClick}
           onWheel={handleWheel}
         >
           <div
@@ -316,23 +396,36 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               transform: `translate(${controller.project.viewport.x}px, ${controller.project.viewport.y}px) scale(${controller.project.viewport.k})`,
             }}
           >
-            <svg className="connections-layer">
+            <svg className="connections-layer" viewBox="-50000 -50000 100000 100000">
               {controller.project.connections.map((connection) => {
                 const endpoints = connectionEndpoints(connection, controller.project.nodes)
                 if (!endpoints) return null
                 const related = controller.selectedNodeIds.includes(connection.fromNodeId) || controller.selectedNodeIds.includes(connection.toNodeId)
                 const selected = controller.selectedConnectionId === connection.id
+                const path = connectionPath(endpoints.start, endpoints.end)
                 return (
-                  <path
-                    key={connection.id}
-                    data-connection-id={connection.id}
-                    className={`connection-path ${related ? 'related' : ''} ${selected ? 'selected' : ''}`}
-                    d={connectionPath(endpoints.start, endpoints.end)}
-                    onPointerDown={(event) => {
-                      event.stopPropagation()
-                      controller.selectConnection(connection.id)
-                    }}
-                  />
+                  <g key={connection.id}>
+                    <path
+                      data-connection-id={connection.id}
+                      className="connection-hit"
+                      d={path}
+                      onPointerDown={(event) => {
+                        event.stopPropagation()
+                        controller.selectConnection(connection.id)
+                        setContextMenu(null)
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        controller.selectConnection(connection.id)
+                        setContextMenu({ type: 'connection', connectionId: connection.id, screen: { x: event.clientX, y: event.clientY } })
+                      }}
+                    />
+                    <path
+                      className={`connection-path ${related ? 'related' : ''} ${selected ? 'selected' : ''}`}
+                      d={path}
+                    />
+                  </g>
                 )
               })}
               {connectionDraft ? (
@@ -362,8 +455,36 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onCaptureHistory={controller.captureHistory}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnectionTarget={Boolean(connectionDraft && connectionDraft.fromNodeId !== node.id)}
+                onContextMenu={(event, nodeId) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  controller.selectNode(nodeId, false)
+                  setContextMenu({ type: 'node', nodeId, screen: { x: event.clientX, y: event.clientY } })
+                }}
               />
             ))}
+            {pendingConnectionCreate ? (
+              <NodeCreateMenu
+                title="创建并连接"
+                position={pendingConnectionCreate.position}
+                onCreate={(type) => {
+                  controller.addConnectedNode(type, pendingConnectionCreate.fromNodeId, pendingConnectionCreate.position)
+                  setPendingConnectionCreate(null)
+                }}
+                onClose={() => setPendingConnectionCreate(null)}
+              />
+            ) : null}
+            {nodeCreatePosition ? (
+              <NodeCreateMenu
+                title="新建节点"
+                position={nodeCreatePosition}
+                onCreate={(type) => {
+                  controller.addNode(type, nodeCreatePosition)
+                  setNodeCreatePosition(null)
+                }}
+                onClose={() => setNodeCreatePosition(null)}
+              />
+            ) : null}
           </div>
 
           <div className="zoom-panel" data-toolbar>
@@ -399,9 +520,29 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             ))}
           </div>
 
-          <MiniMap nodes={controller.project.nodes} viewport={controller.project.viewport} />
+          <MiniMap
+            nodes={controller.project.nodes}
+            viewport={controller.project.viewport}
+            viewportSize={canvasSize}
+            onViewportChange={controller.setViewport}
+          />
         </div>
       </div>
+      {contextMenu ? (
+        <CanvasContextMenuView
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onDuplicate={() => {
+            if (contextMenu.type === 'node') controller.duplicateNode(contextMenu.nodeId)
+            setContextMenu(null)
+          }}
+          onDelete={() => {
+            if (contextMenu.type === 'connection') controller.deleteConnection(contextMenu.connectionId)
+            if (contextMenu.type === 'node') controller.deleteNode(contextMenu.nodeId)
+            setContextMenu(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }
@@ -418,6 +559,7 @@ function CanvasNodeView({
   onCaptureHistory,
   onFinishConnectionToNode,
   isConnectionTarget,
+  onContextMenu,
 }: {
   node: CanvasNode
   selected: boolean
@@ -430,6 +572,7 @@ function CanvasNodeView({
   onCaptureHistory: () => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnectionTarget: boolean
+  onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: string) => void
 }) {
   const Icon = nodeIcons[node.type]
   return (
@@ -437,6 +580,7 @@ function CanvasNodeView({
       data-node-id={node.id}
       className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnectionTarget ? 'connection-target' : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
+      onContextMenu={(event) => onContextMenu(event, node.id)}
       onPointerDown={(event) => {
         if (isConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
           event.preventDefault()
@@ -465,6 +609,67 @@ function CanvasNodeView({
         <SquarePen size={12} />
       </button>
     </article>
+  )
+}
+
+function NodeCreateMenu({
+  title,
+  position,
+  onCreate,
+  onClose,
+}: {
+  title: string
+  position: Point
+  onCreate: (type: NodeKind) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="node-create-menu" data-toolbar style={{ left: position.x, top: position.y }} onPointerDown={(event) => event.stopPropagation()}>
+      <div>{title}</div>
+      {(['text', 'image', 'video', 'config'] as const).map((type) => (
+        <button key={type} onClick={() => onCreate(type)}>
+          {type === 'text' ? '文本节点' : type === 'image' ? '图片节点' : type === 'video' ? '视频节点' : '配置节点'}
+        </button>
+      ))}
+      <button className="muted-menu-action" onClick={onClose}>
+        取消
+      </button>
+    </div>
+  )
+}
+
+function CanvasContextMenuView({
+  menu,
+  onClose,
+  onDuplicate,
+  onDelete,
+}: {
+  menu: NonNullable<CanvasContextMenu>
+  onClose: () => void
+  onDuplicate: () => void
+  onDelete: () => void
+}) {
+  useEffect(() => {
+    const close = () => onClose()
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [onClose])
+
+  return (
+    <div
+      className="canvas-context-menu"
+      style={{ left: menu.screen.x, top: menu.screen.y }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      {menu.type === 'node' ? (
+        <button onClick={onDuplicate}>
+          <Copy size={15} /> 复制节点
+        </button>
+      ) : null}
+      <button className="danger" onClick={onDelete}>
+        <Trash2 size={15} /> 删除{menu.type === 'node' ? '节点' : '连线'}
+      </button>
+    </div>
   )
 }
 
@@ -527,7 +732,18 @@ function NodeBody({
   )
 }
 
-function MiniMap({ nodes, viewport }: { nodes: CanvasNode[]; viewport: { x: number; y: number; k: number } }) {
+function MiniMap({
+  nodes,
+  viewport,
+  viewportSize,
+  onViewportChange,
+}: {
+  nodes: CanvasNode[]
+  viewport: { x: number; y: number; k: number }
+  viewportSize: { width: number; height: number }
+  onViewportChange: (viewport: { x: number; y: number; k: number }) => void
+}) {
+  const mapRef = useRef<SVGSVGElement | null>(null)
   const bounds = nodes.reduce(
     (acc, node) => ({
       minX: Math.min(acc.minX, node.position.x),
@@ -540,23 +756,53 @@ function MiniMap({ nodes, viewport }: { nodes: CanvasNode[]; viewport: { x: numb
   const width = Math.max(1, bounds.maxX - bounds.minX)
   const height = Math.max(1, bounds.maxY - bounds.minY)
   const scale = Math.min(170 / width, 110 / height)
+  const offset = { x: 10 + (170 - width * scale) / 2, y: 10 + (110 - height * scale) / 2 }
   const viewX = (-viewport.x / viewport.k - bounds.minX) * scale
   const viewY = (-viewport.y / viewport.k - bounds.minY) * scale
+  const viewWidth = Math.min(170, (viewportSize.width / viewport.k) * scale)
+  const viewHeight = Math.min(110, (viewportSize.height / viewport.k) * scale)
+
+  const focusViewport = (event: React.PointerEvent<SVGSVGElement>) => {
+    const rect = mapRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const sx = ((event.clientX - rect.left) / rect.width) * 190
+    const sy = ((event.clientY - rect.top) / rect.height) * 130
+    const worldX = (sx - offset.x) / scale + bounds.minX
+    const worldY = (sy - offset.y) / scale + bounds.minY
+    onViewportChange({
+      x: viewportSize.width / 2 - worldX * viewport.k,
+      y: viewportSize.height / 2 - worldY * viewport.k,
+      k: viewport.k,
+    })
+  }
+
   return (
-    <svg className="mini-map" data-minimap viewBox="0 0 190 130">
+    <svg
+      ref={mapRef}
+      className="mini-map"
+      data-minimap
+      viewBox="0 0 190 130"
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId)
+        focusViewport(event)
+      }}
+      onPointerMove={(event) => {
+        if (event.buttons === 1) focusViewport(event)
+      }}
+    >
       <rect x="0" y="0" width="190" height="130" rx="8" />
       {nodes.map((node) => (
         <rect
           key={node.id}
           className="mini-node"
-          x={(node.position.x - bounds.minX) * scale + 10}
-          y={(node.position.y - bounds.minY) * scale + 10}
+          x={(node.position.x - bounds.minX) * scale + offset.x}
+          y={(node.position.y - bounds.minY) * scale + offset.y}
           width={Math.max(3, node.width * scale)}
           height={Math.max(3, node.height * scale)}
           rx="2"
         />
       ))}
-      <rect className="mini-view" x={viewX + 10} y={viewY + 10} width={Math.min(170, 120 / viewport.k)} height={Math.min(110, 80 / viewport.k)} rx="3" />
+      <rect className="mini-view" x={viewX + offset.x} y={viewY + offset.y} width={viewWidth} height={viewHeight} rx="3" />
     </svg>
   )
 }
