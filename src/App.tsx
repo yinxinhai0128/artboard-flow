@@ -5,9 +5,18 @@ import { CanvasWorkspace } from './canvas/CanvasWorkspace'
 import { downloadCanvasProjects, readCanvasProjectsFile } from './canvas/export'
 import type { CanvasProject } from './canvas/types'
 
+function projectPath(id: string) {
+  return `/canvas/${encodeURIComponent(id)}`
+}
+
+function readRouteProjectId() {
+  const match = window.location.pathname.match(/^\/canvas\/([^/]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 function App() {
   const [projects, setProjects] = useState<CanvasProject[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(() => readRouteProjectId())
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -32,11 +41,32 @@ function App() {
     loadProjects()
   }, [loadProjects])
 
+  useEffect(() => {
+    const syncRoute = () => setActiveId(readRouteProjectId())
+    window.addEventListener('popstate', syncRoute)
+    return () => window.removeEventListener('popstate', syncRoute)
+  }, [])
+
+  useEffect(() => {
+    if (loading || !activeId) return
+    if (projects.some((project) => project.id === activeId)) return
+    setActiveId(null)
+    window.history.replaceState(null, '', '/')
+    setError('没有找到这个画布，已返回画布库。')
+  }, [activeId, loading, projects])
+
+  const openProject = (id: string | null, replace = false) => {
+    setActiveId(id)
+    const path = id ? projectPath(id) : '/'
+    if (window.location.pathname === path) return
+    window.history[replace ? 'replaceState' : 'pushState'](null, '', path)
+  }
+
   const createProject = async () => {
     const title = `无限画布 ${projects.length + 1}`
     const project = await canvasApi.createProject(title)
     setProjects((current) => [project, ...current])
-    setActiveId(project.id)
+    openProject(project.id)
   }
 
   const updateProject = (project: CanvasProject) => {
@@ -65,7 +95,7 @@ function App() {
     await canvasApi.deleteProject(id)
     setProjects((current) => current.filter((project) => project.id !== id))
     setSelectedIds((current) => current.filter((value) => value !== id))
-    if (activeId === id) setActiveId(null)
+    if (activeId === id) openProject(null, true)
   }
 
   const deleteSelected = async () => {
@@ -96,7 +126,7 @@ function App() {
         importedProjects.push(await canvasApi.importProject(parsed))
       }
       setProjects((current) => [...importedProjects, ...current])
-      setActiveId(importedProjects[0]?.id ?? null)
+      if (importedProjects[0]) openProject(importedProjects[0].id)
       setError(null)
     } catch {
       setError('导入失败，请确认文件来自 ArtboardFlow 的 JSON 或 ZIP 导出包。')
@@ -104,7 +134,7 @@ function App() {
   }
 
   if (activeProject) {
-    return <CanvasWorkspace project={activeProject} onProjectChange={updateProject} onBack={() => setActiveId(null)} onExport={exportProject} />
+    return <CanvasWorkspace project={activeProject} onProjectChange={updateProject} onBack={() => openProject(null)} onExport={exportProject} />
   }
 
   return (
@@ -150,7 +180,7 @@ function App() {
 
         <div className="project-grid">
           {projects.map((project) => (
-            <article key={project.id} className="project-card" onDoubleClick={() => setActiveId(project.id)}>
+            <article key={project.id} className="project-card" onDoubleClick={() => openProject(project.id)}>
               <label className="checkbox-row">
                 <input
                   type="checkbox"
@@ -166,7 +196,7 @@ function App() {
               </p>
               <small>更新于 {new Date(project.updatedAt).toLocaleString()}</small>
               <div className="project-actions">
-                <button title="打开" onClick={() => setActiveId(project.id)}>
+                <button title="打开" onClick={() => openProject(project.id)}>
                   打开
                 </button>
                 <button title="导出" onClick={() => exportProject(project)}>

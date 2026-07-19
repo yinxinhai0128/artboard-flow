@@ -102,12 +102,14 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   )
 
   const addConnectedNode = useCallback(
-    (type: NodeKind, fromNodeId: string, position: Point) => {
+    (type: NodeKind, nodeId: string, handleType: 'source' | 'target', position: Point) => {
       const node = createNode(type, position)
+      const fromNodeId = handleType === 'source' ? nodeId : node.id
+      const toNodeId = handleType === 'source' ? node.id : nodeId
       commit((current) =>
         addConnectionToProject(
           { ...current, nodes: [...current.nodes, node] },
-          { id: createId(), fromNodeId, toNodeId: node.id },
+          { id: createId(), fromNodeId, toNodeId },
         ),
       )
       setSelectedNodeIds([node.id])
@@ -144,6 +146,15 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
         }),
         { history: recordHistory },
       )
+    },
+    [commit],
+  )
+
+  const renameProject = useCallback(
+    (title: string) => {
+      const normalized = title.trim()
+      if (!normalized) return
+      commit((current) => (current.title === normalized ? current : { ...current, title: normalized }), { history: false })
     },
     [commit],
   )
@@ -193,8 +204,10 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   )
 
   const connectNodes = useCallback(
-    (fromNodeId: string, toNodeId: string) => {
+    (nodeId: string, targetNodeId: string, handleType: 'source' | 'target' = 'source') => {
       commit((current) => {
+        const fromNodeId = handleType === 'source' ? nodeId : targetNodeId
+        const toNodeId = handleType === 'source' ? targetNodeId : nodeId
         return addConnectionToProject(current, { id: createId(), fromNodeId, toNodeId })
       })
     },
@@ -258,7 +271,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
 
   const pasteSelection = useCallback(() => {
     const clipboard = clipboardRef.current
-    if (!clipboard || clipboard.nodes.length === 0) return
+    if (!clipboard || clipboard.nodes.length === 0) return false
     const idMap = new Map(clipboard.nodes.map((node) => [node.id, createId()]))
     const nodes = clipboard.nodes.map((node) => ({
       ...node,
@@ -278,6 +291,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     }))
     setSelectedNodeIds(nodes.map((node) => node.id))
     setSelectedConnectionId(null)
+    return true
   }, [commit])
 
   const undo = useCallback(() => {
@@ -315,6 +329,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     addConnectedNode,
     duplicateNode,
     updateNode,
+    renameProject,
     moveNodes,
     deleteSelection,
     deleteNode,

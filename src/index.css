@@ -266,6 +266,35 @@ button:disabled {
   font-size: 18px;
 }
 
+.topbar-title button {
+  display: inline-block;
+  max-width: min(520px, 52vw);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: text;
+}
+
+.topbar-title h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-title input {
+  width: min(520px, 52vw);
+  height: 30px;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed rgba(244, 244, 245, 0.42);
+  outline: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
 .topbar p {
   margin-top: 2px;
   font-size: 12px;
@@ -543,29 +572,47 @@ button:disabled {
 .port {
   position: absolute;
   top: 50%;
-  width: 20px;
-  height: 20px;
+  width: 48px;
+  height: 48px;
   padding: 0;
-  border: 3px solid var(--panel);
+  border: 0;
   border-radius: 999px;
-  background: var(--muted);
+  background: transparent;
   transform: translateY(-50%);
   cursor: crosshair;
-  z-index: 3;
+  z-index: 12;
 }
 
 .target-port {
-  left: -11px;
+  left: -24px;
 }
 
 .source-port {
-  right: -11px;
+  right: -24px;
+}
+
+.port::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--panel);
+  border-radius: 999px;
+  background: var(--muted);
+  transform: translate(-50%, -50%);
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.source-port::after {
   background: var(--blue);
 }
 
-.port:hover {
+.port:hover::after {
   background: var(--green);
-  transform: translateY(-50%) scale(1.18);
+  transform: translate(-50%, -50%) scale(1.22);
+  box-shadow: 0 0 0 10px rgba(134, 239, 172, 0.12);
 }
 
 .resize-handle {

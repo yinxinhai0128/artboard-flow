@@ -60,7 +60,8 @@ export type SelectionBox = {
 }
 
 export type ConnectionDraft = {
-  fromNodeId: string
+  nodeId: string
+  handleType: 'source' | 'target'
   to: Point
   startScreen: Point
   targetNodeId?: string | null

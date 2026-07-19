@@ -25,7 +25,8 @@ type CanvasContextMenu =
   | null
 
 type PendingConnectionCreate = {
-  fromNodeId: string
+  nodeId: string
+  handleType: 'source' | 'target'
   position: Point
 } | null
 
@@ -113,14 +114,18 @@ function fitMediaSize(width: number, height: number, maxWidth: number, maxHeight
 export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: CanvasWorkspaceProps) {
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const titleInputRef = useRef<HTMLInputElement | null>(null)
   const dragRef = useRef<DragState>(null)
   const connectionDraftRef = useRef<ConnectionDraft | null>(null)
+  const pasteHandledAtRef = useRef(0)
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
   const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null)
   const [pendingConnectionCreate, setPendingConnectionCreate] = useState<PendingConnectionCreate>(null)
   const [nodeCreatePosition, setNodeCreatePosition] = useState<Point | null>(null)
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 1200, height: 720 })
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(project.title)
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
 
@@ -137,6 +142,16 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   useEffect(() => {
     connectionDraftRef.current = connectionDraft
   }, [connectionDraft])
+
+  useEffect(() => {
+    if (!editingTitle) setTitleDraft(controller.project.title)
+  }, [controller.project.title, editingTitle])
+
+  useEffect(() => {
+    if (!editingTitle) return
+    titleInputRef.current?.focus()
+    titleInputRef.current?.select()
+  }, [editingTitle])
 
   useEffect(() => {
     const element = canvasRef.current
@@ -195,6 +210,81 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     },
     [controller],
   )
+
+  const canvasCenterWorld = useCallback(() => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    const screen = { x: (rect?.width ?? 1200) / 2, y: (rect?.height ?? 720) / 2 }
+    return screenToWorld(screen, controller.project.viewport)
+  }, [controller.project.viewport])
+
+  const addClipboardFileNode = useCallback(
+    async (file: File) => {
+      const node = await canvasNodeFromFile(file, canvasCenterWorld())
+      controller.addNode(node.type, node.position, node)
+    },
+    [canvasCenterWorld, controller],
+  )
+
+  const addClipboardTextNode = useCallback(
+    (text: string) => {
+      const content = text.trim()
+      if (!content) return false
+      controller.addNode('text', canvasCenterWorld(), { title: '剪贴板文本', metadata: { content, status: 'success', mimeType: 'text/plain', bytes: new Blob([content]).size } })
+      return true
+    },
+    [canvasCenterWorld, controller],
+  )
+
+  const pasteClipboardData = useCallback(
+    async (clipboardData: DataTransfer | null) => {
+      if (!clipboardData) return false
+      const files = [
+        ...Array.from(clipboardData.files),
+        ...Array.from(clipboardData.items)
+          .filter((item) => item.kind === 'file')
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => Boolean(file)),
+      ]
+      const uniqueFiles = Array.from(new Map(files.map((file) => [`${file.name}:${file.type}:${file.size}`, file])).values())
+      if (uniqueFiles.length) {
+        for (const file of uniqueFiles) await addClipboardFileNode(file)
+        return true
+      }
+      return addClipboardTextNode(clipboardData.getData('text/plain'))
+    },
+    [addClipboardFileNode, addClipboardTextNode],
+  )
+
+  const pasteSystemClipboard = useCallback(async () => {
+    try {
+      if ('clipboard' in navigator && 'read' in navigator.clipboard) {
+        const items = await navigator.clipboard.read()
+        for (const item of items) {
+          const imageType = item.types.find((type) => type.startsWith('image/'))
+          if (!imageType) continue
+          const blob = await item.getType(imageType)
+          const file = new File([blob], 'clipboard-image.png', { type: imageType })
+          await addClipboardFileNode(file)
+          return true
+        }
+      }
+    } catch {
+      // 浏览器可能因为权限拒绝图片剪贴板读取；继续尝试纯文本。
+    }
+    try {
+      const text = (await navigator.clipboard?.readText?.())?.trim()
+      if (!text) return false
+      return addClipboardTextNode(text)
+    } catch {
+      return false
+    }
+  }, [addClipboardFileNode, addClipboardTextNode])
+
+  const saveTitle = () => {
+    controller.renameProject(titleDraft)
+    setTitleDraft(titleDraft.trim() || controller.project.title)
+    setEditingTitle(false)
+  }
 
   const handleCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -279,21 +369,21 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     dragRef.current = { type: 'resize', start: { x: event.clientX, y: event.clientY }, node, corner }
   }
 
-  const startConnection = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => {
+  const startConnection = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, handleType: 'source' | 'target') => {
     event.preventDefault()
     event.stopPropagation()
     controller.captureHistory()
     setPendingConnectionCreate(null)
     setNodeCreatePosition(null)
     setContextMenu(null)
-    setConnectionDraft({ fromNodeId: nodeId, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
+    setConnectionDraft({ nodeId, handleType, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
   }
 
   const finishConnectionToNode = useCallback(
     (toNodeId: string) => {
       const draft = connectionDraftRef.current
-      if (!draft || draft.fromNodeId === toNodeId) return false
-      controller.connectNodes(draft.fromNodeId, toNodeId)
+      if (!draft || draft.nodeId === toNodeId) return false
+      controller.connectNodes(draft.nodeId, toNodeId, draft.handleType)
       setConnectionDraft(null)
       return true
     },
@@ -312,9 +402,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (connectionDraft) {
         setConnectionDraft((value) => {
           if (!value) return value
-          const targetNodeId = findConnectionTarget(event, value.fromNodeId)
+          const targetNodeId = findConnectionTarget(event, value.nodeId)
           const targetNode = targetNodeId ? nodesById.get(targetNodeId) : null
-          return { ...value, targetNodeId, to: targetNode ? targetPort(targetNode) : clientWorld(event) }
+          const to = targetNode ? (value.handleType === 'source' ? targetPort(targetNode) : sourcePort(targetNode)) : clientWorld(event)
+          return { ...value, targetNodeId, to }
         })
       }
       if (selectionBox) {
@@ -381,16 +472,16 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const up = (event: PointerEvent) => {
       const draft = connectionDraftRef.current
       if (draft) {
-        const targetNodeId = draft.targetNodeId ?? findConnectionTarget(event, draft.fromNodeId)
-        if (targetNodeId && targetNodeId !== draft.fromNodeId) {
-          controller.connectNodes(draft.fromNodeId, targetNodeId)
+        const targetNodeId = draft.targetNodeId ?? findConnectionTarget(event, draft.nodeId)
+        if (targetNodeId && targetNodeId !== draft.nodeId) {
+          controller.connectNodes(draft.nodeId, targetNodeId, draft.handleType)
           setConnectionDraft(null)
         } else {
           const dx = event.clientX - draft.startScreen.x
           const dy = event.clientY - draft.startScreen.y
           const isClickArmed = Math.hypot(dx, dy) < 6
           if (!isClickArmed) {
-            setPendingConnectionCreate({ fromNodeId: draft.fromNodeId, position: clientWorld(event) })
+            setPendingConnectionCreate({ nodeId: draft.nodeId, handleType: draft.handleType, position: clientWorld(event) })
             setConnectionDraft(null)
           }
         }
@@ -419,7 +510,15 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         controller.project.nodes.forEach((node) => controller.selectNode(node.id, true))
       }
       if (mod && event.key.toLowerCase() === 'c') controller.copySelection()
-      if (mod && event.key.toLowerCase() === 'v') controller.pasteSelection()
+      if (mod && event.key.toLowerCase() === 'v') {
+        if (controller.pasteSelection()) {
+          event.preventDefault()
+          return
+        }
+        window.setTimeout(() => {
+          if (Date.now() - pasteHandledAtRef.current > 250) void pasteSystemClipboard()
+        }, 80)
+      }
       if (mod && event.key.toLowerCase() === 'z' && !event.shiftKey) {
         event.preventDefault()
         controller.undo()
@@ -446,7 +545,21 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('keyup', keyup)
     }
-  }, [controller])
+  }, [controller, pasteSystemClipboard])
+
+  useEffect(() => {
+    const paste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return
+      if (!event.clipboardData) return
+      event.preventDefault()
+      void pasteClipboardData(event.clipboardData).then((handled) => {
+        if (handled) pasteHandledAtRef.current = Date.now()
+      })
+    }
+    window.addEventListener('paste', paste)
+    return () => window.removeEventListener('paste', paste)
+  }, [pasteClipboardData])
 
   const selectionRect = selectionBox
     ? {
@@ -469,8 +582,27 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         <button className="ghost-button" onClick={onBack}>
           我的画布
         </button>
-        <div>
-          <h1>{controller.project.title}</h1>
+        <div className="topbar-title">
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              value={titleDraft}
+              autoFocus
+              onChange={(event) => setTitleDraft(event.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') saveTitle()
+                if (event.key === 'Escape') {
+                  setTitleDraft(controller.project.title)
+                  setEditingTitle(false)
+                }
+              }}
+            />
+          ) : (
+            <button title="双击重命名画布" onDoubleClick={() => setEditingTitle(true)}>
+              <h1>{controller.project.title}</h1>
+            </button>
+          )}
           <p>
             {controller.project.nodes.length} 个节点 · {controller.project.connections.length} 条连线
           </p>
@@ -562,7 +694,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               {connectionDraft ? (
                 <path
                   className="connection-path draft"
-                  d={connectionPath(sourcePort(nodesById.get(connectionDraft.fromNodeId)!), connectionDraft.to)}
+                  d={
+                    connectionDraft.handleType === 'source'
+                      ? connectionPath(sourcePort(nodesById.get(connectionDraft.nodeId)!), connectionDraft.to)
+                      : connectionPath(connectionDraft.to, targetPort(nodesById.get(connectionDraft.nodeId)!))
+                  }
                 />
               ) : null}
               {selectionRect ? <rect className="selection-box" {...selectionRect} /> : null}
@@ -585,7 +721,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onUpdate={controller.updateNode}
                 onCaptureHistory={controller.captureHistory}
                 onFinishConnectionToNode={finishConnectionToNode}
-                isConnectionTarget={Boolean(connectionDraft && connectionDraft.fromNodeId !== node.id)}
+                isConnectionTarget={Boolean(connectionDraft && connectionDraft.nodeId !== node.id)}
                 onContextMenu={(event, nodeId) => {
                   event.preventDefault()
                   event.stopPropagation()
@@ -599,7 +735,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 title="创建并连接"
                 position={pendingConnectionCreate.position}
                 onCreate={(type) => {
-                  controller.addConnectedNode(type, pendingConnectionCreate.fromNodeId, pendingConnectionCreate.position)
+                  controller.addConnectedNode(type, pendingConnectionCreate.nodeId, pendingConnectionCreate.handleType, pendingConnectionCreate.position)
                   setPendingConnectionCreate(null)
                 }}
                 onClose={() => setPendingConnectionCreate(null)}
@@ -697,7 +833,7 @@ function CanvasNodeView({
   related: boolean
   onPointerDown: (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => void
   onResizePointerDown: (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => void
-  onStartConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
+  onStartConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, handleType: 'source' | 'target') => void
   onFinishConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   onCaptureHistory: () => void
@@ -722,7 +858,13 @@ function CanvasNodeView({
         onPointerDown(event, node)
       }}
     >
-      <button className="port target-port" title="连接到此节点" data-node-control onPointerUp={(event) => onFinishConnection(event, node.id)} />
+      <button
+        className="port target-port"
+        title="从此输入端反向连线"
+        data-node-control
+        onPointerDown={(event) => onStartConnection(event, node.id, 'target')}
+        onPointerUp={(event) => onFinishConnection(event, node.id)}
+      />
       <header>
         <span className="node-icon">
           <Icon size={15} />
@@ -735,7 +877,7 @@ function CanvasNodeView({
         />
       </header>
       <NodeBody node={node} onUpdate={onUpdate} onCaptureHistory={onCaptureHistory} />
-      <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id)} />
+      <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
       {resizeCorners.map((corner) => (
         <button
           key={corner}
