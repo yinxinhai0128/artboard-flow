@@ -486,10 +486,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (connectionDraft) {
         setConnectionDraft((value) => {
           if (!value) return value
-          const targetNodeId = findConnectionDropTargetFromEvent(event, value).nodeId
+          const dropTarget = findConnectionDropTargetFromEvent(event, value)
+          const targetNodeId = dropTarget.nodeId
           const targetNode = targetNodeId ? nodesById.get(targetNodeId) : null
           const to = targetNode ? (value.handleType === 'source' ? targetPort(targetNode) : sourcePort(targetNode)) : clientWorld(event)
-          return { ...value, targetNodeId, to }
+          return { ...value, targetNodeId, blockedNodeId: dropTarget.blockedNodeId, to }
         })
       }
       if (selectionBox) {
@@ -556,7 +557,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const up = (event: PointerEvent) => {
       const draft = connectionDraftRef.current
       if (draft) {
-        const dropTarget = draft.targetNodeId ? { nodeId: draft.targetNodeId, isNearNode: true } : findConnectionDropTargetFromEvent(event, draft)
+        const dropTarget = draft.targetNodeId ? { nodeId: draft.targetNodeId, isNearNode: true, blockedNodeId: null } : findConnectionDropTargetFromEvent(event, draft)
         if (dropTarget.nodeId && dropTarget.nodeId !== draft.nodeId) {
           controller.connectNodes(draft.nodeId, dropTarget.nodeId, draft.handleType)
           setConnectionDraft(null)
@@ -1006,7 +1007,13 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onRefreshGenerationTask={refreshGenerationTaskNode}
                 onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
-                isConnectionTarget={Boolean(connectionDraft && connectionDraft.nodeId !== node.id)}
+                connectionTargetState={
+                  connectionDraft?.targetNodeId === node.id
+                    ? 'valid'
+                    : connectionDraft?.blockedNodeId === node.id
+                      ? 'blocked'
+                      : null
+                }
                 onContextMenu={(event, nodeId) => {
                   event.preventDefault()
                   event.stopPropagation()
@@ -1138,7 +1145,7 @@ function CanvasNodeView({
   onRefreshGenerationTask,
   onHoverStart,
   onFinishConnectionToNode,
-  isConnectionTarget,
+  connectionTargetState,
   onContextMenu,
 }: {
   node: CanvasNode
@@ -1157,19 +1164,20 @@ function CanvasNodeView({
   onRefreshGenerationTask: (nodeId: string) => void
   onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
-  isConnectionTarget: boolean
+  connectionTargetState: 'valid' | 'blocked' | null
   onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: string) => void
 }) {
   const Icon = nodeIcons[node.type]
+  const isValidConnectionTarget = connectionTargetState === 'valid'
   return (
     <article
       data-node-id={node.id}
-      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnectionTarget ? 'connection-target' : ''}`}
+      className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${connectionTargetState ? `connection-target-${connectionTargetState}` : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
       onMouseEnter={() => onHoverStart(node.id)}
       onContextMenu={(event) => onContextMenu(event, node.id)}
       onPointerDown={(event) => {
-        if (isConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
+        if (isValidConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
           event.preventDefault()
           event.stopPropagation()
           onFinishConnectionToNode(node.id)

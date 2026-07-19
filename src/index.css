@@ -822,8 +822,14 @@ button:disabled {
   border-color: rgba(125, 211, 252, 0.45);
 }
 
-.canvas-node.connection-target {
+.canvas-node.connection-target-valid {
   border-color: rgba(134, 239, 172, 0.75);
+  box-shadow: 0 0 0 2px rgba(134, 239, 172, 0.14), 0 16px 42px rgba(0, 0, 0, 0.36);
+}
+
+.canvas-node.connection-target-blocked {
+  border-color: rgba(248, 113, 113, 0.62);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.1), 0 16px 42px rgba(0, 0, 0, 0.28);
 }
 
 .canvas-node header {

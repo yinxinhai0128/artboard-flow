@@ -5,6 +5,7 @@ import type { CanvasConnection, CanvasProject, Point } from './types'
 export type ConnectionDropTarget = {
   nodeId: string | null
   isNearNode: boolean
+  blockedNodeId: string | null
 }
 
 export const CONNECTION_HANDLE_HIT_RADIUS = 40
@@ -42,7 +43,9 @@ export function findConnectionDropTarget(
   const handleRadius = CONNECTION_HANDLE_HIT_RADIUS / normalizedScale
   let isNearNode = false
   let bestNodeId: string | null = null
+  let bestBlockedNodeId: string | null = null
   let bestPriority = Number.POSITIVE_INFINITY
+  let bestBlockedPriority = Number.POSITIVE_INFINITY
 
   const nodes = [...project.nodes].reverse()
 
@@ -59,16 +62,23 @@ export function findConnectionDropTarget(
       world.y <= node.position.y + node.height + padding
     if (!hitsHandle && !inside && !near) return
     isNearNode = true
-    if (node.id === draft.nodeId || !normalizeConnectionForProject(project, draft.nodeId, node.id, draft.handleType)) return
 
     const priority = inside ? 0 : hitsHandle ? 1 : 2
+    if (node.id === draft.nodeId || !normalizeConnectionForProject(project, draft.nodeId, node.id, draft.handleType)) {
+      if (priority < bestBlockedPriority) {
+        bestBlockedNodeId = node.id
+        bestBlockedPriority = priority
+      }
+      return
+    }
+
     if (priority < bestPriority) {
       bestNodeId = node.id
       bestPriority = priority
     }
   })
 
-  return { nodeId: bestNodeId, isNearNode }
+  return { nodeId: bestNodeId, isNearNode, blockedNodeId: bestNodeId ? null : bestBlockedNodeId }
 }
 
 export function deleteSelectionFromProject(project: CanvasProject, nodeIds: string[], connectionId: string | null): CanvasProject {

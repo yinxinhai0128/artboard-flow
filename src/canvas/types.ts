@@ -121,6 +121,7 @@ export type ConnectionDraft = {
   to: Point
   startScreen: Point
   targetNodeId?: string | null
+  blockedNodeId?: string | null
 }
 
 export type Snapshot = Pick<CanvasProject, 'nodes' | 'connections' | 'backgroundMode' | 'viewport'>
