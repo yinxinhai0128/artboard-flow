@@ -1235,6 +1235,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => void handleDrop(event)}
         >
+          <ConnectionGuide draft={connectionDraft} nodesById={nodesById} />
           <div
             className="world"
             style={{
@@ -1506,6 +1507,24 @@ function ShortcutHelpRow({ keys, value }: { keys: string[]; value: string }) {
   )
 }
 
+function ConnectionGuide({ draft, nodesById }: { draft: ConnectionDraft | null; nodesById: Map<string, CanvasNode> }) {
+  if (!draft) return null
+  const originNode = nodesById.get(draft.nodeId)
+  const targetNode = draft.targetNodeId ? nodesById.get(draft.targetNodeId) : null
+  const blockedNode = draft.blockedNodeId ? nodesById.get(draft.blockedNodeId) : null
+  const status = targetNode ? `松手连接到「${targetNode.title || nodeKindLabels[targetNode.type]}」` : blockedNode ? '这个节点不能这样连接' : '拖到目标节点连接，拖到空白处新建并连接'
+
+  return (
+    <div className="connection-guide" data-toolbar>
+      <Link2 size={15} />
+      <strong>{originNode ? `从「${originNode.title || nodeKindLabels[originNode.type]}」连线` : '正在连线'}</strong>
+      <span>{status}</span>
+      <kbd>Esc</kbd>
+      <span>取消</span>
+    </div>
+  )
+}
+
 function CanvasNodeView({
   node,
   selected,
@@ -1575,6 +1594,7 @@ function CanvasNodeView({
       <button
         className="port target-port"
         title="从此输入端反向连线"
+        data-label="输入"
         data-node-control
         onPointerDown={(event) => onStartConnection(event, node.id, 'target')}
         onPointerUp={(event) => onFinishConnection(event, node.id)}
@@ -1603,7 +1623,7 @@ function CanvasNodeView({
         onSplitGenerationOutputs={onSplitGenerationOutputs}
       />
       {node.type !== 'config' ? (
-        <button className="port source-port" title="从此节点连线" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
+        <button className="port source-port" title="从此节点连线" data-label="输出" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
       ) : null}
       {resizeCorners.map((corner) => (
         <button
