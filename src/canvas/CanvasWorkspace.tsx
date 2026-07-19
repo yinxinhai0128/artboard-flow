@@ -3,7 +3,7 @@ import { Copy, Download, FileJson, Image, Info, Minus, MousePointer2, Play, Plus
 import { connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { buildCanvasGenerationContext, type CanvasGenerationContext } from './generation'
+import { buildCanvasGenerationContext, buildCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -124,6 +124,13 @@ function nodePreview(node: CanvasNode) {
   if (node.type === 'config') return `${node.metadata.model || '默认模型'} · ${node.metadata.size || '1024x1024'} · ${node.metadata.count || 1} 张`
   if (node.metadata.mimeType) return node.metadata.mimeType
   return node.metadata.content ? '已载入内容' : `空${nodeKindLabels[node.type]}节点`
+}
+
+function appendReferenceToken(value: string | undefined, input: CanvasGenerationInput) {
+  const token = `@[node:${input.nodeId}]`
+  const current = value ?? ''
+  if (current.includes(token)) return current
+  return current.trim() ? `${current.trimEnd()} ${token}` : token
 }
 
 function canDownloadNode(node: CanvasNode) {
@@ -704,6 +711,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         '',
         context.prompt || '无提示词',
       ].join('\n')
+      const generatedAt = new Date().toISOString()
+      const generationPayload = buildCanvasGenerationPayload(context, generatedAt)
       const outputNode = controller.addConnectedNode(
         outputType,
         configNodeId,
@@ -717,6 +726,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             status: 'idle',
             prompt: context.prompt,
             content: outputType === 'text' ? payload : '',
+            generationPayload,
             model: context.model,
             size: context.size,
             count: context.count,
@@ -727,7 +737,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         metadata: {
           status: 'success',
           errorDetails: '',
-          generatedAt: new Date().toISOString(),
+          generatedAt,
+          generationPayload,
           outputNodeId: outputNode.id,
         },
       }, false)
@@ -1349,6 +1360,12 @@ function NodeBody({
                   <span>{nodeKindLabels[input.type]}</span>
                   <strong>{input.title || '未命名节点'}</strong>
                   <small>{input.preview}</small>
+                  <button
+                    data-canvas-input
+                    onClick={() => onUpdate(node.id, { metadata: { composerContent: appendReferenceToken(node.metadata.composerContent ?? node.metadata.prompt, input) } }, false)}
+                  >
+                    引用
+                  </button>
                 </div>
               ))}
               {inputs.length > 4 ? <em>还有 {inputs.length - 4} 个上游输入</em> : null}
@@ -1394,7 +1411,7 @@ function NodeBody({
           <textarea
             data-canvas-input
             value={node.metadata.composerContent ?? node.metadata.prompt ?? ''}
-            placeholder="输入任务提示词；也可以直接连接文本节点作为上游提示词。"
+            placeholder="输入任务提示词；点击上游输入的“引用”可精确选择文本、图片或视频。"
             onFocus={onCaptureHistory}
             onChange={(event) => onUpdate(node.id, { metadata: { composerContent: event.target.value } }, false)}
           />

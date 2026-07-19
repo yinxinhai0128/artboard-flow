@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCanvasGenerationContext, buildCanvasGenerationInputs } from './generation'
+import { buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload } from './generation'
 import type { CanvasConnection, CanvasNode } from './types'
 
 const configNode: CanvasNode = {
@@ -90,6 +90,7 @@ describe('canvas generation context', () => {
     expect(context.count).toBe(2)
     expect(context.prompt).toBe('主提示词\n\n一只银色机械鸟飞过雪山。')
     expect(context.summary).toEqual({ text: 1, image: 1, video: 1 })
+    expect(context.selectedInputs.map((input) => input.nodeId)).toEqual(['text', 'image', 'video'])
     expect(context.referenceImages).toHaveLength(1)
     expect(context.referenceVideos).toHaveLength(1)
   })
@@ -119,9 +120,47 @@ describe('canvas generation context', () => {
     const context = buildCanvasGenerationContext('config', [configWithComposer, textNode, imageNode, videoNode], connections)
 
     expect(context.prompt).toBe('把 图片1 的主体做成电影感镜头，并结合 【文本1】。\n\n【文本1】\n一只银色机械鸟飞过雪山。')
+    expect(context.selectedInputs.map((input) => input.nodeId)).toEqual(['image', 'text'])
     expect(context.summary).toEqual({ text: 1, image: 1, video: 0 })
     expect(context.referenceImages).toHaveLength(1)
     expect(context.referenceVideos).toHaveLength(0)
+  })
+
+  it('builds an API-ready payload from the selected generation inputs', () => {
+    const configWithComposer: CanvasNode = {
+      ...configNode,
+      metadata: {
+        ...configNode.metadata,
+        composerContent: '只参考 @[node:image]，不要使用视频。',
+      },
+    }
+    const context = buildCanvasGenerationContext('config', [configWithComposer, textNode, imageNode, videoNode], connections)
+    const payload = buildCanvasGenerationPayload(context, '2026-07-19T10:00:00.000Z')
+
+    expect(payload).toMatchObject({
+      mode: 'image',
+      model: 'image-model',
+      size: '1024x1024',
+      count: 2,
+      prompt: '只参考 图片1，不要使用视频。',
+      summary: { text: 0, image: 1, video: 0 },
+      createdAt: '2026-07-19T10:00:00.000Z',
+    })
+    expect(payload.inputs).toEqual([
+      {
+        nodeId: 'image',
+        type: 'image',
+        title: '参考图',
+        text: undefined,
+        media: {
+          url: 'data:image/png;base64,abc',
+          mimeType: 'image/png',
+          bytes: 128,
+          width: 64,
+          height: 64,
+        },
+      },
+    ])
   })
 
   it('reports an unready context when config has no prompt and no usable upstream input', () => {

@@ -2,6 +2,29 @@ export type NodeKind = 'text' | 'image' | 'video' | 'config'
 
 export type CanvasGenerationMode = 'image' | 'video' | 'text'
 
+export type CanvasGenerationPayload = {
+  mode: CanvasGenerationMode
+  model: string
+  size: string
+  count: number
+  prompt: string
+  summary: Record<Exclude<NodeKind, 'config'>, number>
+  inputs: Array<{
+    nodeId: string
+    type: Exclude<NodeKind, 'config'>
+    title: string
+    text?: string
+    media?: {
+      url: string
+      mimeType?: string
+      bytes?: number
+      width?: number
+      height?: number
+    }
+  }>
+  createdAt: string
+}
+
 export type Point = {
   x: number
   y: number
@@ -29,6 +52,7 @@ export type CanvasNode = {
     errorDetails?: string
     generationMode?: CanvasGenerationMode
     composerContent?: string
+    generationPayload?: CanvasGenerationPayload
     generatedAt?: string
     outputNodeId?: string
     model?: string

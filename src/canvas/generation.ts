@@ -1,4 +1,4 @@
-import type { CanvasConnection, CanvasGenerationMode, CanvasNode, NodeKind } from './types'
+import type { CanvasConnection, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, NodeKind } from './types'
 
 export const CONFIG_REFERENCE_PATTERN = /@\[node:([^\]]+)\]/g
 
@@ -28,6 +28,7 @@ export type CanvasGenerationContext = {
   count: number
   prompt: string
   inputs: CanvasGenerationInput[]
+  selectedInputs: CanvasGenerationInput[]
   referenceImages: CanvasGenerationInput[]
   referenceVideos: CanvasGenerationInput[]
   summary: CanvasGenerationSummary
@@ -75,6 +76,7 @@ export function buildCanvasGenerationContext(configNodeId: string, nodes: Canvas
     count,
     prompt,
     inputs,
+    selectedInputs,
     referenceImages,
     referenceVideos,
     summary,
@@ -89,6 +91,25 @@ export function summarizeInputs(inputs: CanvasGenerationInput[]) {
     summary[input.type] += 1
   })
   return summary
+}
+
+export function buildCanvasGenerationPayload(context: CanvasGenerationContext, createdAt = new Date().toISOString()): CanvasGenerationPayload {
+  return {
+    mode: context.mode,
+    model: context.model,
+    size: context.size,
+    count: context.count,
+    prompt: context.prompt,
+    summary: context.summary,
+    inputs: context.selectedInputs.map((input) => ({
+      nodeId: input.nodeId,
+      type: input.type,
+      title: input.title,
+      text: input.text,
+      media: input.media,
+    })),
+    createdAt,
+  }
 }
 
 function generationInputFromNode(node: CanvasNode): CanvasGenerationInput | null {
