@@ -697,6 +697,17 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     dragRef.current = { type: 'node', start: { x: event.clientX, y: event.clientY }, nodeIds: expandNodeIdsForMovement(controller.project.nodes, nodeIds) }
   }
 
+  const selectNodeFromInput = (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => {
+    if (event.button !== 0) return
+    const target = event.target as HTMLElement
+    if (!target.closest('[data-canvas-input]') || target.closest('[data-node-control]')) return
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey
+    controller.selectNode(node.id, additive)
+    setContextMenu(null)
+    setToolbarNodeId(node.id)
+    setHoveredNodeId(node.id)
+  }
+
   const handleResizePointerDown = (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => {
     event.preventDefault()
     event.stopPropagation()
@@ -1409,6 +1420,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 selected={controller.selectedNodeIds.includes(node.id)}
                 related={relatedHighlight.nodeIds.has(node.id)}
                 onPointerDown={handleNodePointerDown}
+                onInputPointerDown={selectNodeFromInput}
                 onResizePointerDown={handleResizePointerDown}
                 onStartConnection={startConnection}
                 onFinishConnection={finishConnection}
@@ -1672,6 +1684,7 @@ function CanvasNodeView({
   selected,
   related,
   onPointerDown,
+  onInputPointerDown,
   onResizePointerDown,
   onStartConnection,
   onFinishConnection,
@@ -1698,6 +1711,7 @@ function CanvasNodeView({
   selected: boolean
   related: boolean
   onPointerDown: (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => void
+  onInputPointerDown: (event: React.PointerEvent<HTMLElement>, node: CanvasNode) => void
   onResizePointerDown: (event: React.PointerEvent<HTMLButtonElement>, node: CanvasNode, corner: ResizeCorner) => void
   onStartConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, handleType: 'source' | 'target') => void
   onFinishConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
@@ -1734,6 +1748,7 @@ function CanvasNodeView({
       onMouseEnter={() => onHoverStart(node.id)}
       onMouseLeave={() => onHoverEnd(node.id)}
       onContextMenu={(event) => onContextMenu(event, node.id)}
+      onPointerDownCapture={(event) => onInputPointerDown(event, node)}
       onPointerDown={(event) => {
         if (isValidConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
           event.preventDefault()
