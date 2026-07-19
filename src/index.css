@@ -857,7 +857,9 @@ button:disabled {
   font-size: 12px;
 }
 
-.config-body input {
+.config-body input,
+.config-body select,
+.config-body textarea {
   width: 100%;
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
@@ -865,6 +867,20 @@ button:disabled {
   border-radius: 6px;
   padding: 6px 8px;
   outline: 0;
+}
+
+.config-body select {
+  color-scheme: dark;
+}
+
+.config-prompt-label {
+  align-items: start;
+}
+
+.config-body textarea {
+  min-height: 74px;
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .config-inputs {
@@ -942,11 +958,52 @@ button:disabled {
 
 .config-input-list small,
 .config-input-list em,
-.config-inputs p {
+.config-inputs p,
+.config-task-preview p,
+.config-task-preview em {
   color: var(--muted);
   font-size: 11px;
   font-style: normal;
   line-height: 1.45;
+}
+
+.config-task-preview {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: 10px;
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.config-task-preview p {
+  max-height: 88px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.config-task-preview em {
+  color: #fca5a5;
+}
+
+.config-task-preview button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  color: #08111f;
+  background: #e5e7eb;
+  border: 0;
+  border-radius: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.config-task-preview button:disabled {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.08);
+  cursor: not-allowed;
 }
 
 .port {

@@ -102,8 +102,8 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   )
 
   const addConnectedNode = useCallback(
-    (type: NodeKind, nodeId: string, handleType: 'source' | 'target', position: Point) => {
-      const node = createNode(type, position)
+    (type: NodeKind, nodeId: string, handleType: 'source' | 'target', position: Point, patch: Partial<CanvasNode> = {}) => {
+      const node = createNode(type, position, patch)
       const fromNodeId = handleType === 'source' ? nodeId : node.id
       const toNodeId = handleType === 'source' ? node.id : nodeId
       commit((current) =>

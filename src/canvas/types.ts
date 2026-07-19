@@ -1,5 +1,7 @@
 export type NodeKind = 'text' | 'image' | 'video' | 'config'
 
+export type CanvasGenerationMode = 'image' | 'video' | 'text'
+
 export type Point = {
   x: number
   y: number
@@ -24,6 +26,11 @@ export type CanvasNode = {
     content?: string
     prompt?: string
     status?: 'idle' | 'success' | 'loading' | 'error'
+    errorDetails?: string
+    generationMode?: CanvasGenerationMode
+    composerContent?: string
+    generatedAt?: string
+    outputNodeId?: string
     model?: string
     size?: string
     count?: number
