@@ -5,7 +5,7 @@ import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, Selec
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { nextNodeSelection, normalizeConnectionForProject } from './document'
+import { findConnectionDropTarget, nextNodeSelection } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -32,14 +32,6 @@ type PendingConnectionCreate = {
   handleType: 'source' | 'target'
   position: Point
 } | null
-
-type ConnectionDropTarget = {
-  nodeId: string | null
-  isNearNode: boolean
-}
-
-const CONNECTION_HANDLE_HIT_RADIUS = 40
-const CONNECTION_NODE_HIT_PADDING = 32
 
 const nodeIcons = {
   text: Type,
@@ -274,41 +266,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     return () => observer.disconnect()
   }, [])
 
-  const findConnectionDropTarget = useCallback(
-    (event: { clientX: number; clientY: number }, draft: Pick<ConnectionDraft, 'nodeId' | 'handleType'>): ConnectionDropTarget => {
-      const world = clientWorld(event)
-      const scale = Math.max(controller.project.viewport.k, 0.05)
-      const padding = CONNECTION_NODE_HIT_PADDING / scale
-      const handleRadius = CONNECTION_HANDLE_HIT_RADIUS / scale
-      let isNearNode = false
-      let bestNodeId: string | null = null
-      let bestPriority = Number.POSITIVE_INFINITY
-      const nodes = [...controller.project.nodes].reverse()
-
-      nodes.forEach((node) => {
-        const anchor = draft.handleType === 'source' ? targetPort(node) : sourcePort(node)
-        const dx = world.x - anchor.x
-        const dy = world.y - anchor.y
-        const hitsHandle = dx * dx + dy * dy <= handleRadius * handleRadius
-        const inside = world.x >= node.position.x && world.x <= node.position.x + node.width && world.y >= node.position.y && world.y <= node.position.y + node.height
-        const near =
-          world.x >= node.position.x - padding &&
-          world.x <= node.position.x + node.width + padding &&
-          world.y >= node.position.y - padding &&
-          world.y <= node.position.y + node.height + padding
-        if (!hitsHandle && !inside && !near) return
-        isNearNode = true
-        if (node.id === draft.nodeId || !normalizeConnectionForProject(controller.project, draft.nodeId, node.id, draft.handleType)) return
-
-        const priority = inside ? 0 : hitsHandle ? 1 : 2
-        if (priority < bestPriority) {
-          bestNodeId = node.id
-          bestPriority = priority
-        }
-      })
-
-      return { nodeId: bestNodeId, isNearNode }
-    },
+  const findConnectionDropTargetFromEvent = useCallback(
+    (event: { clientX: number; clientY: number }, draft: Pick<ConnectionDraft, 'nodeId' | 'handleType'>) =>
+      findConnectionDropTarget(controller.project, clientWorld(event), draft, controller.project.viewport.k),
     [clientWorld, controller.project],
   )
 
@@ -526,7 +486,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (connectionDraft) {
         setConnectionDraft((value) => {
           if (!value) return value
-          const targetNodeId = findConnectionDropTarget(event, value).nodeId
+          const targetNodeId = findConnectionDropTargetFromEvent(event, value).nodeId
           const targetNode = targetNodeId ? nodesById.get(targetNodeId) : null
           const to = targetNode ? (value.handleType === 'source' ? targetPort(targetNode) : sourcePort(targetNode)) : clientWorld(event)
           return { ...value, targetNodeId, to }
@@ -596,7 +556,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const up = (event: PointerEvent) => {
       const draft = connectionDraftRef.current
       if (draft) {
-        const dropTarget = draft.targetNodeId ? { nodeId: draft.targetNodeId, isNearNode: true } : findConnectionDropTarget(event, draft)
+        const dropTarget = draft.targetNodeId ? { nodeId: draft.targetNodeId, isNearNode: true } : findConnectionDropTargetFromEvent(event, draft)
         if (dropTarget.nodeId && dropTarget.nodeId !== draft.nodeId) {
           controller.connectNodes(draft.nodeId, dropTarget.nodeId, draft.handleType)
           setConnectionDraft(null)
@@ -621,7 +581,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
-  }, [clientWorld, connectionDraft, controller, findConnectionDropTarget, nodesById, selectionBox])
+  }, [clientWorld, connectionDraft, controller, findConnectionDropTargetFromEvent, nodesById, selectionBox])
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {

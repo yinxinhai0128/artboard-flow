@@ -1,4 +1,13 @@
-import type { CanvasConnection, CanvasProject } from './types'
+import { sourcePort, targetPort } from './geometry'
+import type { CanvasConnection, CanvasProject, Point } from './types'
+
+export type ConnectionDropTarget = {
+  nodeId: string | null
+  isNearNode: boolean
+}
+
+export const CONNECTION_HANDLE_HIT_RADIUS = 40
+export const CONNECTION_NODE_HIT_PADDING = 32
 
 export function nextNodeSelection(current: string[], nodeId: string, additive: boolean): string[] {
   const exists = current.includes(nodeId)
@@ -19,6 +28,46 @@ export function normalizeConnectionForProject(
   if (second.type === 'config') return { fromNodeId: first.id, toNodeId: second.id }
   if (first.type === 'config' && firstHandleType === 'target') return { fromNodeId: second.id, toNodeId: first.id }
   return { fromNodeId: first.id, toNodeId: second.id }
+}
+
+export function findConnectionDropTarget(
+  project: CanvasProject,
+  world: Point,
+  draft: { nodeId: string; handleType: 'source' | 'target' },
+  scale: number,
+): ConnectionDropTarget {
+  const normalizedScale = Math.max(scale, 0.05)
+  const padding = CONNECTION_NODE_HIT_PADDING / normalizedScale
+  const handleRadius = CONNECTION_HANDLE_HIT_RADIUS / normalizedScale
+  let isNearNode = false
+  let bestNodeId: string | null = null
+  let bestPriority = Number.POSITIVE_INFINITY
+
+  const nodes = [...project.nodes].reverse()
+
+  nodes.forEach((node) => {
+    const anchor = draft.handleType === 'source' ? targetPort(node) : sourcePort(node)
+    const dx = world.x - anchor.x
+    const dy = world.y - anchor.y
+    const hitsHandle = dx * dx + dy * dy <= handleRadius * handleRadius
+    const inside = world.x >= node.position.x && world.x <= node.position.x + node.width && world.y >= node.position.y && world.y <= node.position.y + node.height
+    const near =
+      world.x >= node.position.x - padding &&
+      world.x <= node.position.x + node.width + padding &&
+      world.y >= node.position.y - padding &&
+      world.y <= node.position.y + node.height + padding
+    if (!hitsHandle && !inside && !near) return
+    isNearNode = true
+    if (node.id === draft.nodeId || !normalizeConnectionForProject(project, draft.nodeId, node.id, draft.handleType)) return
+
+    const priority = inside ? 0 : hitsHandle ? 1 : 2
+    if (priority < bestPriority) {
+      bestNodeId = node.id
+      bestPriority = priority
+    }
+  })
+
+  return { nodeId: bestNodeId, isNearNode }
 }
 
 export function deleteSelectionFromProject(project: CanvasProject, nodeIds: string[], connectionId: string | null): CanvasProject {

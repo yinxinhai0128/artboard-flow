@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, deleteSelectionFromProject, nextNodeSelection, normalizeConnectionForProject } from './document'
+import { addConnectionToProject, deleteSelectionFromProject, findConnectionDropTarget, nextNodeSelection, normalizeConnectionForProject } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -88,6 +88,24 @@ describe('canvas document operations', () => {
     expect(normalizeConnectionForProject(source, 'config', 'prompt', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
     expect(normalizeConnectionForProject(source, 'prompt', 'image', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
     expect(normalizeConnectionForProject(source, 'config', 'config-2', 'source')).toBeNull()
+  })
+
+  it('finds connection drop targets by node body, handle radius, and invalid nearby nodes', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...baseNode('prompt'), position: { x: 0, y: 0 }, width: 100, height: 80 },
+        { ...imageNode('image'), position: { x: 220, y: 0 }, width: 100, height: 80 },
+        { ...configNode('config'), position: { x: 420, y: 0 }, width: 100, height: 80 },
+        { ...configNode('config-2'), position: { x: 620, y: 0 }, width: 100, height: 80 },
+      ],
+      connections: [],
+    }
+
+    expect(findConnectionDropTarget(source, { x: 250, y: 30 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: 'image', isNearNode: true })
+    expect(findConnectionDropTarget(source, { x: 419, y: 40 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: 'config', isNearNode: true })
+    expect(findConnectionDropTarget(source, { x: 620, y: 40 }, { nodeId: 'config', handleType: 'source' }, 1)).toEqual({ nodeId: null, isNearNode: true })
+    expect(findConnectionDropTarget(source, { x: 900, y: 300 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: null, isNearNode: false })
   })
 
   it('prevents config-to-config connections in the document layer', () => {
