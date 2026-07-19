@@ -57,7 +57,7 @@ function parseDocument(row) {
 function normalizeProject(input = {}) {
   const createdAt = typeof input.createdAt === 'string' ? input.createdAt : nowIso()
   const updatedAt = typeof input.updatedAt === 'string' ? input.updatedAt : nowIso()
-  const nodes = normalizeNodes(input.nodes)
+  const nodes = normalizeNodeRelationships(normalizeNodes(input.nodes))
   return {
     schemaVersion: 1,
     id: typeof input.id === 'string' && input.id ? input.id : id(),
@@ -95,6 +95,38 @@ function normalizeNodes(value) {
       height: Number.isFinite(node.height) ? Math.max(90, Math.min(1200, node.height)) : 180,
       metadata,
     }]
+  })
+}
+
+function normalizeNodeRelationships(nodes) {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
+  return nodes.map((node) => {
+    const metadata = { ...node.metadata }
+    let changed = false
+
+    const groupId = typeof metadata.groupId === 'string' ? metadata.groupId : ''
+    const group = groupId ? nodesById.get(groupId) : null
+    if (groupId && (!group || group.type !== 'group' || group.id === node.id || node.type === 'group')) {
+      delete metadata.groupId
+      changed = true
+    }
+
+    const splitSourceNodeId = typeof metadata.splitSourceNodeId === 'string' ? metadata.splitSourceNodeId : ''
+    const splitSource = splitSourceNodeId ? nodesById.get(splitSourceNodeId) : null
+    if (
+      splitSourceNodeId &&
+      (!splitSource ||
+        splitSource.id === node.id ||
+        splitSource.type === 'group' ||
+        splitSource.type === 'config' ||
+        splitSource.type === 'text')
+    ) {
+      delete metadata.splitSourceNodeId
+      delete metadata.splitOutputIndex
+      changed = true
+    }
+
+    return changed ? { ...node, metadata } : node
   })
 }
 
