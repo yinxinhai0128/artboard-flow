@@ -788,6 +788,49 @@ button:disabled {
   color: #dc2626;
 }
 
+.selection-toolbar {
+  position: absolute;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(244, 244, 245, 0.97);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  color: #18181b;
+  transform: translate(-50%, -100%);
+}
+
+.selection-toolbar strong {
+  padding: 0 9px;
+  color: #3f3f46;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.selection-toolbar button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.selection-toolbar button:hover {
+  background: rgba(24, 24, 27, 0.08);
+}
+
+.selection-toolbar .danger {
+  color: #dc2626;
+}
+
 .node-info-backdrop {
   position: fixed;
   inset: 0;

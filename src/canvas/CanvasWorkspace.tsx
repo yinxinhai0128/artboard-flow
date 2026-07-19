@@ -378,7 +378,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     return contexts
   }, [controller.project.connections, controller.project.nodes])
   const selectedSingleNodeId = controller.selectedNodeIds.length === 1 ? controller.selectedNodeIds[0] : null
-  const toolbarNode = (selectedSingleNodeId ? nodesById.get(selectedSingleNodeId) : null) ?? (toolbarNodeId ? nodesById.get(toolbarNodeId) : null) ?? null
+  const hasMultiSelection = controller.selectedNodeIds.length > 1
+  const toolbarNode = hasMultiSelection ? null : (selectedSingleNodeId ? nodesById.get(selectedSingleNodeId) : null) ?? (toolbarNodeId ? nodesById.get(toolbarNodeId) : null) ?? null
   const activeRelationNodeId = controller.selectedNodeIds.length > 1 ? null : hoveredNodeId ?? selectedSingleNodeId
   const relatedHighlight = useMemo(() => {
     const nodeIds = new Set<string>()
@@ -395,6 +396,17 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   }, [activeRelationNodeId, renderableConnections])
   const infoNode = infoNodeId ? nodesById.get(infoNodeId) ?? null : null
   const previewNode = previewNodeId ? nodesById.get(previewNodeId) ?? null : null
+  const selectionToolbarPosition = useMemo(() => {
+    if (!hasMultiSelection || selectionBox || controller.selectedNodes.length === 0) return null
+    const left = Math.min(...controller.selectedNodes.map((node) => node.position.x))
+    const top = Math.min(...controller.selectedNodes.map((node) => node.position.y))
+    const right = Math.max(...controller.selectedNodes.map((node) => node.position.x + node.width))
+    const anchor = worldToScreen({ x: (left + right) / 2, y: top }, controller.project.viewport)
+    return {
+      x: Math.min(Math.max(anchor.x, 190), Math.max(canvasSize.width - 190, 190)),
+      y: Math.max(anchor.y - 56, 16),
+    }
+  }, [canvasSize.width, controller.project.viewport, controller.selectedNodes, hasMultiSelection, selectionBox])
   const infoNodeRelations = useMemo(
     () => infoNode ? getNodeRelations(controller.project, infoNode.id) : { incoming: [], outgoing: [] },
     [controller.project, infoNode],
@@ -1490,6 +1502,17 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
               onViewportChange={controller.setViewport}
             />
           ) : null}
+          <SelectionToolbar
+            position={selectionToolbarPosition}
+            count={controller.selectedNodeIds.length}
+            onDeselect={controller.clearSelection}
+            onCopy={controller.copySelection}
+            onDuplicate={() => {
+              controller.copySelection()
+              controller.pasteSelection()
+            }}
+            onDelete={controller.deleteSelection}
+          />
           <NodeHoverToolbar
             node={toolbarNode}
             viewport={controller.project.viewport}
@@ -1876,6 +1899,45 @@ function CanvasContextMenuView({
       ) : null}
       <button className="danger" onClick={onDelete}>
         <Trash2 size={15} /> 删除{menu.type === 'node' ? '节点' : '连线'}
+      </button>
+    </div>
+  )
+}
+
+function SelectionToolbar({
+  position,
+  count,
+  onDeselect,
+  onCopy,
+  onDuplicate,
+  onDelete,
+}: {
+  position: Point | null
+  count: number
+  onDeselect: () => void
+  onCopy: () => void
+  onDuplicate: () => void
+  onDelete: () => void
+}) {
+  if (!position || count < 2) return null
+  return (
+    <div className="selection-toolbar" data-toolbar style={{ left: position.x, top: position.y }} onPointerDown={(event) => event.stopPropagation()}>
+      <strong>已选 {count} 个节点</strong>
+      <button onClick={onDeselect}>
+        <MousePointer2 size={15} />
+        取消
+      </button>
+      <button onClick={onCopy}>
+        <Copy size={15} />
+        复制
+      </button>
+      <button onClick={onDuplicate}>
+        <Copy size={15} />
+        副本
+      </button>
+      <button className="danger" onClick={onDelete}>
+        <Trash2 size={15} />
+        删除
       </button>
     </div>
   )
