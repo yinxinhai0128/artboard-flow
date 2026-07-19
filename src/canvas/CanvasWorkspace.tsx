@@ -886,36 +886,53 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement
-      const editing = ['INPUT', 'TEXTAREA'].includes(target.tagName)
-      if (event.code === 'Space') setSpacePressed(true)
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const editing = Boolean(target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.closest("[contenteditable='true'], [data-canvas-no-zoom]")))
       if (editing) return
+      if (event.code === 'Space') {
+        setSpacePressed(true)
+        return
+      }
       const mod = event.ctrlKey || event.metaKey
-      if (mod && event.key.toLowerCase() === 'a') {
+      const key = event.key.toLowerCase()
+      if (mod && !event.altKey && key === 'a') {
         event.preventDefault()
         controller.clearSelection()
         controller.project.nodes.forEach((node) => controller.selectNode(node.id, true))
+        return
       }
-      if (mod && event.key.toLowerCase() === 'c') controller.copySelection()
-      if (mod && event.key.toLowerCase() === 'v') {
+      if (mod && !event.altKey && key === 'c') {
+        event.preventDefault()
+        controller.copySelection()
+        return
+      }
+      if (mod && !event.altKey && key === 'v') {
+        event.preventDefault()
         if (controller.pasteSelection(canvasCenterWorld())) {
-          event.preventDefault()
           return
         }
         window.setTimeout(() => {
           if (Date.now() - pasteHandledAtRef.current > 250) void pasteSystemClipboard()
         }, 80)
+        return
       }
-      if (mod && event.key.toLowerCase() === 'z' && !event.shiftKey) {
+      if (mod && !event.altKey && key === 'z' && !event.shiftKey) {
         event.preventDefault()
         controller.undo()
+        return
       }
-      if ((mod && event.key.toLowerCase() === 'y') || (mod && event.shiftKey && event.key.toLowerCase() === 'z')) {
+      if ((mod && !event.altKey && key === 'y') || (mod && !event.altKey && event.shiftKey && key === 'z')) {
         event.preventDefault()
         controller.redo()
+        return
       }
-      if (event.key === 'Delete' || event.key === 'Backspace') controller.deleteSelection()
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        controller.deleteSelection()
+        return
+      }
       if (event.key === 'Escape') {
+        event.preventDefault()
         setActiveConnectionDraft(null)
         setPendingConnectionCreate(null)
         setNodeCreatePosition(null)
@@ -924,6 +941,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         setInfoNodeId(null)
         setShortcutsOpen(false)
         controller.clearSelection()
+        return
       }
     }
     const keyup = (event: KeyboardEvent) => {
