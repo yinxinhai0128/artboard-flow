@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, FileJson, Image, Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
+import { Copy, Download, FileJson, Image, Info, Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Video } from 'lucide-react'
 import { connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort } from './geometry'
 import type { CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -125,6 +125,36 @@ function nodePreview(node: CanvasNode) {
   return node.metadata.content ? '已载入内容' : `空${nodeKindLabels[node.type]}节点`
 }
 
+function canDownloadNode(node: CanvasNode) {
+  return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video'))
+}
+
+function safeFileName(name: string) {
+  return (name.trim() || 'canvas-node')
+    .split('')
+    .map((char) => (char.charCodeAt(0) < 32 || '<>:"/\\|?*'.includes(char) ? '-' : char))
+    .join('')
+    .slice(0, 80)
+}
+
+function downloadNodeContent(node: CanvasNode) {
+  const content = node.metadata.content
+  if (!content) return
+  const anchor = document.createElement('a')
+  if (node.type === 'text') {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    anchor.href = URL.createObjectURL(blob)
+    anchor.download = `${safeFileName(node.title)}.txt`
+    anchor.click()
+    URL.revokeObjectURL(anchor.href)
+    return
+  }
+  anchor.href = content
+  const extension = node.type === 'video' ? 'mp4' : node.metadata.mimeType?.split('/')[1]?.split(';')[0] || 'png'
+  anchor.download = `${safeFileName(node.title)}.${extension}`
+  anchor.click()
+}
+
 export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: CanvasWorkspaceProps) {
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -143,6 +173,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [sidePanelOpen, setSidePanelOpen] = useState(false)
   const [sidePanelQuery, setSidePanelQuery] = useState('')
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
+  const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null)
+  const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [spacePressed, setSpacePressed] = useState(false)
   const nodesById = useMemo(() => new Map(controller.project.nodes.map((node) => [node.id, node])), [controller.project.nodes])
   const relationCounts = useMemo(() => {
@@ -156,6 +188,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     })
     return counts
   }, [controller.project.connections, controller.project.nodes])
+  const selectedSingleNodeId = controller.selectedNodeIds.length === 1 ? controller.selectedNodeIds[0] : null
+  const toolbarNode = (selectedSingleNodeId ? nodesById.get(selectedSingleNodeId) : null) ?? (toolbarNodeId ? nodesById.get(toolbarNodeId) : null) ?? null
+  const infoNode = infoNodeId ? nodesById.get(infoNodeId) ?? null : null
 
   const clientPoint = useCallback((event: { clientX: number; clientY: number }) => {
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -319,6 +354,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const target = event.target as HTMLElement
     if (target.closest('[data-node-id], [data-connection-id], [data-toolbar], [data-minimap]')) return
     setContextMenu(null)
+    setToolbarNodeId(null)
     setNodeCreatePosition(null)
     setPendingConnectionCreate(null)
     if (connectionDraftRef.current) {
@@ -561,6 +597,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         setPendingConnectionCreate(null)
         setNodeCreatePosition(null)
         setContextMenu(null)
+        setToolbarNodeId(null)
+        setInfoNodeId(null)
         controller.clearSelection()
       }
     }
@@ -826,6 +864,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onFinishConnection={finishConnection}
                 onUpdate={controller.updateNode}
                 onCaptureHistory={controller.captureHistory}
+                onHoverStart={setToolbarNodeId}
                 onFinishConnectionToNode={finishConnectionToNode}
                 isConnectionTarget={Boolean(connectionDraft && connectionDraft.nodeId !== node.id)}
                 onContextMenu={(event, nodeId) => {
@@ -899,8 +938,26 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             viewportSize={canvasSize}
             onViewportChange={controller.setViewport}
           />
+          <NodeHoverToolbar
+            node={toolbarNode}
+            viewport={controller.project.viewport}
+            onInfo={(node) => setInfoNodeId(node.id)}
+            onDuplicate={(node) => controller.duplicateNode(node.id)}
+            onDownload={downloadNodeContent}
+            onDelete={(node) => {
+              controller.deleteNode(node.id)
+              setToolbarNodeId(null)
+              if (infoNodeId === node.id) setInfoNodeId(null)
+            }}
+            onKeep={(nodeId) => setToolbarNodeId(nodeId)}
+          />
         </div>
       </div>
+      <NodeInfoModal
+        node={infoNode}
+        relationCounts={infoNode ? relationCounts.get(infoNode.id) ?? { incoming: 0, outgoing: 0 } : { incoming: 0, outgoing: 0 }}
+        onClose={() => setInfoNodeId(null)}
+      />
       {contextMenu ? (
         <CanvasContextMenuView
           menu={contextMenu}
@@ -930,6 +987,7 @@ function CanvasNodeView({
   onFinishConnection,
   onUpdate,
   onCaptureHistory,
+  onHoverStart,
   onFinishConnectionToNode,
   isConnectionTarget,
   onContextMenu,
@@ -943,6 +1001,7 @@ function CanvasNodeView({
   onFinishConnection: (event: React.PointerEvent<HTMLButtonElement>, nodeId: string) => void
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   onCaptureHistory: () => void
+  onHoverStart: (nodeId: string) => void
   onFinishConnectionToNode: (nodeId: string) => boolean
   isConnectionTarget: boolean
   onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: string) => void
@@ -953,6 +1012,7 @@ function CanvasNodeView({
       data-node-id={node.id}
       className={`canvas-node ${node.type} ${selected ? 'selected' : ''} ${related ? 'related' : ''} ${isConnectionTarget ? 'connection-target' : ''}`}
       style={{ left: node.position.x, top: node.position.y, width: node.width, height: node.height }}
+      onMouseEnter={() => onHoverStart(node.id)}
       onContextMenu={(event) => onContextMenu(event, node.id)}
       onPointerDown={(event) => {
         if (isConnectionTarget && !(event.target as HTMLElement).closest('[data-canvas-input]')) {
@@ -1056,6 +1116,114 @@ function CanvasContextMenuView({
       <button className="danger" onClick={onDelete}>
         <Trash2 size={15} /> 删除{menu.type === 'node' ? '节点' : '连线'}
       </button>
+    </div>
+  )
+}
+
+function NodeHoverToolbar({
+  node,
+  viewport,
+  onInfo,
+  onDuplicate,
+  onDownload,
+  onDelete,
+  onKeep,
+}: {
+  node: CanvasNode | null
+  viewport: { x: number; y: number; k: number }
+  onInfo: (node: CanvasNode) => void
+  onDuplicate: (node: CanvasNode) => void
+  onDownload: (node: CanvasNode) => void
+  onDelete: (node: CanvasNode) => void
+  onKeep: (nodeId: string) => void
+}) {
+  if (!node) return null
+  const left = viewport.x + (node.position.x + node.width / 2) * viewport.k
+  const top = Math.max(12, viewport.y + node.position.y * viewport.k - 12)
+
+  return (
+    <div
+      className="node-hover-toolbar"
+      data-toolbar
+      style={{ left, top }}
+      onMouseEnter={() => onKeep(node.id)}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <button title="节点信息" onClick={() => onInfo(node)}>
+        <Info size={15} />
+        信息
+      </button>
+      <button title="复制节点" onClick={() => onDuplicate(node)}>
+        <Copy size={15} />
+        复制
+      </button>
+      {canDownloadNode(node) ? (
+        <button title="下载节点内容" onClick={() => onDownload(node)}>
+          <Download size={15} />
+          下载
+        </button>
+      ) : null}
+      <button className="danger" title="删除节点" onClick={() => onDelete(node)}>
+        <Trash2 size={15} />
+        删除
+      </button>
+    </div>
+  )
+}
+
+function NodeInfoModal({
+  node,
+  relationCounts,
+  onClose,
+}: {
+  node: CanvasNode | null
+  relationCounts: { incoming: number; outgoing: number }
+  onClose: () => void
+}) {
+  if (!node) return null
+  const metadata = JSON.stringify(node.metadata, null, 2)
+
+  return (
+    <div className="node-info-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="node-info-modal" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>{nodeKindLabels[node.type]}节点</span>
+            <h2>{node.title || '未命名节点'}</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="node-info-grid">
+          <InfoField label="ID" value={node.id} />
+          <InfoField label="类型" value={nodeKindLabels[node.type]} />
+          <InfoField label="尺寸" value={`${Math.round(node.width)} × ${Math.round(node.height)}`} />
+          <InfoField label="位置" value={`${Math.round(node.position.x)}, ${Math.round(node.position.y)}`} />
+          <InfoField label="输入关系" value={String(relationCounts.incoming)} />
+          <InfoField label="输出关系" value={String(relationCounts.outgoing)} />
+          <InfoField label="状态" value={node.metadata.status || 'idle'} />
+          {node.metadata.mimeType ? <InfoField label="MIME" value={node.metadata.mimeType} /> : null}
+          {node.metadata.bytes ? <InfoField label="大小" value={`${node.metadata.bytes} bytes`} /> : null}
+        </div>
+        {node.metadata.content ? (
+          <div className="node-info-content">
+            <strong>内容预览</strong>
+            <p>{node.type === 'text' ? node.metadata.content : node.metadata.mimeType || '媒体内容已载入'}</p>
+          </div>
+        ) : null}
+        <div className="node-info-json">
+          <strong>Metadata JSON</strong>
+          <pre>{metadata}</pre>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function InfoField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   )
 }

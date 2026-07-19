@@ -617,6 +617,146 @@ button:disabled {
   color: #fca5a5;
 }
 
+.node-hover-toolbar {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(244, 244, 245, 0.96);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3);
+  color: #18181b;
+  transform: translate(-50%, -100%);
+}
+
+.node-hover-toolbar button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.node-hover-toolbar button:hover {
+  background: rgba(24, 24, 27, 0.08);
+}
+
+.node-hover-toolbar .danger {
+  color: #dc2626;
+}
+
+.node-info-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.node-info-modal {
+  width: min(680px, 94vw);
+  max-height: min(760px, 88vh);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(18, 18, 18, 0.98);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+}
+
+.node-info-modal header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.node-info-modal header span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.node-info-modal h2 {
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.node-info-modal header button {
+  align-self: flex-start;
+}
+
+.node-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 18px 20px;
+}
+
+.node-info-grid div,
+.node-info-content,
+.node-info-json {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px 12px;
+}
+
+.node-info-grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.node-info-grid strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.node-info-content,
+.node-info-json {
+  margin: 0 20px 14px;
+}
+
+.node-info-content strong,
+.node-info-json strong {
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.node-info-content p {
+  max-height: 120px;
+  overflow: auto;
+  margin-top: 8px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.node-info-json pre {
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .canvas-node {
   position: absolute;
   border: 1px solid var(--border);
