@@ -15,7 +15,7 @@
 - Use Simplified Chinese for UI and project docs.
 - Rebuild behavior independently; do not copy AGPL source code from the reference project.
 - First phase includes canvas projects, infinite pan/zoom, node creation/editing, node resize/drag, selection/marquee, connections, mini-map, undo/redo, copy/paste, JSON import/export, and backend persistence.
-- First phase excludes AI generation APIs, prompt library, asset library, plugin marketplace, account system, and multi-user sync.
+- First phase excludes real third-party AI generation APIs, prompt library, plugin marketplace, account system, and multi-user sync. The reusable local asset library is now part of the canvas module.
 
 ---
 

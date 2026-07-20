@@ -21,6 +21,7 @@ describe('asset store helpers', () => {
     expect(assetKindFromMimeType('image/svg+xml')).toBe('image')
     expect(assetKindFromMimeType('video/mp4')).toBe('video')
     expect(assetKindFromMimeType('audio/mpeg')).toBe('audio')
+    expect(assetKindFromMimeType('text/plain')).toBe('text')
     expect(assetKindFromMimeType('application/octet-stream')).toBe('file')
 
     expect(assetRecordFromKey('abc-123.svg', { size: 123, mtimeMs: 1000 })).toEqual({
@@ -31,6 +32,13 @@ describe('asset store helpers', () => {
       extension: 'svg',
       kind: 'image',
       updatedAt: '1970-01-01T00:00:01.000Z',
+    })
+    expect(assetRecordFromKey('note.txt', { size: 12, mtimeMs: 2000 })).toMatchObject({
+      storageKey: 'note.txt',
+      url: '/api/assets/note.txt',
+      mimeType: 'text/plain',
+      extension: 'txt',
+      kind: 'text',
     })
   })
 })

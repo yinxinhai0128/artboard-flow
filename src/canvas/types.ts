@@ -110,7 +110,7 @@ export type CanvasAssetUpload = {
 }
 
 export type CanvasAssetRecord = CanvasAssetUpload & {
-  kind: 'image' | 'video' | 'audio' | 'file'
+  kind: 'text' | 'image' | 'video' | 'audio' | 'file'
   updatedAt: string
 }
 

@@ -10,6 +10,7 @@ const MIME_EXTENSIONS = new Map([
   ['audio/mp3', 'mp3'],
   ['audio/wav', 'wav'],
   ['audio/ogg', 'ogg'],
+  ['text/plain', 'txt'],
 ])
 
 const EXTENSION_MIME_TYPES = new Map(Array.from(MIME_EXTENSIONS, ([mimeType, extension]) => [extension, mimeType]))
@@ -47,6 +48,7 @@ export function assetKindFromMimeType(mimeType) {
   if (mimeType.startsWith('image/')) return 'image'
   if (mimeType.startsWith('video/')) return 'video'
   if (mimeType.startsWith('audio/')) return 'audio'
+  if (mimeType === 'text/plain') return 'text'
   return 'file'
 }
 

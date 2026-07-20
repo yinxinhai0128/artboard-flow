@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Copy, Download, Eye, FileJson, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -128,6 +128,24 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
 }
 
 async function canvasNodeFromAsset(asset: CanvasAssetRecord, position: Point): Promise<Partial<CanvasNode> & { type: NodeKind; position: Point } | null> {
+  if (asset.kind === 'text') {
+    const response = await fetch(asset.url)
+    const content = response.ok ? await response.text() : ''
+    return {
+      type: 'text',
+      title: asset.storageKey,
+      position,
+      width: 300,
+      height: 190,
+      metadata: {
+        content,
+        status: 'success',
+        mimeType: asset.mimeType,
+        bytes: asset.bytes,
+        storageKey: asset.storageKey,
+      },
+    }
+  }
   if (asset.kind === 'image') {
     const size = await readImageSize(asset.url)
     const fit = fitMediaSize(size.width, size.height, 360, 280)
@@ -205,13 +223,17 @@ function fileMatchesMediaNode(file: File, node: CanvasNode) {
   return false
 }
 
-function readFileAsDataUrl(file: File) {
+function readBlobAsDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
     reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
+    reader.readAsDataURL(blob)
   })
+}
+
+function readFileAsDataUrl(file: File) {
+  return readBlobAsDataUrl(file)
 }
 
 function readImageSize(src: string) {
@@ -304,6 +326,15 @@ function canDownloadNode(node: CanvasNode) {
 
 function canPreviewNode(node: CanvasNode) {
   return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video' || node.type === 'audio'))
+}
+
+function canSaveAssetNode(node: CanvasNode) {
+  return Boolean(node.metadata.content && (node.type === 'text' || node.type === 'image' || node.type === 'video' || node.type === 'audio'))
+}
+
+function assetKeyFromUrl(value: string) {
+  const match = /^\/api\/assets\/([^/?#]+)/.exec(value)
+  return match ? decodeURIComponent(match[1]) : ''
 }
 
 function safeFileName(name: string) {
@@ -592,6 +623,46 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       controller.addNode(node.type, node.position, node)
     },
     [canvasCenterWorld, controller],
+  )
+
+  const saveNodeAsAsset = useCallback(
+    async (node: CanvasNode) => {
+      const content = node.metadata.content
+      if (!content || !canSaveAssetNode(node)) return
+      setAssetError('')
+      try {
+        const existingKey = node.metadata.storageKey || assetKeyFromUrl(content)
+        if (existingKey && node.type !== 'text') {
+          controller.updateNode(node.id, { metadata: { storageKey: existingKey } }, false)
+          await loadAssets()
+          setToolbarNodeId(node.id)
+          return
+        }
+
+        const dataUrl = node.type === 'text'
+          ? `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`
+          : content.startsWith('data:')
+            ? content
+            : await fetch(content).then(async (response) => {
+                if (!response.ok) throw new Error('资产内容读取失败')
+                return readBlobAsDataUrl(await response.blob())
+              })
+        const asset = await canvasApi.uploadAsset(dataUrl)
+        controller.updateNode(node.id, {
+          metadata: {
+            content: node.type === 'text' ? content : asset.url,
+            mimeType: asset.mimeType,
+            bytes: asset.bytes,
+            storageKey: asset.storageKey,
+          },
+        })
+        await loadAssets()
+        setToolbarNodeId(node.id)
+      } catch (error) {
+        setAssetError(error instanceof Error ? error.message : '保存资产失败')
+      }
+    },
+    [controller, loadAssets],
   )
 
   const addClipboardFileNode = useCallback(
@@ -1807,6 +1878,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onPromoteSplitOutput={promoteSplitOutput}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
             onCopyContent={(node) => void copyNodePayload(node)}
+            onSaveAsset={(node) => void saveNodeAsAsset(node)}
             onUpload={openMediaUpload}
             onDownload={downloadNodeContent}
             onToggleFreeResize={toggleMediaFreeResize}
@@ -2280,6 +2352,7 @@ function NodeHoverToolbar({
   onPromoteSplitOutput,
   onDuplicate,
   onCopyContent,
+  onSaveAsset,
   onUpload,
   onDownload,
   onToggleFreeResize,
@@ -2296,6 +2369,7 @@ function NodeHoverToolbar({
   onPromoteSplitOutput: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
   onCopyContent: (node: CanvasNode) => void
+  onSaveAsset: (node: CanvasNode) => void
   onUpload: (node: CanvasNode) => void
   onDownload: (node: CanvasNode) => void
   onToggleFreeResize: (node: CanvasNode) => void
@@ -2309,6 +2383,7 @@ function NodeHoverToolbar({
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
+  const canSaveAsset = canSaveAssetNode(node)
   const canUpload = isUploadableMediaNode(node)
   const canToggleFreeResize = node.type === 'image' || node.type === 'video'
 
@@ -2362,6 +2437,12 @@ function NodeHoverToolbar({
         <button title="复制节点正文、提示词或媒体地址" onClick={() => onCopyContent(node)}>
           <FileJson size={15} />
           复制内容
+        </button>
+      ) : null}
+      {canSaveAsset ? (
+        <button title="加入资产库" data-node-action="save-asset" onClick={() => onSaveAsset(node)}>
+          <FolderPlus size={15} />
+          存资产
         </button>
       ) : null}
       {canUpload ? (
