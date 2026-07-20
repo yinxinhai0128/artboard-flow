@@ -3,7 +3,7 @@ import { Compass, Copy, Download, Eye, FileJson, Group, HelpCircle, Image, Info,
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
 import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
@@ -1193,9 +1193,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!payload) return
       try {
         const job = await canvasApi.submitGenerationJob(controller.project.id, taskNodeId, payload)
-        controller.updateNode(taskNodeId, {
-          metadata: metadataFromGenerationJob(job, taskNode.metadata),
-        })
+        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job))
       } catch (error) {
         controller.updateNode(taskNodeId, {
           metadata: {
@@ -1215,9 +1213,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!jobId) return
       try {
         const job = await canvasApi.getGenerationJob(jobId)
-        controller.updateNode(taskNodeId, {
-          metadata: metadataFromGenerationJob(job, taskNode.metadata),
-        })
+        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job))
       } catch (error) {
         controller.updateNode(taskNodeId, {
           metadata: {
@@ -1237,9 +1233,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!jobId) return
       try {
         const job = await canvasApi.cancelGenerationJob(jobId)
-        controller.updateNode(taskNodeId, {
-          metadata: metadataFromGenerationJob(job, taskNode.metadata),
-        })
+        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job))
       } catch (error) {
         controller.updateNode(taskNodeId, {
           metadata: {
@@ -1269,7 +1263,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             if (!latestNode) return
             const metadata = metadataFromGenerationJob(job, latestNode.metadata)
             if (hasGenerationMetadataChanged(latestNode.metadata, metadata)) {
-              controller.updateNode(taskNode.id, { metadata }, false)
+              controller.updateProject((current) => applyGenerationJobToProject(current, taskNode.id, job), false)
             }
           } catch {
             // 自动轮询不把临时网络错误写成节点失败；用户仍可手动刷新查看详细错误。

@@ -1,5 +1,5 @@
 import { CONFIG_REFERENCE_PATTERN, getGenerationResourceNodes } from './resourceReferences'
-import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasResourceNodeKind } from './types'
+import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasProject, CanvasResourceNodeKind } from './types'
 
 export type CanvasGenerationInput = {
   nodeId: string
@@ -165,6 +165,37 @@ export function metadataFromGenerationJob(job: CanvasGenerationJob, current: Can
     ...base,
     status: 'loading',
     errorDetails: '',
+  }
+}
+
+export function applyGenerationJobToProject(project: CanvasProject, taskNodeId: string, job: CanvasGenerationJob): CanvasProject {
+  const taskNode = project.nodes.find((node) => node.id === taskNodeId)
+  if (!taskNode) return project
+
+  const taskMetadata = metadataFromGenerationJob(job, taskNode.metadata)
+  const outputNodeId = taskNode.metadata.outputNodeId
+
+  return {
+    ...project,
+    nodes: project.nodes.map((node) => {
+      if (node.id === taskNode.id) {
+        return { ...node, metadata: { ...node.metadata, ...taskMetadata } }
+      }
+      if (outputNodeId && node.id === outputNodeId) {
+        return {
+          ...node,
+          metadata: {
+            ...node.metadata,
+            ...metadataFromGenerationJob(job, node.metadata),
+            prompt: job.payload.prompt || node.metadata.prompt,
+            model: job.payload.model || node.metadata.model,
+            size: job.payload.size || node.metadata.size,
+            count: job.payload.count || node.metadata.count,
+          },
+        }
+      }
+      return node
+    }),
   }
 }
 

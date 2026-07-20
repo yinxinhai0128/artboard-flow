@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload } from './generation'
-import type { CanvasConnection, CanvasGenerationJob, CanvasNode } from './types'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload } from './generation'
+import type { CanvasConnection, CanvasGenerationJob, CanvasNode, CanvasProject } from './types'
 
 const configNode: CanvasNode = {
   id: 'config',
@@ -284,5 +284,85 @@ describe('canvas generation context', () => {
       status: 'idle',
       errorDetails: '用户已停止生成',
     })
+  })
+  it('applies completed generation jobs to both task and output nodes', () => {
+    const payload = buildCanvasGenerationPayload(buildCanvasGenerationContext('config', [configNode, imageNode], [{ id: 'c1', fromNodeId: 'image', toNodeId: 'config' }]))
+    const taskNode: CanvasNode = {
+      ...imageNode,
+      id: 'task',
+      title: 'Image generation task',
+      metadata: {
+        generationPayload: payload,
+        outputNodeId: 'output',
+        status: 'loading',
+        prompt: payload.prompt,
+      },
+    }
+    const outputNode: CanvasNode = {
+      ...imageNode,
+      id: 'output',
+      title: 'Generated image',
+      metadata: {
+        generationPayload: payload,
+        status: 'loading',
+        prompt: payload.prompt,
+      },
+    }
+    const project: CanvasProject = {
+      id: 'project-1',
+      title: 'Generation project',
+      createdAt: '2026-07-19T00:00:00.000Z',
+      updatedAt: '2026-07-19T00:00:00.000Z',
+      nodes: [configNode, taskNode, outputNode],
+      connections: [
+        { id: 'config-task', fromNodeId: 'config', toNodeId: 'task' },
+        { id: 'config-output', fromNodeId: 'config', toNodeId: 'output' },
+      ],
+      backgroundMode: 'dots',
+      viewport: { x: 0, y: 0, k: 1 },
+    }
+    const job: CanvasGenerationJob = {
+      id: 'job-1',
+      projectId: 'project-1',
+      nodeId: 'task',
+      status: 'succeeded',
+      createdAt: '2026-07-19T10:00:00.000Z',
+      updatedAt: '2026-07-19T10:05:00.000Z',
+      payload,
+      result: {
+        content: 'data:image/png;base64,first',
+        mimeType: 'image/png',
+        outputs: [
+          { content: 'data:image/png;base64,first', mimeType: 'image/png', naturalWidth: 64, naturalHeight: 64 },
+          { content: 'data:image/png;base64,second', mimeType: 'image/png', naturalWidth: 128, naturalHeight: 96 },
+        ],
+      },
+    }
+
+    const updated = applyGenerationJobToProject(project, 'task', job)
+    const updatedTask = updated.nodes.find((node) => node.id === 'task')
+    const updatedOutput = updated.nodes.find((node) => node.id === 'output')
+
+    expect(updatedTask?.metadata).toMatchObject({
+      status: 'success',
+      generationJobStatus: 'succeeded',
+      content: 'data:image/png;base64,first',
+      outputNodeId: 'output',
+    })
+    expect(updatedOutput?.metadata).toMatchObject({
+      status: 'success',
+      generationJobStatus: 'succeeded',
+      content: 'data:image/png;base64,first',
+      generationOutputs: [
+        { content: 'data:image/png;base64,first', naturalWidth: 64 },
+        { content: 'data:image/png;base64,second', naturalWidth: 128 },
+      ],
+      prompt: payload.prompt,
+      model: payload.model,
+      size: payload.size,
+      count: payload.count,
+      generatedAt: '2026-07-19T10:05:00.000Z',
+    })
+    expect(updated.connections).toEqual(project.connections)
   })
 })
