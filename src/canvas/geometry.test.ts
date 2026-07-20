@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
+import {
+  CANVAS_MAX_SCALE,
+  CANVAS_MIN_SCALE,
+  clampViewportScale,
+  connectionEndpoints,
+  connectionPath,
+  resizeNodeFrame,
+  screenToWorld,
+  sourcePort,
+  targetPort,
+  visibleNodesInViewport,
+  worldToScreen,
+} from './geometry'
 import type { CanvasConnection, CanvasNode, Viewport } from './types'
 
 const node = (id: string, x: number, y: number, width = 100, height = 80): CanvasNode => ({
@@ -64,5 +76,33 @@ describe('canvas geometry', () => {
   it('creates a cubic bezier path for a connection', () => {
     expect(connectionPath({ x: 10, y: 20 }, { x: 210, y: 80 })).toBe('M 10 20 C 110 20, 110 80, 210 80')
     expect(connectionPath({ x: 10, y: 20 }, { x: 50, y: 80 })).toBe('M 10 20 C 60 20, 0 80, 50 80')
+  })
+
+  it('keeps media nodes proportional by default while resizing', () => {
+    const subject: CanvasNode = {
+      ...node('image', 40, 60, 320, 180),
+      type: 'image',
+      metadata: { naturalWidth: 1920, naturalHeight: 1080 },
+    }
+
+    expect(resizeNodeFrame(subject, 'bottom-right', { x: 80, y: 10 })).toEqual({
+      position: { x: 40, y: 60 },
+      width: 400,
+      height: 225,
+    })
+  })
+
+  it('allows media nodes to resize freely when freeResize is enabled', () => {
+    const subject: CanvasNode = {
+      ...node('image', 40, 60, 320, 180),
+      type: 'image',
+      metadata: { naturalWidth: 1920, naturalHeight: 1080, freeResize: true },
+    }
+
+    expect(resizeNodeFrame(subject, 'bottom-right', { x: 80, y: 10 })).toEqual({
+      position: { x: 40, y: 60 },
+      width: 400,
+      height: 190,
+    })
   })
 })

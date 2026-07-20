@@ -94,6 +94,7 @@ export type CanvasNode = {
     count?: number
     naturalWidth?: number
     naturalHeight?: number
+    freeResize?: boolean
     mimeType?: string
     bytes?: number
   }

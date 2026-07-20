@@ -2,6 +2,7 @@ import type { CanvasConnection, CanvasNode, Point, Viewport } from './types'
 
 export const CANVAS_MIN_SCALE = 0.05
 export const CANVAS_MAX_SCALE = 5
+export type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 export function clampViewportScale(scale: number) {
   return Math.min(CANVAS_MAX_SCALE, Math.max(CANVAS_MIN_SCALE, scale))
@@ -78,4 +79,44 @@ export function visibleNodesInViewport(
 
 export function rectsIntersect(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+export function resizeNodeFrame(
+  node: CanvasNode,
+  corner: ResizeCorner,
+  delta: Point,
+  minimum = { width: 160, height: 110 },
+): Pick<CanvasNode, 'position' | 'width' | 'height'> {
+  const fromLeft = corner.includes('left')
+  const fromTop = corner.includes('top')
+  const startRight = node.position.x + node.width
+  const startBottom = node.position.y + node.height
+  let width = Math.max(minimum.width, node.width + (fromLeft ? -delta.x : delta.x))
+  let height = Math.max(minimum.height, node.height + (fromTop ? -delta.y : delta.y))
+
+  if ((node.type === 'image' || node.type === 'video') && !node.metadata.freeResize) {
+    const ratio = (node.metadata.naturalWidth || node.width) / (node.metadata.naturalHeight || node.height || 1)
+    if (Math.abs(delta.x) >= Math.abs(delta.y)) {
+      height = width / ratio
+    } else {
+      width = height * ratio
+    }
+    if (height < minimum.height) {
+      height = minimum.height
+      width = height * ratio
+    }
+    if (width < minimum.width) {
+      width = minimum.width
+      height = width / ratio
+    }
+  }
+
+  return {
+    position: {
+      x: fromLeft ? startRight - width : node.position.x,
+      y: fromTop ? startBottom - height : node.position.y,
+    },
+    width,
+    height,
+  }
 }

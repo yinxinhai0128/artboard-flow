@@ -14,6 +14,11 @@ const project = (id: string, title: string): CanvasProject => ({
   viewport: { x: 0, y: 0, k: 1 },
 })
 
+const advanceTimers = async (ms: number) => {
+  await vi.advanceTimersByTime(ms)
+  await Promise.resolve()
+}
+
 describe('project save queue', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -27,11 +32,11 @@ describe('project save queue', () => {
 
     queue.enqueue(project('project-1', 'first'))
     queue.enqueue(project('project-1', 'second'))
-    await vi.advanceTimersByTimeAsync(349)
+    await advanceTimers(349)
 
     expect(save).not.toHaveBeenCalled()
 
-    await vi.advanceTimersByTimeAsync(1)
+    await advanceTimers(1)
 
     expect(save).toHaveBeenCalledTimes(1)
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ id: 'project-1', title: 'second' }))
@@ -46,7 +51,7 @@ describe('project save queue', () => {
     queue.enqueue(project('project-1', 'latest'))
 
     await queue.flush('project-1')
-    await vi.advanceTimersByTimeAsync(350)
+    await advanceTimers(350)
 
     expect(save).toHaveBeenCalledTimes(1)
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ title: 'latest' }))

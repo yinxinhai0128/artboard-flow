@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Compass, Copy, Download, Eye, FileJson, Group, HelpCircle, Image, Info, Link2, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
-import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen } from './geometry'
+import { Compass, Copy, Download, Eye, FileJson, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
@@ -13,8 +13,6 @@ type CanvasWorkspaceProps = {
   onBack: () => void
   onExport: (project: CanvasProject) => void
 }
-
-type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 type DragState =
   | { type: 'pan'; start: Point; viewportStart: Point; historyCaptured: boolean }
@@ -833,46 +831,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         const dx = (event.clientX - drag.start.x) / controller.project.viewport.k
         const dy = (event.clientY - drag.start.y) / controller.project.viewport.k
         const changed = dx !== 0 || dy !== 0
-        const fromLeft = drag.corner.includes('left')
-        const fromTop = drag.corner.includes('top')
-        const minWidth = 160
-        const minHeight = 110
-        const startRight = drag.node.position.x + drag.node.width
-        const startBottom = drag.node.position.y + drag.node.height
-        let width = Math.max(minWidth, drag.node.width + (fromLeft ? -dx : dx))
-        let height = Math.max(minHeight, drag.node.height + (fromTop ? -dy : dy))
-        if (drag.node.type === 'image' || drag.node.type === 'video') {
-          const ratio = (drag.node.metadata.naturalWidth || drag.node.width) / (drag.node.metadata.naturalHeight || drag.node.height || 1)
-          if (Math.abs(dx) >= Math.abs(dy)) {
-            height = width / ratio
-          } else {
-            width = height * ratio
-          }
-          if (height < minHeight) {
-            height = minHeight
-            width = height * ratio
-          }
-          if (width < minWidth) {
-            width = minWidth
-            height = width / ratio
-          }
-        }
+        const frame = resizeNodeFrame(drag.node, drag.corner, { x: dx, y: dy })
         if (changed && !drag.historyCaptured) {
           controller.captureHistory()
           dragRef.current = { ...drag, historyCaptured: true }
         }
-        controller.updateNode(
-          drag.node.id,
-          {
-            position: {
-              x: fromLeft ? startRight - width : drag.node.position.x,
-              y: fromTop ? startBottom - height : drag.node.position.y,
-            },
-            width,
-            height,
-          },
-          false,
-        )
+        controller.updateNode(drag.node.id, frame, false)
       }
     }
     const up = (event: PointerEvent | MouseEvent) => {
@@ -1119,6 +1083,29 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       setToolbarNodeId(node.id)
     },
     [controller, splitOutputCounts],
+  )
+
+  const toggleMediaFreeResize = useCallback(
+    (node: CanvasNode) => {
+      if (node.type !== 'image' && node.type !== 'video') return
+      const freeResize = !node.metadata.freeResize
+      const ratio = (node.metadata.naturalWidth || node.width) / (node.metadata.naturalHeight || node.height || 1)
+      const lockedPatch = freeResize
+        ? {}
+        : {
+            height: node.width / ratio,
+            position: {
+              ...node.position,
+              y: node.position.y + node.height / 2 - node.width / ratio / 2,
+            },
+          }
+      controller.updateNode(node.id, {
+        ...lockedPatch,
+        metadata: { freeResize },
+      })
+      setToolbarNodeId(node.id)
+    },
+    [controller],
   )
 
   const createGenerationTaskNode = useCallback(
@@ -1609,6 +1596,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onCopyContent={(node) => void copyNodePayload(node)}
             onUpload={openMediaUpload}
             onDownload={downloadNodeContent}
+            onToggleFreeResize={toggleMediaFreeResize}
             onDelete={(node) => {
               controller.deleteNode(node.id)
               setToolbarNodeId(null)
@@ -2052,6 +2040,7 @@ function NodeHoverToolbar({
   onCopyContent,
   onUpload,
   onDownload,
+  onToggleFreeResize,
   onDelete,
   onKeep,
 }: {
@@ -2066,6 +2055,7 @@ function NodeHoverToolbar({
   onCopyContent: (node: CanvasNode) => void
   onUpload: (node: CanvasNode) => void
   onDownload: (node: CanvasNode) => void
+  onToggleFreeResize: (node: CanvasNode) => void
   onDelete: (node: CanvasNode) => void
   onKeep: (nodeId: string) => void
 }) {
@@ -2076,6 +2066,7 @@ function NodeHoverToolbar({
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canUpload = isUploadableMediaNode(node)
+  const canToggleFreeResize = node.type === 'image' || node.type === 'video'
 
   return (
     <div
@@ -2133,6 +2124,16 @@ function NodeHoverToolbar({
         <button title="下载节点内容" onClick={() => onDownload(node)}>
           <Download size={15} />
           下载
+        </button>
+      ) : null}
+      {canToggleFreeResize ? (
+        <button
+          className={node.metadata.freeResize ? 'active' : ''}
+          title={node.metadata.freeResize ? '切换为锁定比例缩放' : '切换为自由比例缩放'}
+          onClick={() => onToggleFreeResize(node)}
+        >
+          {node.metadata.freeResize ? <LockOpen size={15} /> : <Lock size={15} />}
+          {node.metadata.freeResize ? '自由比例' : '锁比例'}
         </button>
       ) : null}
       <button className="danger" title="删除节点" onClick={() => onDelete(node)}>
@@ -2404,7 +2405,7 @@ function NodeBody({
   }
   if (node.type === 'image') {
     return (
-      <div className="node-body media-body">
+      <div className={`node-body media-body ${node.metadata.freeResize ? 'free-resize' : ''}`}>
         {node.metadata.content ? (
           <>
             <img src={node.metadata.content} alt={node.title} draggable={false} onDragStart={(event) => event.preventDefault()} />
@@ -2418,7 +2419,7 @@ function NodeBody({
   }
   if (node.type === 'video') {
     return (
-      <div className="node-body media-body">
+      <div className={`node-body media-body ${node.metadata.freeResize ? 'free-resize' : ''}`}>
         {node.metadata.content ? (
           <>
             <video src={node.metadata.content} controls draggable={false} onDragStart={(event) => event.preventDefault()} />
