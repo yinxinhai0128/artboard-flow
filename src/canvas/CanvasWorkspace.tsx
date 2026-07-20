@@ -3,11 +3,13 @@ import { Compass, Copy, Download, Eye, FileJson, Group, HelpCircle, Image, Info,
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
+import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
+import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
 import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForProject } from './graph'
+import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -168,32 +170,6 @@ function nodePreview(node: CanvasNode) {
   if (node.type === 'config') return `${node.metadata.model || '默认模型'} · ${node.metadata.size || '1024x1024'} · ${node.metadata.count || 1} 张`
   if (node.metadata.mimeType) return node.metadata.mimeType
   return node.metadata.content ? '已载入内容' : `空${nodeKindLabels[node.type]}节点`
-}
-
-function appendReferenceToken(value: string | undefined, input: CanvasGenerationInput) {
-  const token = referenceToken(input)
-  const current = value ?? ''
-  if (current.includes(token)) return current
-  return current.trim() ? `${current.trimEnd()} ${token}` : token
-}
-
-function referenceToken(input: CanvasGenerationInput) {
-  return `@[node:${input.nodeId}]`
-}
-
-function hasReferenceToken(value: string | undefined, input: CanvasGenerationInput) {
-  return Boolean(value?.includes(referenceToken(input)))
-}
-
-function removeReferenceToken(value: string | undefined, input: CanvasGenerationInput) {
-  const token = referenceToken(input)
-  return (value ?? '')
-    .split(token)
-    .join('')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 
 const statusLabels: Record<NonNullable<CanvasNode['metadata']['status']>, string> = {
@@ -374,6 +350,13 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (node.type === 'config') contexts.set(node.id, buildCanvasGenerationContext(node.id, controller.project.nodes, controller.project.connections))
     })
     return contexts
+  }, [controller.project.connections, controller.project.nodes])
+  const mentionReferencesByNodeId = useMemo(() => {
+    const references = new Map<string, CanvasResourceReference[]>()
+    controller.project.nodes.forEach((node) => {
+      references.set(node.id, buildNodeMentionReferences(node, controller.project.nodes, controller.project.connections))
+    })
+    return references
   }, [controller.project.connections, controller.project.nodes])
   const selectedSingleNodeId = controller.selectedNodeIds.length === 1 ? controller.selectedNodeIds[0] : null
   const hasMultiSelection = controller.selectedNodeIds.length > 1
@@ -1485,6 +1468,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onRetryGenerationTask={retryGenerationTaskNode}
                 onSubmitGenerationTask={submitGenerationTaskNode}
                 onRefreshGenerationTask={refreshGenerationTaskNode}
+                mentionReferences={mentionReferencesByNodeId.get(node.id) ?? []}
                 splitOutputCount={splitOutputCounts.get(node.id) ?? 0}
                 onSplitGenerationOutputs={splitGenerationOutputs}
                 onToggleSplitOutputs={toggleSplitOutputs}
@@ -1752,6 +1736,7 @@ function CanvasNodeView({
   onRetryGenerationTask,
   onSubmitGenerationTask,
   onRefreshGenerationTask,
+  mentionReferences,
   splitOutputCount,
   onSplitGenerationOutputs,
   onToggleSplitOutputs,
@@ -1779,6 +1764,7 @@ function CanvasNodeView({
   onRetryGenerationTask: (nodeId: string) => void
   onSubmitGenerationTask: (nodeId: string) => void
   onRefreshGenerationTask: (nodeId: string) => void
+  mentionReferences: CanvasResourceReference[]
   splitOutputCount: number
   onSplitGenerationOutputs: (node: CanvasNode) => void
   onToggleSplitOutputs: (node: CanvasNode) => void
@@ -1845,6 +1831,7 @@ function CanvasNodeView({
         onRetryGenerationTask={onRetryGenerationTask}
         onSubmitGenerationTask={onSubmitGenerationTask}
         onRefreshGenerationTask={onRefreshGenerationTask}
+        mentionReferences={mentionReferences}
         splitOutputCount={splitOutputCount}
         onSplitGenerationOutputs={onSplitGenerationOutputs}
         onToggleSplitOutputs={onToggleSplitOutputs}
@@ -2392,6 +2379,7 @@ function GenerationOutputSwitcher({
 function NodeBody({
   node,
   generationContext,
+  mentionReferences,
   onUpdate,
   onCaptureHistory,
   onCreateGenerationTask,
@@ -2404,6 +2392,7 @@ function NodeBody({
 }: {
   node: CanvasNode
   generationContext: CanvasGenerationContext | null
+  mentionReferences: CanvasResourceReference[]
   onUpdate: (id: string, patch: Partial<CanvasNode>, recordHistory?: boolean) => void
   onCaptureHistory: () => void
   onCreateGenerationTask: (nodeId: string) => void
@@ -2414,6 +2403,18 @@ function NodeBody({
   onSplitGenerationOutputs: (node: CanvasNode) => void
   onToggleSplitOutputs: (node: CanvasNode) => void
 }) {
+  const [composerMention, setComposerMention] = useState<{ query: string; caret: number } | null>(null)
+  const mentionCandidates = useMemo(
+    () => composerMention ? filterReferenceCandidates(mentionReferences, composerMention.query).slice(0, 6) : [],
+    [composerMention, mentionReferences],
+  )
+
+  const syncComposerMention = (input: HTMLTextAreaElement) => {
+    const caret = input.selectionStart ?? input.value.length
+    const query = mentionQueryBeforeCaret(input.value, caret)
+    setComposerMention(query === null || mentionReferences.length === 0 ? null : { query, caret })
+  }
+
   const shouldRenderGenerationTask = Boolean(node.metadata.generationPayload)
     && (!node.metadata.content || node.metadata.status === 'loading' || node.metadata.status === 'error')
 
@@ -2479,7 +2480,7 @@ function NodeBody({
     const inputs = context?.inputs ?? []
     const summary = context?.summary ?? { text: 0, image: 0, video: 0, audio: 0 }
     const composerValue = node.metadata.composerContent ?? node.metadata.prompt ?? ''
-    const hasExplicitReferences = inputs.some((input) => hasReferenceToken(composerValue, input))
+    const hasExplicitReferences = inputs.some((input) => hasReferenceToken(composerValue, input.nodeId))
     return (
       <div className="node-body config-body" onWheel={(event) => event.stopPropagation()}>
         <section className="config-inputs">
@@ -2496,7 +2497,7 @@ function NodeBody({
           {inputs.length ? (
             <div className="config-input-list">
               {inputs.slice(0, 4).map((input) => {
-                const referenced = hasReferenceToken(composerValue, input)
+                const referenced = hasReferenceToken(composerValue, input.nodeId)
                 const included = !hasExplicitReferences || referenced
                 return (
                   <div key={input.nodeId} className={`${input.hasContent ? '' : 'is-empty'} ${referenced ? 'is-referenced' : ''}`}>
@@ -2507,7 +2508,7 @@ function NodeBody({
                       data-canvas-input
                       className={referenced ? 'is-active' : ''}
                       onClick={() => {
-                        const next = referenced ? removeReferenceToken(composerValue, input) : appendReferenceToken(composerValue, input)
+                        const next = referenced ? removeReferenceToken(composerValue, input.nodeId) : appendReferenceToken(composerValue, input.nodeId)
                         onUpdate(node.id, { metadata: { composerContent: next } }, false)
                       }}
                     >
@@ -2560,9 +2561,38 @@ function NodeBody({
             data-canvas-input
             value={composerValue}
             placeholder="输入任务提示词；点击上游输入的“引用”可精确选择文本、图片或视频。"
-            onFocus={onCaptureHistory}
-            onChange={(event) => onUpdate(node.id, { metadata: { composerContent: event.target.value } }, false)}
+            onFocus={(event) => {
+              onCaptureHistory()
+              syncComposerMention(event.currentTarget)
+            }}
+            onClick={(event) => syncComposerMention(event.currentTarget)}
+            onKeyUp={(event) => syncComposerMention(event.currentTarget)}
+            onBlur={() => window.setTimeout(() => setComposerMention(null), 120)}
+            onChange={(event) => {
+              onUpdate(node.id, { metadata: { composerContent: event.target.value } }, false)
+              syncComposerMention(event.currentTarget)
+            }}
           />
+          {mentionCandidates.length ? (
+            <div className="composer-mention-menu" data-canvas-input>
+              {mentionCandidates.map((reference) => (
+                <button
+                  key={reference.nodeId}
+                  type="button"
+                  data-reference-node-id={reference.nodeId}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    const next = insertReferenceAtMention(composerValue, composerMention?.caret ?? composerValue.length, reference.nodeId)
+                    onUpdate(node.id, { metadata: { composerContent: next.value } }, false)
+                    setComposerMention(null)
+                  }}
+                >
+                  <strong>{reference.label}</strong>
+                  <span>{reference.title}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </label>
         <section className="config-task-preview">
           <div className="config-inputs-header">
