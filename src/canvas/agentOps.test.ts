@@ -131,11 +131,35 @@ describe('canvas agent operations', () => {
     expect(result.project.updatedAt).toBe(project.updatedAt)
   })
 
+  it('collects generation requests without mutating the project', () => {
+    const source: CanvasProject = {
+      ...project,
+      nodes: project.nodes.map((node) =>
+        node.id === 'config-1'
+          ? { ...node, metadata: { ...node.metadata, generationMode: 'video' } }
+          : node,
+      ),
+    }
+
+    const result = applyCanvasAgentOps(snapshot(source), [
+      { type: 'run_generation', nodeId: 'config-1' },
+      { type: 'run_generation', nodeId: 'text-1', mode: 'image', prompt: '  direct prompt  ' },
+      { type: 'run_generation', nodeId: 'missing', mode: 'video', prompt: 'ignored' },
+    ])
+
+    expect(result.project).toBe(source)
+    expect(result.generationRequests).toEqual([
+      { nodeId: 'config-1', mode: 'video', prompt: '使用 @[node:text-1] 作为提示词' },
+      { nodeId: 'text-1', mode: 'image', prompt: 'direct prompt' },
+    ])
+  })
+
   it('summarizes operation batches for agent feedback', () => {
     expect(summarizeCanvasAgentOps([
       { type: 'add_node', nodeType: 'text' },
       { type: 'add_node', nodeType: 'image' },
       { type: 'connect_nodes', fromNodeId: 'a', toNodeId: 'b' },
-    ])).toBe('新增节点 2、连接 1')
+      { type: 'run_generation', nodeId: 'config-1' },
+    ])).toBe('新增节点 2、连接 1、触发生成 1')
   })
 })

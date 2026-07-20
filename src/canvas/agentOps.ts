@@ -1,5 +1,5 @@
 import { addConnectionToProject, deleteSelectionFromProject } from './document'
-import type { CanvasNode, CanvasProject, NodeKind, Point, Viewport } from './types'
+import type { CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind, Point, Viewport } from './types'
 
 export type CanvasAgentOp =
   | {
@@ -20,6 +20,13 @@ export type CanvasAgentOp =
   | { type: 'connect_nodes'; id?: string; fromNodeId: string; toNodeId: string }
   | { type: 'set_viewport'; viewport: Viewport }
   | { type: 'select_nodes'; ids: string[] }
+  | { type: 'run_generation'; nodeId: string; mode?: CanvasGenerationMode; prompt?: string }
+
+export type CanvasAgentGenerationRequest = {
+  nodeId: string
+  mode: CanvasGenerationMode
+  prompt: string
+}
 
 export type CanvasAgentSnapshot = {
   project: CanvasProject
@@ -49,6 +56,7 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops: CanvasAg
   let project = snapshot.project
   let selectedNodeIds = snapshot.selectedNodeIds
   let selectedConnectionId = snapshot.selectedConnectionId
+  const generationRequests: CanvasAgentGenerationRequest[] = []
   let changed = false
 
   for (const [index, op] of ops.entries()) {
@@ -118,10 +126,15 @@ export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops: CanvasAg
       selectedNodeIds = op.ids.filter((id) => existing.has(id))
       selectedConnectionId = null
     }
+
+    if (op.type === 'run_generation') {
+      const request = generationRequestFromOp(project, op)
+      if (request) generationRequests.push(request)
+    }
   }
 
   if (changed) project = { ...project, updatedAt: now() }
-  return { project, selectedNodeIds, selectedConnectionId }
+  return { project, selectedNodeIds, selectedConnectionId, generationRequests }
 }
 
 export function summarizeCanvasAgentOps(ops: CanvasAgentOp[] = []) {
@@ -169,5 +182,14 @@ function operationLabel(type: string) {
   if (type === 'connect_nodes') return '连接'
   if (type === 'set_viewport') return '调整视图'
   if (type === 'select_nodes') return '选择节点'
+  if (type === 'run_generation') return '触发生成'
   return type
+}
+
+function generationRequestFromOp(project: CanvasProject, op: Extract<CanvasAgentOp, { type: 'run_generation' }>): CanvasAgentGenerationRequest | null {
+  const node = project.nodes.find((item) => item.id === op.nodeId)
+  if (!node) return null
+  const mode = op.mode ?? node.metadata.generationMode ?? 'image'
+  const prompt = (op.prompt ?? node.metadata.composerContent ?? node.metadata.prompt ?? node.metadata.content ?? '').trim()
+  return { nodeId: node.id, mode, prompt }
 }
