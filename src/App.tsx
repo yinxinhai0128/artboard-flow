@@ -3,6 +3,7 @@ import { Code2, Download, Edit3, FileUp, Plus, Trash2 } from 'lucide-react'
 import { canvasApi } from './canvas/api'
 import { CanvasWorkspace } from './canvas/CanvasWorkspace'
 import { downloadCanvasProjects, readCanvasProjectsFile } from './canvas/export'
+import { createProjectSaveQueue } from './canvas/saveQueue'
 import type { CanvasProject } from './canvas/types'
 
 function projectPath(id: string) {
@@ -20,7 +21,20 @@ function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const saveTimers = useRef(new Map<string, number>())
+  const saveQueue = useRef<ReturnType<typeof createProjectSaveQueue> | null>(null)
+
+  if (!saveQueue.current) {
+    saveQueue.current = createProjectSaveQueue({
+      delayMs: 350,
+      save: canvasApi.updateProject,
+      onSaved: (saved) => {
+        setProjects((current) => current.map((item) => (item.id === saved.id ? saved : item)))
+      },
+      onError: (requestError) => {
+        setError(requestError instanceof Error ? requestError.message : '保存画布失败')
+      },
+    })
+  }
 
   const activeProject = projects.find((project) => project.id === activeId) ?? null
 
@@ -48,6 +62,19 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const flushSaves = () => {
+      void saveQueue.current?.flushAll()
+    }
+    window.addEventListener('pagehide', flushSaves)
+    window.addEventListener('beforeunload', flushSaves)
+    return () => {
+      window.removeEventListener('pagehide', flushSaves)
+      window.removeEventListener('beforeunload', flushSaves)
+      flushSaves()
+    }
+  }, [])
+
+  useEffect(() => {
     if (loading || !activeId) return
     if (projects.some((project) => project.id === activeId)) return
     setActiveId(null)
@@ -56,6 +83,7 @@ function App() {
   }, [activeId, loading, projects])
 
   const openProject = (id: string | null, replace = false) => {
+    if (activeId && activeId !== id) void saveQueue.current?.flush(activeId)
     setActiveId(id)
     const path = id ? projectPath(id) : '/'
     if (window.location.pathname === path) return
@@ -71,27 +99,20 @@ function App() {
 
   const updateProject = (project: CanvasProject) => {
     setProjects((current) => current.map((item) => (item.id === project.id ? project : item)))
-    window.clearTimeout(saveTimers.current.get(project.id))
-    const timer = window.setTimeout(async () => {
-      try {
-        const saved = await canvasApi.updateProject(project)
-        setProjects((current) => current.map((item) => (item.id === saved.id ? saved : item)))
-      } catch (requestError) {
-        setError(requestError instanceof Error ? requestError.message : '保存画布失败')
-      }
-    }, 350)
-    saveTimers.current.set(project.id, timer)
+    saveQueue.current?.enqueue(project)
   }
 
   const renameProject = async (project: CanvasProject) => {
     const title = window.prompt('画布名称', project.title)?.trim()
     if (!title) return
+    await saveQueue.current?.flush(project.id)
     const saved = await canvasApi.updateProject({ ...project, title })
     setProjects((current) => current.map((item) => (item.id === saved.id ? saved : item)))
   }
 
   const deleteProject = async (id: string) => {
     if (!window.confirm('确定删除这个画布吗？')) return
+    saveQueue.current?.cancel(id)
     await canvasApi.deleteProject(id)
     setProjects((current) => current.filter((project) => project.id !== id))
     setSelectedIds((current) => current.filter((value) => value !== id))
@@ -100,6 +121,7 @@ function App() {
 
   const deleteSelected = async () => {
     if (selectedIds.length === 0 || !window.confirm(`确定删除 ${selectedIds.length} 个画布吗？`)) return
+    selectedIds.forEach((id) => saveQueue.current?.cancel(id))
     await canvasApi.deleteProjects(selectedIds)
     setProjects((current) => current.filter((project) => !selectedIds.includes(project.id)))
     setSelectedIds([])
