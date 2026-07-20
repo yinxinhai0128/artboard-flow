@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { packCanvasProjects, readCanvasProjectsFile } from './export'
+import { packCanvasClipboard, packCanvasProjects, readCanvasClipboardFile, readCanvasProjectsFile } from './export'
+import type { CanvasClipboard } from './document'
 import type { CanvasProject } from './types'
 
 const project: CanvasProject = {
@@ -126,5 +127,42 @@ describe('canvas export files', () => {
 
     expect(imported.connections).toEqual([{ id: 'connection-1', fromNodeId: 'node-1', toNodeId: 'node-2' }])
     expect(imported.nodes.find((node) => node.id === 'node-2')?.metadata).toEqual({})
+  })
+
+  it('packs selected canvas clipboard fragments with media assets outside json', async () => {
+    const content = 'data:image/png;base64,aGVsbG8='
+    const clipboard: CanvasClipboard = {
+      nodes: [
+        {
+          id: 'image-1',
+          type: 'image',
+          title: '参考图',
+          position: { x: 10, y: 20 },
+          width: 280,
+          height: 220,
+          metadata: { content, status: 'success', mimeType: 'image/png', bytes: 5 },
+        },
+        {
+          id: 'text-1',
+          type: 'text',
+          title: '提示词',
+          position: { x: 330, y: 20 },
+          width: 260,
+          height: 180,
+          metadata: { content: 'cinematic light', status: 'success' },
+        },
+      ],
+      connections: [{ id: 'edge-1', fromNodeId: 'text-1', toNodeId: 'image-1' }],
+    }
+
+    const zip = packCanvasClipboard(clipboard)
+    const zipText = new TextDecoder().decode(zip)
+    const file = new File([zip], 'fragment.artboard-flow-fragment.zip', { type: 'application/zip' })
+
+    const imported = await readCanvasClipboardFile(file)
+
+    expect(zipText).not.toContain(content)
+    expect(zipText).toContain('clipboard/files/image-1-content.png')
+    expect(imported).toEqual(clipboard)
   })
 })

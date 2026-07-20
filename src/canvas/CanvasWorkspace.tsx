@@ -6,6 +6,7 @@ import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
 import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
+import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -304,6 +305,11 @@ function copyNodePayload(node: CanvasNode) {
   return copyTextToClipboard(nodeCopyPayload(node))
 }
 
+function isCanvasFragmentFile(file: File) {
+  const name = file.name.toLowerCase()
+  return name.endsWith('.artboard-flow-fragment.zip') || name.endsWith('.artboard-flow-fragment.json')
+}
+
 export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: CanvasWorkspaceProps) {
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -527,6 +533,19 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [canvasCenterWorld, controller],
   )
 
+  const pasteCanvasClipboardFile = useCallback(
+    async (file: File, targetCenter = canvasCenterWorld()) => {
+      if (!isCanvasFragmentFile(file)) return false
+      try {
+        const clipboard = await readCanvasClipboardFile(file)
+        return controller.pasteClipboard(clipboard, targetCenter)
+      } catch {
+        return false
+      }
+    },
+    [canvasCenterWorld, controller],
+  )
+
   const writeCanvasClipboardText = useCallback((clipboard: CanvasClipboard | null) => {
     const text = serializeCanvasClipboard(clipboard)
     if (!text) return
@@ -537,6 +556,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const clipboard = controller.copySelection()
     writeCanvasClipboardText(clipboard)
   }, [controller, writeCanvasClipboardText])
+
+  const exportSelectionFragment = useCallback(() => {
+    const clipboard = controller.copySelection()
+    void downloadCanvasClipboard(clipboard, `ArtboardFlow-节点片段-${clipboard?.nodes.length ?? 0}个`)
+  }, [controller])
 
   const pasteClipboardData = useCallback(
     async (clipboardData: DataTransfer | null) => {
@@ -552,12 +576,15 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       ]
       const uniqueFiles = Array.from(new Map(files.map((file) => [`${file.name}:${file.type}:${file.size}`, file])).values())
       if (uniqueFiles.length) {
-        for (const file of uniqueFiles) await addClipboardFileNode(file)
+        for (const file of uniqueFiles) {
+          if (await pasteCanvasClipboardFile(file)) continue
+          await addClipboardFileNode(file)
+        }
         return true
       }
       return addClipboardTextNode(text)
     },
-    [addClipboardFileNode, addClipboardTextNode, pasteCanvasClipboardText],
+    [addClipboardFileNode, addClipboardTextNode, pasteCanvasClipboardFile, pasteCanvasClipboardText],
   )
 
   const pasteSystemClipboard = useCallback(async () => {
@@ -690,6 +717,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     if (files.length) {
       for (const [index, file] of files.entries()) {
         const position = { x: world.x + index * 36, y: world.y + index * 36 }
+        if (await pasteCanvasClipboardFile(file, position)) continue
         const node = await canvasNodeFromFile(file, position)
         controller.addNode(node.type, node.position, node)
       }
@@ -1578,6 +1606,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onDeselect={controller.clearSelection}
             onGroup={controller.groupSelection}
             onCopy={copySelectionToClipboard}
+            onExport={exportSelectionFragment}
             onDuplicate={() => {
               controller.copySelection()
               controller.pasteSelection()
@@ -1989,6 +2018,7 @@ function SelectionToolbar({
   onDeselect,
   onGroup,
   onCopy,
+  onExport,
   onDuplicate,
   onDelete,
 }: {
@@ -1997,6 +2027,7 @@ function SelectionToolbar({
   onDeselect: () => void
   onGroup: () => void
   onCopy: () => void
+  onExport: () => void
   onDuplicate: () => void
   onDelete: () => void
 }) {
@@ -2015,6 +2046,10 @@ function SelectionToolbar({
       <button onClick={onCopy}>
         <Copy size={15} />
         复制
+      </button>
+      <button onClick={onExport}>
+        <Download size={15} />
+        导出片段
       </button>
       <button onClick={onDuplicate}>
         <Copy size={15} />
