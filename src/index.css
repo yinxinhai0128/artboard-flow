@@ -1876,17 +1876,9 @@ button:disabled {
   transform: translateY(-50%);
   cursor: crosshair;
   z-index: 12;
-  opacity: 0;
-  pointer-events: auto;
-  transition: opacity 0.15s ease;
-}
-
-.canvas-node:hover .port,
-.canvas-node.selected .port,
-.canvas-node.connection-active .port,
-.canvas-node.connection-target-valid .port,
-.canvas-node.connection-target-blocked .port {
   opacity: 1;
+  pointer-events: auto;
+  transition: transform 0.15s ease;
 }
 
 .target-port {
@@ -1908,7 +1900,9 @@ button:disabled {
   border-radius: 999px;
   background: var(--muted);
   transform: translate(-50%, -50%);
-  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  opacity: 0.58;
+  box-shadow: 0 0 0 5px rgba(244, 244, 245, 0.08);
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
 .source-port::after {
@@ -1917,8 +1911,17 @@ button:disabled {
 
 .port:hover::after {
   background: var(--green);
+  opacity: 1;
   transform: translate(-50%, -50%) scale(1.22);
   box-shadow: 0 0 0 10px rgba(134, 239, 172, 0.12);
+}
+
+.canvas-node:hover .port::after,
+.canvas-node.selected .port::after,
+.canvas-node.connection-active .port::after,
+.canvas-node.connection-target-valid .port::after,
+.canvas-node.connection-target-blocked .port::after {
+  opacity: 1;
 }
 
 .port::before {
@@ -1932,8 +1935,18 @@ button:disabled {
   color: var(--text);
   font-size: 10px;
   font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
   transform: translateX(-50%);
+  transition: opacity 0.15s ease;
   white-space: nowrap;
+}
+
+.port:hover::before,
+.canvas-node.connection-active .port::before,
+.canvas-node.connection-target-valid .port::before,
+.canvas-node.connection-target-blocked .port::before {
+  opacity: 1;
 }
 
 .resize-handle {

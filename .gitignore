@@ -22,6 +22,8 @@ server/data/*.sqlite-*
 # Local QA artifacts
 .playwright-cli
 output
+.codex-temp
+.codex-npm-cache
 
 # Unused scaffold binary asset kept out of source control
 src/assets/hero.png
