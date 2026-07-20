@@ -847,15 +847,6 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     dragRef.current = { type: 'resize', start: { x: event.clientX, y: event.clientY }, node, corner, historyCaptured: false }
   }
 
-  const startConnection = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, handleType: 'source' | 'target') => {
-    event.preventDefault()
-    event.stopPropagation()
-    setPendingConnectionCreate(null)
-    setNodeCreatePosition(null)
-    setContextMenu(null)
-    setActiveConnectionDraft({ nodeId, handleType, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
-  }
-
   const finishConnectionToNode = useCallback(
     (toNodeId: string) => {
       const draft = connectionDraftRef.current
@@ -866,6 +857,19 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     },
     [controller, setActiveConnectionDraft],
   )
+
+  const startConnection = (event: React.PointerEvent<HTMLButtonElement>, nodeId: string, handleType: 'source' | 'target') => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (connectionDraftRef.current) {
+      if (!finishConnectionToNode(nodeId)) setActiveConnectionDraft(null)
+      return
+    }
+    setPendingConnectionCreate(null)
+    setNodeCreatePosition(null)
+    setContextMenu(null)
+    setActiveConnectionDraft({ nodeId, handleType, to: clientWorld(event), startScreen: { x: event.clientX, y: event.clientY } })
+  }
 
   const finishConnection = (event: React.PointerEvent<HTMLButtonElement>, toNodeId: string) => {
     event.preventDefault()
