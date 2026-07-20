@@ -22,6 +22,7 @@ const project: CanvasProject = {
   ],
   connections: [],
   backgroundMode: 'dots',
+  showImageInfo: true,
   viewport: { x: 0, y: 0, k: 1 },
 }
 

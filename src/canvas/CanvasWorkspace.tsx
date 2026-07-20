@@ -166,6 +166,23 @@ function fitMediaSize(width: number, height: number, maxWidth: number, maxHeight
   }
 }
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function mediaInfoParts(node: CanvasNode) {
+  const parts: string[] = []
+  const width = node.metadata.naturalWidth
+  const height = node.metadata.naturalHeight
+  if (typeof width === 'number' && typeof height === 'number' && Number.isFinite(width) && Number.isFinite(height)) parts.push(`${Math.round(width)} × ${Math.round(height)}`)
+  else if (node.width && node.height) parts.push(`${Math.round(node.width)} × ${Math.round(node.height)}`)
+  if (node.metadata.mimeType) parts.push(node.metadata.mimeType)
+  if (typeof node.metadata.bytes === 'number' && Number.isFinite(node.metadata.bytes)) parts.push(formatBytes(node.metadata.bytes))
+  return parts
+}
+
 function nodePreview(node: CanvasNode) {
   if (node.type === 'text') return node.metadata.content || '空文本节点'
   if (node.type === 'config') return `${node.metadata.model || '默认模型'} · ${node.metadata.size || '1024x1024'} · ${node.metadata.count || 1} 张`
@@ -1503,6 +1520,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onRefreshGenerationTask={refreshGenerationTaskNode}
                 onCancelGenerationTask={cancelGenerationTaskNode}
                 mentionReferences={mentionReferencesByNodeId.get(node.id) ?? []}
+                showImageInfo={Boolean(controller.project.showImageInfo)}
                 splitOutputCount={splitOutputCounts.get(node.id) ?? 0}
                 onSplitGenerationOutputs={splitGenerationOutputs}
                 onToggleSplitOutputs={toggleSplitOutputs}
@@ -1597,6 +1615,13 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 {mode === 'dots' ? '点阵' : mode === 'lines' ? '网格' : '空白'}
               </button>
             ))}
+            <button
+              className={controller.project.showImageInfo ? 'active' : ''}
+              title={controller.project.showImageInfo ? '隐藏媒体信息' : '显示媒体信息'}
+              onClick={() => controller.setShowImageInfo(!controller.project.showImageInfo)}
+            >
+              信息
+            </button>
           </div>
 
           {miniMapOpen ? (
@@ -1777,6 +1802,7 @@ function CanvasNodeView({
   onRefreshGenerationTask,
   onCancelGenerationTask,
   mentionReferences,
+  showImageInfo,
   splitOutputCount,
   onSplitGenerationOutputs,
   onToggleSplitOutputs,
@@ -1806,6 +1832,7 @@ function CanvasNodeView({
   onRefreshGenerationTask: (nodeId: string) => void
   onCancelGenerationTask: (nodeId: string) => void
   mentionReferences: CanvasResourceReference[]
+  showImageInfo: boolean
   splitOutputCount: number
   onSplitGenerationOutputs: (node: CanvasNode) => void
   onToggleSplitOutputs: (node: CanvasNode) => void
@@ -1876,6 +1903,7 @@ function CanvasNodeView({
         onRefreshGenerationTask={onRefreshGenerationTask}
         onCancelGenerationTask={onCancelGenerationTask}
         mentionReferences={mentionReferences}
+        showImageInfo={showImageInfo}
         splitOutputCount={splitOutputCount}
         onSplitGenerationOutputs={onSplitGenerationOutputs}
         onToggleSplitOutputs={onToggleSplitOutputs}
@@ -2436,6 +2464,16 @@ function GenerationOutputSwitcher({
   )
 }
 
+function MediaInfoBar({ node }: { node: CanvasNode }) {
+  const parts = mediaInfoParts(node)
+  if (!parts.length) return null
+  return (
+    <div className="media-info-bar" data-canvas-input>
+      {parts.map((part) => <span key={part}>{part}</span>)}
+    </div>
+  )
+}
+
 function NodeBody({
   node,
   generationContext,
@@ -2447,6 +2485,7 @@ function NodeBody({
   onSubmitGenerationTask,
   onRefreshGenerationTask,
   onCancelGenerationTask,
+  showImageInfo,
   splitOutputCount,
   onSplitGenerationOutputs,
   onToggleSplitOutputs,
@@ -2461,6 +2500,7 @@ function NodeBody({
   onSubmitGenerationTask: (nodeId: string) => void
   onRefreshGenerationTask: (nodeId: string) => void
   onCancelGenerationTask: (nodeId: string) => void
+  showImageInfo: boolean
   splitOutputCount: number
   onSplitGenerationOutputs: (node: CanvasNode) => void
   onToggleSplitOutputs: (node: CanvasNode) => void
@@ -2498,6 +2538,7 @@ function NodeBody({
         {node.metadata.content ? (
           <>
             <img src={node.metadata.content} alt={node.title} draggable={false} onDragStart={(event) => event.preventDefault()} />
+            {showImageInfo ? <MediaInfoBar node={node} /> : null}
             <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} onToggleSplit={onToggleSplitOutputs} />
           </>
         ) : (
@@ -2512,6 +2553,7 @@ function NodeBody({
         {node.metadata.content ? (
           <>
             <video src={node.metadata.content} controls draggable={false} onDragStart={(event) => event.preventDefault()} />
+            {showImageInfo ? <MediaInfoBar node={node} /> : null}
             <GenerationOutputSwitcher node={node} onUpdate={onUpdate} splitOutputCount={splitOutputCount} onSplit={onSplitGenerationOutputs} onToggleSplit={onToggleSplitOutputs} />
           </>
         ) : (

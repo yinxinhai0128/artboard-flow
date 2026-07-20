@@ -115,6 +115,7 @@ export type CanvasProject = {
   nodes: CanvasNode[]
   connections: CanvasConnection[]
   backgroundMode: BackgroundMode
+  showImageInfo?: boolean
   viewport: Viewport
 }
 
@@ -134,4 +135,4 @@ export type ConnectionDraft = {
   blockedNodeId?: string | null
 }
 
-export type Snapshot = Pick<CanvasProject, 'nodes' | 'connections' | 'backgroundMode' | 'viewport'>
+export type Snapshot = Pick<CanvasProject, 'nodes' | 'connections' | 'backgroundMode' | 'showImageInfo' | 'viewport'>

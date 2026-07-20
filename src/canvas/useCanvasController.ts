@@ -15,6 +15,7 @@ function snapshot(project: CanvasProject): Snapshot {
     nodes: project.nodes,
     connections: project.connections,
     backgroundMode: project.backgroundMode,
+    showImageInfo: project.showImageInfo,
     viewport: project.viewport,
   }
 }
@@ -257,6 +258,13 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     [commit],
   )
 
+  const setShowImageInfo = useCallback(
+    (showImageInfo: boolean) => {
+      commit((current) => ({ ...current, showImageInfo }))
+    },
+    [commit],
+  )
+
   const selectNode = useCallback((id: string, additive: boolean) => {
     setSelectedConnectionId(null)
     setSelectedNodeIds((current) => nextNodeSelection(current, id, additive))
@@ -356,6 +364,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     syncDraggedNodeGroups,
     setViewport,
     setBackgroundMode,
+    setShowImageInfo,
     selectNode,
     selectConnection,
     clearSelection,

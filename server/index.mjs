@@ -67,6 +67,7 @@ function normalizeProject(input = {}) {
     nodes,
     connections: normalizeConnections(input.connections, nodes),
     backgroundMode: BACKGROUND_MODES.has(input.backgroundMode) ? input.backgroundMode : 'dots',
+    showImageInfo: input.showImageInfo === true,
     viewport: isViewport(input.viewport) ? input.viewport : { x: 0, y: 0, k: 1 },
   }
 }

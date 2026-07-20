@@ -1446,6 +1446,29 @@ button:disabled {
   object-fit: fill;
 }
 
+.media-info-bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.media-info-bar span {
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.68);
+  color: #f4f4f5;
+  font-size: 11px;
+  line-height: 1;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
 .audio-body {
   align-items: stretch;
 }
