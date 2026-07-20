@@ -1,10 +1,10 @@
 import cors from '@fastify/cors'
 import Fastify from 'fastify'
 import { DatabaseSync } from 'node:sqlite'
-import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assetExtensionFromMimeType, createAssetKey, decodeDataUrlAsset, mimeTypeFromAssetKey } from './asset-store.mjs'
+import { assetExtensionFromMimeType, assetRecordFromKey, createAssetKey, decodeDataUrlAsset, mimeTypeFromAssetKey } from './asset-store.mjs'
 import { normalizeGenerationJobPayload, normalizeGenerationJobResult, normalizeGenerationJobStatus, parseGenerationJob } from './generation-adapter.mjs'
 
 const app = Fastify({ logger: true })
@@ -194,6 +194,13 @@ app.post('/api/assets', async (request, reply) => {
   } catch {
     return reply.code(400).send({ error: 'INVALID_ASSET_DATA_URL' })
   }
+})
+
+app.get('/api/assets', async () => {
+  return readdirSync(assetDir)
+    .filter((key) => ASSET_KEY_PATTERN.test(key))
+    .map((key) => assetRecordFromKey(key, statSync(join(assetDir, key))))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 })
 
 app.get('/api/assets/:key', async (request, reply) => {

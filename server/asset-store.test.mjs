@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assetExtensionFromMimeType, createAssetKey, decodeDataUrlAsset, mimeTypeFromAssetKey } from './asset-store.mjs'
+import { assetExtensionFromMimeType, assetKindFromMimeType, assetRecordFromKey, createAssetKey, decodeDataUrlAsset, mimeTypeFromAssetKey } from './asset-store.mjs'
 
 describe('asset store helpers', () => {
   it('decodes base64 data urls into mime typed bytes', () => {
@@ -15,5 +15,22 @@ describe('asset store helpers', () => {
     expect(assetExtensionFromMimeType('video/mp4')).toBe('mp4')
     expect(createAssetKey('abc-123', 'image/webp')).toBe('abc-123.webp')
     expect(mimeTypeFromAssetKey('abc-123.webp')).toBe('image/webp')
+  })
+
+  it('builds reusable asset records from stored file keys', () => {
+    expect(assetKindFromMimeType('image/svg+xml')).toBe('image')
+    expect(assetKindFromMimeType('video/mp4')).toBe('video')
+    expect(assetKindFromMimeType('audio/mpeg')).toBe('audio')
+    expect(assetKindFromMimeType('application/octet-stream')).toBe('file')
+
+    expect(assetRecordFromKey('abc-123.svg', { size: 123, mtimeMs: 1000 })).toEqual({
+      storageKey: 'abc-123.svg',
+      url: '/api/assets/abc-123.svg',
+      mimeType: 'image/svg+xml',
+      bytes: 123,
+      extension: 'svg',
+      kind: 'image',
+      updatedAt: '1970-01-01T00:00:01.000Z',
+    })
   })
 })

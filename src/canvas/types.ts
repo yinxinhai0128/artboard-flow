@@ -109,6 +109,11 @@ export type CanvasAssetUpload = {
   extension: string
 }
 
+export type CanvasAssetRecord = CanvasAssetUpload & {
+  kind: 'image' | 'video' | 'audio' | 'file'
+  updatedAt: string
+}
+
 export type CanvasConnection = {
   id: string
   fromNodeId: string

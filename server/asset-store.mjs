@@ -41,3 +41,25 @@ export function mimeTypeFromAssetKey(key) {
 export function createAssetKey(id, mimeType) {
   return `${String(id).replace(/[^a-zA-Z0-9_-]/g, '')}.${assetExtensionFromMimeType(mimeType)}`
 }
+
+export function assetKindFromMimeType(mimeType) {
+  if (typeof mimeType !== 'string') return 'file'
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'file'
+}
+
+export function assetRecordFromKey(key, stats) {
+  const mimeType = mimeTypeFromAssetKey(key)
+  const extension = String(key).split('.').pop() || 'bin'
+  return {
+    storageKey: key,
+    url: `/api/assets/${key}`,
+    mimeType,
+    bytes: Number.isFinite(stats?.size) ? stats.size : 0,
+    extension,
+    kind: assetKindFromMimeType(mimeType),
+    updatedAt: new Date(Number.isFinite(stats?.mtimeMs) ? stats.mtimeMs : Date.now()).toISOString(),
+  }
+}

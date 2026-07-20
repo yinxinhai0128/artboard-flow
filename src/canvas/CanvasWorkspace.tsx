@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Compass, Copy, Download, Eye, FileJson, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
-import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
+import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
 import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
@@ -36,6 +36,8 @@ type PendingConnectionCreate = {
   handleType: 'source' | 'target'
   position: Point
 } | null
+
+type SidePanelTab = 'nodes' | 'assets'
 
 const nodeIcons = {
   text: Type,
@@ -123,6 +125,62 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
     position,
     metadata: { content, status: 'success', mimeType: file.type || 'text/plain', bytes: file.size },
   }
+}
+
+async function canvasNodeFromAsset(asset: CanvasAssetRecord, position: Point): Promise<Partial<CanvasNode> & { type: NodeKind; position: Point } | null> {
+  if (asset.kind === 'image') {
+    const size = await readImageSize(asset.url)
+    const fit = fitMediaSize(size.width, size.height, 360, 280)
+    return {
+      type: 'image',
+      title: asset.storageKey,
+      position,
+      width: fit.width,
+      height: fit.height + 42,
+      metadata: {
+        content: asset.url,
+        status: 'success',
+        mimeType: asset.mimeType,
+        bytes: asset.bytes,
+        storageKey: asset.storageKey,
+        naturalWidth: size.width,
+        naturalHeight: size.height,
+      },
+    }
+  }
+  if (asset.kind === 'video') {
+    return {
+      type: 'video',
+      title: asset.storageKey,
+      position,
+      width: 360,
+      height: 260,
+      metadata: {
+        content: asset.url,
+        status: 'success',
+        mimeType: asset.mimeType,
+        bytes: asset.bytes,
+        storageKey: asset.storageKey,
+      },
+    }
+  }
+  if (asset.kind === 'audio') {
+    return {
+      type: 'audio',
+      title: asset.storageKey,
+      position,
+      width: 300,
+      height: 170,
+      metadata: {
+        content: asset.url,
+        status: 'success',
+        mimeType: asset.mimeType,
+        bytes: asset.bytes,
+        storageKey: asset.storageKey,
+      },
+    }
+  }
+  return null
 }
 
 function isAudioFile(file: File) {
@@ -331,8 +389,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(project.title)
   const [sidePanelOpen, setSidePanelOpen] = useState(false)
+  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('nodes')
   const [sidePanelQuery, setSidePanelQuery] = useState('')
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
+  const [assets, setAssets] = useState<CanvasAssetRecord[]>([])
+  const [assetsLoading, setAssetsLoading] = useState(false)
+  const [assetError, setAssetError] = useState('')
   const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null)
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null)
@@ -505,6 +567,32 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const screen = { x: (rect?.width ?? 1200) / 2, y: (rect?.height ?? 720) / 2 }
     return screenToWorld(screen, controller.project.viewport)
   }, [controller.project.viewport])
+
+  const loadAssets = useCallback(async () => {
+    setAssetsLoading(true)
+    setAssetError('')
+    try {
+      setAssets(await canvasApi.listAssets())
+    } catch (error) {
+      setAssetError(error instanceof Error ? error.message : '资产加载失败')
+    } finally {
+      setAssetsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!sidePanelOpen || sidePanelTab !== 'assets') return
+    void loadAssets()
+  }, [loadAssets, sidePanelOpen, sidePanelTab])
+
+  const insertAssetNode = useCallback(
+    async (asset: CanvasAssetRecord) => {
+      const node = await canvasNodeFromAsset(asset, canvasCenterWorld())
+      if (!node) return
+      controller.addNode(node.type, node.position, node)
+    },
+    [canvasCenterWorld, controller],
+  )
 
   const addClipboardFileNode = useCallback(
     async (file: File) => {
@@ -1017,6 +1105,14 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         .includes(query)
     })
   }, [controller.project.nodes, sidePanelQuery, sidePanelType])
+  const filteredAssets = useMemo(() => {
+    const query = sidePanelQuery.trim().toLowerCase()
+    if (!query) return assets
+    return assets.filter((asset) => [asset.storageKey, asset.kind, asset.mimeType]
+      .join(' ')
+      .toLowerCase()
+      .includes(query))
+  }, [assets, sidePanelQuery])
 
   const focusNode = useCallback(
     (node: CanvasNode) => {
@@ -1377,44 +1473,85 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           <aside className="node-side-panel" data-toolbar>
             <div className="node-side-panel-header">
               <div>
-                <strong>画布节点</strong>
-                <span>{filteredPanelNodes.length} / {controller.project.nodes.length}</span>
+                <strong>{sidePanelTab === 'nodes' ? '画布节点' : '资产库'}</strong>
+                <span>
+                  {sidePanelTab === 'nodes'
+                    ? `${filteredPanelNodes.length} / ${controller.project.nodes.length}`
+                    : `${filteredAssets.length} / ${assets.length}`}
+                </span>
               </div>
               <button onClick={() => setSidePanelOpen(false)}>收起</button>
+            </div>
+            <div className="node-side-panel-tabs">
+              <button className={sidePanelTab === 'nodes' ? 'active' : ''} onClick={() => setSidePanelTab('nodes')}>节点</button>
+              <button className={sidePanelTab === 'assets' ? 'active' : ''} onClick={() => setSidePanelTab('assets')}>资产</button>
             </div>
             <div className="node-side-panel-controls">
               <input
                 value={sidePanelQuery}
-                placeholder="搜索标题、内容或类型"
+                placeholder={sidePanelTab === 'nodes' ? '搜索标题、内容或类型' : '搜索资产名或类型'}
                 onChange={(event) => setSidePanelQuery(event.target.value)}
               />
-              <select value={sidePanelType} onChange={(event) => setSidePanelType(event.target.value as NodeKind | 'all')}>
-                <option value="all">全部类型</option>
-                {(['text', 'image', 'video', 'audio', 'config'] as const).map((type) => (
-                  <option key={type} value={type}>{nodeKindLabels[type]}</option>
-                ))}
-              </select>
+              {sidePanelTab === 'nodes' ? (
+                <select value={sidePanelType} onChange={(event) => setSidePanelType(event.target.value as NodeKind | 'all')}>
+                  <option value="all">全部类型</option>
+                  {(['text', 'image', 'video', 'audio', 'config'] as const).map((type) => (
+                    <option key={type} value={type}>{nodeKindLabels[type]}</option>
+                  ))}
+                </select>
+              ) : (
+                <button className="node-side-panel-refresh" disabled={assetsLoading} onClick={() => void loadAssets()}>
+                  {assetsLoading ? '刷新中' : '刷新'}
+                </button>
+              )}
             </div>
             <div className="node-side-panel-list">
-              {filteredPanelNodes.length ? (
-                filteredPanelNodes.map((node) => {
-                  const counts = relationCounts.get(node.id) ?? { incoming: 0, outgoing: 0 }
-                  const selected = controller.selectedNodeIds.includes(node.id)
-                  return (
-                    <button key={node.id} className={`node-list-item ${selected ? 'active' : ''}`} onClick={() => focusNode(node)}>
-                      <span className={`node-list-icon ${node.type}`}>{nodeKindLabels[node.type].slice(0, 1)}</span>
-                      <span className="node-list-main">
-                        <span className="node-list-title">{node.title || '未命名节点'}</span>
-                        <span className="node-list-preview">{nodePreview(node)}</span>
-                        <span className="node-list-relations">
-                          输入 {counts.incoming} · 输出 {counts.outgoing}
+              {sidePanelTab === 'nodes' ? (
+                filteredPanelNodes.length ? (
+                  filteredPanelNodes.map((node) => {
+                    const counts = relationCounts.get(node.id) ?? { incoming: 0, outgoing: 0 }
+                    const selected = controller.selectedNodeIds.includes(node.id)
+                    return (
+                      <button key={node.id} className={`node-list-item ${selected ? 'active' : ''}`} onClick={() => focusNode(node)}>
+                        <span className={`node-list-icon ${node.type}`}>{nodeKindLabels[node.type].slice(0, 1)}</span>
+                        <span className="node-list-main">
+                          <span className="node-list-title">{node.title || '未命名节点'}</span>
+                          <span className="node-list-preview">{nodePreview(node)}</span>
+                          <span className="node-list-relations">
+                            输入 {counts.incoming} · 输出 {counts.outgoing}
+                          </span>
                         </span>
-                      </span>
-                    </button>
-                  )
-                })
+                      </button>
+                    )
+                  })
+                ) : (
+                  <div className="node-side-empty">没有匹配的节点</div>
+                )
+              ) : assetError ? (
+                <div className="node-side-empty">{assetError}</div>
+              ) : assetsLoading && !assets.length ? (
+                <div className="node-side-empty">正在加载资产…</div>
+              ) : filteredAssets.length ? (
+                filteredAssets.map((asset) => (
+                  <button
+                    key={asset.storageKey}
+                    className={`asset-list-item ${asset.kind === 'file' ? 'disabled' : ''}`}
+                    data-asset-key={asset.storageKey}
+                    disabled={asset.kind === 'file'}
+                    onClick={() => void insertAssetNode(asset)}
+                  >
+                    <span className={`asset-list-cover ${asset.kind}`}>
+                      {asset.kind === 'image' ? <img src={asset.url} alt="" /> : asset.kind.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="node-list-main">
+                      <span className="node-list-title">{asset.storageKey}</span>
+                      <span className="node-list-preview">{asset.mimeType}</span>
+                      <span className="node-list-relations">{formatBytes(asset.bytes)} · 点击插入画布</span>
+                    </span>
+                  </button>
+                ))
               ) : (
-                <div className="node-side-empty">没有匹配的节点</div>
+                <div className="node-side-empty">暂无资产。拖入或粘贴图片/视频/音频后会出现在这里。</div>
               )}
             </div>
           </aside>

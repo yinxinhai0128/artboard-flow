@@ -369,6 +369,26 @@ button:disabled {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+.node-side-panel-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px 14px 0;
+}
+
+.node-side-panel-tabs button {
+  min-height: 30px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.node-side-panel-tabs button.active {
+  color: var(--text);
+  background: rgba(125, 211, 252, 0.12);
+  border-color: rgba(125, 211, 252, 0.32);
+}
+
 .node-side-panel-controls {
   display: grid;
   gap: 8px;
@@ -376,7 +396,8 @@ button:disabled {
 }
 
 .node-side-panel-controls input,
-.node-side-panel-controls select {
+.node-side-panel-controls select,
+.node-side-panel-refresh {
   width: 100%;
   height: 34px;
   color: var(--text);
@@ -385,6 +406,12 @@ button:disabled {
   border-radius: 9px;
   padding: 0 10px;
   outline: 0;
+}
+
+.node-side-panel-refresh {
+  display: grid;
+  place-items: center;
+  color: var(--subtle);
 }
 
 .node-side-panel-list {
@@ -409,10 +436,57 @@ button:disabled {
   text-align: left;
 }
 
+.asset-list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+}
+
 .node-list-item:hover,
-.node-list-item.active {
+.node-list-item.active,
+.asset-list-item:hover {
   background: rgba(255, 255, 255, 0.07);
   border-color: rgba(125, 211, 252, 0.28);
+}
+
+.asset-list-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.asset-list-cover {
+  width: 48px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.asset-list-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.asset-list-cover.video {
+  background: rgba(251, 146, 60, 0.16);
+}
+
+.asset-list-cover.audio {
+  background: rgba(168, 85, 247, 0.18);
 }
 
 .node-list-icon {
