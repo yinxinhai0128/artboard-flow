@@ -1,6 +1,5 @@
+import { CONFIG_REFERENCE_PATTERN, getGenerationResourceNodes } from './resourceReferences'
 import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasResourceNodeKind } from './types'
-
-export const CONFIG_REFERENCE_PATTERN = /@\[node:([^\]]+)\]/g
 
 export type CanvasGenerationInput = {
   nodeId: string
@@ -40,12 +39,9 @@ export type CanvasGenerationContext = {
 const defaultSummary = (): CanvasGenerationSummary => ({ text: 0, image: 0, video: 0, audio: 0 })
 
 export function buildCanvasGenerationInputs(configNodeId: string, nodes: CanvasNode[], connections: CanvasConnection[]) {
-  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
-  return connections
-    .filter((connection) => connection.toNodeId === configNodeId)
-    .flatMap((connection): CanvasGenerationInput[] => {
-      const node = nodeMap.get(connection.fromNodeId)
-      const input = node ? generationInputFromNode(node) : null
+  return getGenerationResourceNodes(configNodeId, nodes, connections)
+    .flatMap((node): CanvasGenerationInput[] => {
+      const input = generationInputFromNode(node)
       return input ? [input] : []
     })
 }

@@ -1,5 +1,5 @@
 import { sourcePort, targetPort } from './geometry'
-import { CONFIG_REFERENCE_PATTERN } from './generation'
+import { CONFIG_REFERENCE_PATTERN } from './resourceReferences'
 import type { CanvasConnection, CanvasNode, CanvasProject, Point } from './types'
 
 export type ConnectionDropTarget = {
