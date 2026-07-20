@@ -1845,6 +1845,8 @@ function CanvasNodeView({
         <button
           className="port target-port"
           title="从此输入端反向连线"
+          aria-label="连接输入端口"
+          data-connection-handle="target"
           data-label="输入"
           data-node-control
           onPointerDown={(event) => onStartConnection(event, node.id, 'target')}
@@ -1878,7 +1880,7 @@ function CanvasNodeView({
         onToggleSplitOutputs={onToggleSplitOutputs}
       />
       {node.type !== 'config' && node.type !== 'group' ? (
-        <button className="port source-port" title="从此节点连线" data-label="输出" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
+        <button className="port source-port" title="从此节点连线" aria-label="连接输出端口" data-connection-handle="source" data-label="输出" data-node-control onPointerDown={(event) => onStartConnection(event, node.id, 'source')} />
       ) : null}
       {resizeCorners.map((corner) => (
         <button
