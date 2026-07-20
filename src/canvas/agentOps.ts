@@ -1,4 +1,5 @@
 import { addConnectionToProject, deleteSelectionFromProject } from './document'
+import { createCanvasNode } from './nodeFactory'
 import type { CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind, Point, Viewport } from './types'
 
 export type CanvasAgentOp =
@@ -40,15 +41,6 @@ type CanvasAgentOptions = {
 }
 
 const nodeKinds = new Set<NodeKind>(['text', 'image', 'video', 'audio', 'config', 'group'])
-
-const nodeDefaults: Record<NodeKind, { title: string; width: number; height: number; content: string }> = {
-  text: { title: '文本节点', width: 260, height: 180, content: '写下提示词、分镜说明或生成备注。' },
-  image: { title: '图片节点', width: 280, height: 220, content: '' },
-  video: { title: '视频节点', width: 320, height: 220, content: '' },
-  audio: { title: '音频节点', width: 300, height: 170, content: '' },
-  config: { title: '配置节点', width: 300, height: 300, content: '模型、比例、数量等生成参数会放在这里。' },
-  group: { title: '组', width: 360, height: 260, content: '' },
-}
 
 export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops: CanvasAgentOp[] = [], options: CanvasAgentOptions = {}) {
   const createId = options.createId ?? (() => crypto.randomUUID())
@@ -149,22 +141,16 @@ export function summarizeCanvasAgentOps(ops: CanvasAgentOp[] = []) {
 
 function createAgentNode(op: Extract<CanvasAgentOp, { type: 'add_node' }>, createId: () => string, index: number): CanvasNode {
   const nodeType = op.nodeType && nodeKinds.has(op.nodeType) ? op.nodeType : 'text'
-  const defaults = nodeDefaults[nodeType]
-  return {
-    id: op.id || createId(),
-    type: nodeType,
-    title: op.title || defaults.title,
-    position: op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 },
-    width: op.width || defaults.width,
-    height: op.height || defaults.height,
-    metadata: {
-      content: defaults.content,
-      status: 'idle',
-      count: nodeType === 'config' ? 1 : undefined,
-      size: nodeType === 'config' ? '1024x1024' : undefined,
-      ...op.metadata,
+  return createCanvasNode(nodeType, op.position || { x: op.x ?? index * 36, y: op.y ?? index * 36 }, {
+    createId,
+    patch: {
+      id: op.id,
+      title: op.title,
+      width: op.width,
+      height: op.height,
+      metadata: op.metadata,
     },
-  }
+  })
 }
 
 function agentDeleteNodeIds(project: CanvasProject, op: Extract<CanvasAgentOp, { type: 'delete_node' }>) {

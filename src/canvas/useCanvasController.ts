@@ -2,36 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
 import { rectsIntersect } from './geometry'
 import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject, pasteClipboardIntoProject, syncNodeGroupMembership, type CanvasClipboard } from './document'
+import { createCanvasNode } from './nodeFactory'
 
 const createId = () => crypto.randomUUID()
 
-const nodeDefaults: Record<NodeKind, { title: string; width: number; height: number; content: string }> = {
-  text: { title: '文本节点', width: 260, height: 180, content: '写下提示词、分镜说明或生成备注。' },
-  image: { title: '图片节点', width: 280, height: 220, content: '' },
-  video: { title: '视频节点', width: 320, height: 220, content: '' },
-  audio: { title: '音频节点', width: 300, height: 170, content: '' },
-  config: { title: '配置节点', width: 300, height: 300, content: '模型、比例、数量等生成参数会放在这里。' },
-  group: { title: '组', width: 360, height: 260, content: '' },
-}
-
 function createNode(type: NodeKind, position: Point, patch: Partial<CanvasNode> = {}): CanvasNode {
-  const defaults = nodeDefaults[type]
-  return {
-    ...patch,
-    id: patch.id ?? createId(),
-    type,
-    title: patch.title ?? defaults.title,
-    position: patch.position ?? position,
-    width: patch.width ?? defaults.width,
-    height: patch.height ?? defaults.height,
-    metadata: {
-      content: defaults.content,
-      status: 'idle',
-      count: type === 'config' ? 1 : undefined,
-      size: type === 'config' ? '1024x1024' : undefined,
-      ...patch.metadata,
-    },
-  }
+  return createCanvasNode(type, position, { createId, patch })
 }
 
 function snapshot(project: CanvasProject): Snapshot {
