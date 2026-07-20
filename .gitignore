@@ -18,6 +18,7 @@ dist-ssr
 # Runtime data
 server/data/*.sqlite
 server/data/*.sqlite-*
+server/data/assets/
 
 # Local QA artifacts
 .playwright-cli

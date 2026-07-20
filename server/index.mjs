@@ -1,15 +1,18 @@
 import cors from '@fastify/cors'
 import Fastify from 'fastify'
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assetExtensionFromMimeType, createAssetKey, decodeDataUrlAsset, mimeTypeFromAssetKey } from './asset-store.mjs'
 import { normalizeGenerationJobPayload, normalizeGenerationJobResult, normalizeGenerationJobStatus, parseGenerationJob } from './generation-adapter.mjs'
 
 const app = Fastify({ logger: true })
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)))
 const dataDir = join(rootDir, 'server', 'data')
+const assetDir = join(dataDir, 'assets')
 mkdirSync(dataDir, { recursive: true })
+mkdirSync(assetDir, { recursive: true })
 
 const db = new DatabaseSync(join(dataDir, 'artboard-flow.sqlite'))
 db.exec(`
@@ -42,6 +45,7 @@ const nowIso = () => new Date().toISOString()
 const id = () => crypto.randomUUID()
 const NODE_TYPES = new Set(['text', 'image', 'video', 'audio', 'config', 'group'])
 const BACKGROUND_MODES = new Set(['dots', 'lines', 'blank'])
+const ASSET_KEY_PATTERN = /^[a-zA-Z0-9_-]+\.[a-z0-9]+$/
 
 function parseDocument(row) {
   const document = JSON.parse(row.document_json)
@@ -173,6 +177,32 @@ function saveProject(project) {
 }
 
 app.get('/api/health', async () => ({ ok: true, name: 'ArtboardFlow' }))
+
+app.post('/api/assets', async (request, reply) => {
+  const body = request.body && typeof request.body === 'object' ? request.body : {}
+  try {
+    const asset = decodeDataUrlAsset(body.dataUrl)
+    const storageKey = createAssetKey(id(), asset.mimeType)
+    writeFileSync(join(assetDir, storageKey), asset.data)
+    return reply.code(201).send({
+      storageKey,
+      url: `/api/assets/${storageKey}`,
+      mimeType: asset.mimeType,
+      bytes: asset.bytes,
+      extension: assetExtensionFromMimeType(asset.mimeType),
+    })
+  } catch {
+    return reply.code(400).send({ error: 'INVALID_ASSET_DATA_URL' })
+  }
+})
+
+app.get('/api/assets/:key', async (request, reply) => {
+  const key = typeof request.params.key === 'string' ? request.params.key : ''
+  if (!ASSET_KEY_PATTERN.test(key)) return reply.code(400).send({ error: 'INVALID_ASSET_KEY' })
+  const assetPath = join(assetDir, key)
+  if (!existsSync(assetPath)) return reply.code(404).send({ error: 'ASSET_NOT_FOUND' })
+  return reply.type(mimeTypeFromAssetKey(key)).send(createReadStream(assetPath))
+})
 
 app.get('/api/projects', async () => {
   const rows = db.prepare(`

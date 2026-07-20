@@ -97,7 +97,16 @@ export type CanvasNode = {
     freeResize?: boolean
     mimeType?: string
     bytes?: number
+    storageKey?: string
   }
+}
+
+export type CanvasAssetUpload = {
+  storageKey: string
+  url: string
+  mimeType: string
+  bytes: number
+  extension: string
 }
 
 export type CanvasConnection = {

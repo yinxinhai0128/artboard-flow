@@ -60,6 +60,7 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
   if (file.type.startsWith('image/')) {
     const content = await readFileAsDataUrl(file)
     const size = await readImageSize(content)
+    const asset = await canvasApi.uploadAsset(content)
     const fit = fitMediaSize(size.width, size.height, 360, 280)
     return {
       type: 'image',
@@ -68,10 +69,11 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
       width: fit.width,
       height: fit.height + 42,
       metadata: {
-        content,
+        content: asset.url,
         status: 'success',
-        mimeType: file.type,
-        bytes: file.size,
+        mimeType: asset.mimeType || file.type,
+        bytes: asset.bytes || file.size,
+        storageKey: asset.storageKey,
         naturalWidth: size.width,
         naturalHeight: size.height,
       },
@@ -79,6 +81,7 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
   }
   if (file.type.startsWith('video/')) {
     const content = await readFileAsDataUrl(file)
+    const asset = await canvasApi.uploadAsset(content)
     return {
       type: 'video',
       title: file.name || '视频节点',
@@ -86,15 +89,17 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
       width: 360,
       height: 260,
       metadata: {
-        content,
+        content: asset.url,
         status: 'success',
-        mimeType: file.type,
-        bytes: file.size,
+        mimeType: asset.mimeType || file.type,
+        bytes: asset.bytes || file.size,
+        storageKey: asset.storageKey,
       },
     }
   }
   if (isAudioFile(file)) {
     const content = await readFileAsDataUrl(file)
+    const asset = await canvasApi.uploadAsset(content)
     return {
       type: 'audio',
       title: file.name || '音频节点',
@@ -102,10 +107,11 @@ async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<
       width: 300,
       height: 170,
       metadata: {
-        content,
+        content: asset.url,
         status: 'success',
-        mimeType: file.type || 'audio/mpeg',
-        bytes: file.size,
+        mimeType: asset.mimeType || file.type || 'audio/mpeg',
+        bytes: asset.bytes || file.size,
+        storageKey: asset.storageKey,
       },
     }
   }
