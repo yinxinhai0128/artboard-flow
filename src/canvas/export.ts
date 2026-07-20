@@ -1,10 +1,18 @@
 import type { CanvasProject } from './types'
 
+type ArtboardFlowExportAsset = {
+  nodeId: string
+  metadataKey: 'content'
+  path: string
+  mimeType: string
+  bytes: number
+}
+
 export type ArtboardFlowExportFile = {
   app: 'artboard-flow'
   version: 1
   exportedAt: string
-  projects: { project: CanvasProject; files: [] }[]
+  projects: { project: CanvasProject; files: ArtboardFlowExportAsset[] }[]
 }
 
 const textEncoder = new TextEncoder()
@@ -15,24 +23,83 @@ export async function downloadCanvasProjects(projects: CanvasProject[], fileName
 }
 
 export function packCanvasProjects(projects: CanvasProject[]) {
+  const zipFiles: { name: string; data: Uint8Array }[] = []
   const payload: ArtboardFlowExportFile = {
     app: 'artboard-flow',
     version: 1,
     exportedAt: new Date().toISOString(),
-    projects: projects.map((project) => ({ project, files: [] })),
+    projects: projects.map((project) => externalizeProjectMedia(project, zipFiles)),
   }
-  return createStoredZip([{ name: 'projects.json', data: textEncoder.encode(JSON.stringify(payload, null, 2)) }])
+  return createStoredZip([{ name: 'projects.json', data: textEncoder.encode(JSON.stringify(payload, null, 2)) }, ...zipFiles])
 }
 
 export async function readCanvasProjectsFile(file: File): Promise<CanvasProject[]> {
-  const text = file.name.toLowerCase().endsWith('.zip') || file.type.includes('zip')
-    ? await readProjectsJsonFromZip(file)
-    : await file.text()
+  const entries = file.name.toLowerCase().endsWith('.zip') || file.type.includes('zip')
+    ? readStoredZip(new Uint8Array(await file.arrayBuffer()))
+    : null
+  const text = entries ? readProjectsJsonFromZip(entries) : await file.text()
   const parsed = JSON.parse(text) as unknown
-  if (isExportFile(parsed)) return parsed.projects.map((item) => sanitizeImportedProject(item.project))
+  if (isExportFile(parsed)) return parsed.projects.map((item) => sanitizeImportedProject(restoreProjectMedia(item.project, item.files ?? [], entries)))
   if (isProjectArray(parsed)) return parsed.map(sanitizeImportedProject)
   if (isProject(parsed)) return [sanitizeImportedProject(parsed)]
   throw new Error('INVALID_CANVAS_EXPORT')
+}
+
+function externalizeProjectMedia(project: CanvasProject, zipFiles: { name: string; data: Uint8Array }[]) {
+  const files: ArtboardFlowExportAsset[] = []
+  const nodes = project.nodes.map((node) => {
+    const content = node.metadata.content
+    if (!(node.type === 'image' || node.type === 'video' || node.type === 'audio') || typeof content !== 'string') return node
+    const dataUrl = decodeDataUrl(content)
+    if (!dataUrl) return node
+
+    const path = `projects/${safeFileName(project.id)}/files/${safeFileName(node.id)}-content.${fileExtension(dataUrl.mimeType)}`
+    files.push({ nodeId: node.id, metadataKey: 'content', path, mimeType: dataUrl.mimeType, bytes: dataUrl.data.length })
+    zipFiles.push({ name: path, data: dataUrl.data })
+    return { ...node, metadata: { ...node.metadata, content: `artboard-flow-file:${path}` } }
+  })
+  return { project: { ...project, nodes }, files }
+}
+
+function restoreProjectMedia(project: CanvasProject, files: ArtboardFlowExportAsset[], entries: Map<string, Uint8Array> | null) {
+  if (!entries || !files.length) return project
+  const filesByNode = new Map(files.map((file) => [file.nodeId, file]))
+  return {
+    ...project,
+    nodes: project.nodes.map((node) => {
+      const file = filesByNode.get(node.id)
+      if (!file) return node
+      const content = node.metadata[file.metadataKey]
+      if (content !== `artboard-flow-file:${file.path}`) return node
+      const data = entries.get(file.path)
+      if (!data) return node
+      return {
+        ...node,
+        metadata: {
+          ...node.metadata,
+          [file.metadataKey]: encodeDataUrl(file.mimeType, data),
+          mimeType: node.metadata.mimeType ?? file.mimeType,
+          bytes: node.metadata.bytes ?? file.bytes,
+        },
+      }
+    }),
+  }
+}
+
+function decodeDataUrl(value: string) {
+  const match = /^data:([^;,]+)?((?:;[^,]*)?),(.*)$/s.exec(value)
+  if (!match) return null
+  const mimeType = match[1] || 'application/octet-stream'
+  const metadata = match[2] || ''
+  const payload = match[3] || ''
+  if (metadata.includes(';base64')) {
+    return { mimeType, data: base64ToBytes(payload) }
+  }
+  return { mimeType, data: textEncoder.encode(decodeURIComponent(payload)) }
+}
+
+function encodeDataUrl(mimeType: string, data: Uint8Array) {
+  return `data:${mimeType || 'application/octet-stream'};base64,${bytesToBase64(data)}`
 }
 
 function sanitizeImportedProject(project: CanvasProject): CanvasProject {
@@ -110,8 +177,7 @@ function isProject(value: unknown): value is CanvasProject {
   return Boolean(value && typeof value === 'object' && Array.isArray((value as CanvasProject).nodes) && Array.isArray((value as CanvasProject).connections))
 }
 
-async function readProjectsJsonFromZip(file: File) {
-  const entries = readStoredZip(new Uint8Array(await file.arrayBuffer()))
+function readProjectsJsonFromZip(entries: Map<string, Uint8Array>) {
   const projectsJson = entries.get('projects.json')
   if (!projectsJson) throw new Error('MISSING_PROJECTS_JSON')
   return textDecoder.decode(projectsJson)
@@ -240,6 +306,23 @@ function concatBytes(chunks: Uint8Array[]) {
   return output
 }
 
+function base64ToBytes(value: string) {
+  const binary = atob(value)
+  const output = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    output[index] = binary.charCodeAt(index)
+  }
+  return output
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+  return btoa(binary)
+}
+
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
@@ -251,4 +334,17 @@ function downloadBlob(blob: Blob, fileName: string) {
 
 function safeFileName(value: string) {
   return value.trim().replace(/[\\/:*?"<>|]/g, '_') || 'ArtboardFlow'
+}
+
+function fileExtension(mimeType: string) {
+  if (mimeType.includes('png')) return 'png'
+  if (mimeType.includes('jpeg')) return 'jpg'
+  if (mimeType.includes('webp')) return 'webp'
+  if (mimeType.includes('gif')) return 'gif'
+  if (mimeType.includes('mp4')) return 'mp4'
+  if (mimeType.includes('webm')) return 'webm'
+  if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3'
+  if (mimeType.includes('wav')) return 'wav'
+  if (mimeType.includes('ogg')) return 'ogg'
+  return 'bin'
 }

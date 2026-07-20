@@ -50,6 +50,34 @@ describe('canvas export files', () => {
     await expect(readCanvasProjectsFile(file)).resolves.toEqual([project])
   })
 
+  it('stores media node data urls as zip files and restores them on import', async () => {
+    const content = 'data:image/png;base64,aGVsbG8='
+    const mediaProject: CanvasProject = {
+      ...project,
+      nodes: [
+        {
+          id: 'image-1',
+          type: 'image',
+          title: '参考图',
+          position: { x: 10, y: 20 },
+          width: 280,
+          height: 220,
+          metadata: { content, status: 'success', mimeType: 'image/png', bytes: 5 },
+        },
+      ],
+    }
+
+    const zip = packCanvasProjects([mediaProject])
+    const zipText = new TextDecoder().decode(zip)
+    const file = new File([zip], 'media.artboard-flow.zip', { type: 'application/zip' })
+
+    const [imported] = await readCanvasProjectsFile(file)
+
+    expect(zipText).not.toContain(content)
+    expect(zipText).toContain('projects/project-1/files/image-1-content.png')
+    expect(imported.nodes[0].metadata.content).toBe(content)
+  })
+
   it('sanitizes imported projects before they reach the canvas', async () => {
     const dirtyProject: CanvasProject = {
       ...project,
