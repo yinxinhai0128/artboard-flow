@@ -9,6 +9,7 @@ import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, ins
 import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForProject } from './graph'
+import { splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
 
 type CanvasWorkspaceProps = {
@@ -1035,6 +1036,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
   const splitGenerationOutputs = useCallback(
     (node: CanvasNode) => {
+      const result = splitGenerationOutputsInProject(controller.project, node.id, () => crypto.randomUUID())
+      if (result) {
+        controller.replaceProject(result.project)
+        setToolbarNodeId(node.id)
+        return
+      }
       const outputs = generationOutputsForNode(node)
       if (outputs.length <= 1 || node.type === 'config' || node.type === 'text') return
       const existingIndexes = new Set(

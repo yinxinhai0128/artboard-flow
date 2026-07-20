@@ -94,6 +94,13 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     [commit],
   )
 
+  const replaceProject = useCallback(
+    (project: CanvasProject) => {
+      commit(() => project)
+    },
+    [commit],
+  )
+
   const duplicateNode = useCallback(
     (id: string) => {
       const source = localProject.nodes.find((node) => node.id === id)
@@ -328,6 +335,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     canRedo: history.future.length > 0,
     addNode,
     addConnectedNode,
+    replaceProject,
     duplicateNode,
     updateNode,
     renameProject,
