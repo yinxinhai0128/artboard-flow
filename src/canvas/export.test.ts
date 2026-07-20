@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { packCanvasClipboard, packCanvasProjects, readCanvasClipboardFile, readCanvasProjectsFile } from './export'
+import { packCanvasClipboard, packCanvasClipboardWithAssets, packCanvasProjects, packCanvasProjectsWithAssets, readCanvasClipboardFile, readCanvasProjectsFile } from './export'
 import type { CanvasClipboard } from './document'
 import type { CanvasProject } from './types'
 
@@ -78,6 +78,44 @@ describe('canvas export files', () => {
     expect(zipText).not.toContain(content)
     expect(zipText).toContain('projects/project-1/files/image-1-content.png')
     expect(imported.nodes[0].metadata.content).toBe(content)
+  })
+
+  it('stores media node storageKey assets as zip files and restores them on import', async () => {
+    const mediaProject: CanvasProject = {
+      ...project,
+      nodes: [
+        {
+          id: 'image-1',
+          type: 'image',
+          title: '参考图',
+          position: { x: 10, y: 20 },
+          width: 280,
+          height: 220,
+          metadata: {
+            content: '/api/assets/image-1.svg',
+            storageKey: 'image-1.svg',
+            status: 'success',
+            mimeType: 'image/svg+xml',
+            bytes: 5,
+          },
+        },
+      ],
+    }
+
+    const zip = await packCanvasProjectsWithAssets([mediaProject], async () => ({
+      data: new TextEncoder().encode('hello'),
+      mimeType: 'image/svg+xml',
+      bytes: 5,
+    }))
+    const zipText = new TextDecoder().decode(zip)
+    const file = new File([zip], 'media.artboard-flow.zip', { type: 'application/zip' })
+
+    const [imported] = await readCanvasProjectsFile(file)
+
+    expect(zipText).not.toContain('/api/assets/image-1.svg')
+    expect(zipText).toContain('projects/project-1/files/image-1-content.svg')
+    expect(imported.nodes[0].metadata.content).toBe('data:image/svg+xml;base64,aGVsbG8=')
+    expect(imported.nodes[0].metadata.storageKey).toBeUndefined()
   })
 
   it('sanitizes imported projects before they reach the canvas', async () => {
@@ -165,5 +203,43 @@ describe('canvas export files', () => {
     expect(zipText).not.toContain(content)
     expect(zipText).toContain('clipboard/files/image-1-content.png')
     expect(imported).toEqual(clipboard)
+  })
+
+  it('packs selected canvas clipboard storageKey assets outside json', async () => {
+    const clipboard: CanvasClipboard = {
+      nodes: [
+        {
+          id: 'image-1',
+          type: 'image',
+          title: '参考图',
+          position: { x: 10, y: 20 },
+          width: 280,
+          height: 220,
+          metadata: {
+            content: '/api/assets/image-1.png',
+            storageKey: 'image-1.png',
+            status: 'success',
+            mimeType: 'image/png',
+            bytes: 5,
+          },
+        },
+      ],
+      connections: [],
+    }
+
+    const zip = await packCanvasClipboardWithAssets(clipboard, async () => ({
+      data: new TextEncoder().encode('hello'),
+      mimeType: 'image/png',
+      bytes: 5,
+    }))
+    const zipText = new TextDecoder().decode(zip)
+    const file = new File([zip], 'fragment.artboard-flow-fragment.zip', { type: 'application/zip' })
+
+    const imported = await readCanvasClipboardFile(file)
+
+    expect(zipText).not.toContain('/api/assets/image-1.png')
+    expect(zipText).toContain('clipboard/files/image-1-content.png')
+    expect(imported.nodes[0].metadata.content).toBe('data:image/png;base64,aGVsbG8=')
+    expect(imported.nodes[0].metadata.storageKey).toBeUndefined()
   })
 })

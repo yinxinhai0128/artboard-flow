@@ -9,6 +9,14 @@ type ArtboardFlowExportAsset = {
   bytes: number
 }
 
+type PackedAsset = {
+  data: Uint8Array
+  mimeType: string
+  bytes: number
+}
+
+type CanvasAssetFetcher = (url: string, node: CanvasNode) => Promise<PackedAsset | null>
+
 export type ArtboardFlowExportFile = {
   app: 'artboard-flow'
   version: 1
@@ -29,12 +37,12 @@ const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
 
 export async function downloadCanvasProjects(projects: CanvasProject[], fileName = 'ArtboardFlow') {
-  downloadBlob(new Blob([packCanvasProjects(projects)], { type: 'application/zip' }), `${safeFileName(fileName)}.artboard-flow.zip`)
+  downloadBlob(new Blob([await packCanvasProjectsWithAssets(projects)], { type: 'application/zip' }), `${safeFileName(fileName)}.artboard-flow.zip`)
 }
 
 export async function downloadCanvasClipboard(clipboard: CanvasClipboard | null, fileName = 'ArtboardFlow-节点片段') {
   if (!clipboard?.nodes.length) return
-  downloadBlob(new Blob([packCanvasClipboard(clipboard)], { type: 'application/zip' }), `${safeFileName(fileName)}.artboard-flow-fragment.zip`)
+  downloadBlob(new Blob([await packCanvasClipboardWithAssets(clipboard)], { type: 'application/zip' }), `${safeFileName(fileName)}.artboard-flow-fragment.zip`)
 }
 
 export function packCanvasProjects(projects: CanvasProject[]) {
@@ -56,6 +64,29 @@ export function packCanvasClipboard(clipboard: CanvasClipboard) {
     version: 1,
     exportedAt: new Date().toISOString(),
     ...externalizeClipboardMedia(clipboard, zipFiles),
+  }
+  return createStoredZip([{ name: 'clipboard.json', data: textEncoder.encode(JSON.stringify(payload, null, 2)) }, ...zipFiles])
+}
+
+export async function packCanvasProjectsWithAssets(projects: CanvasProject[], fetchAsset: CanvasAssetFetcher = fetchCanvasAsset) {
+  const zipFiles: { name: string; data: Uint8Array }[] = []
+  const payload: ArtboardFlowExportFile = {
+    app: 'artboard-flow',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    projects: await Promise.all(projects.map((project) => externalizeProjectMediaWithAssets(project, zipFiles, fetchAsset))),
+  }
+  return createStoredZip([{ name: 'projects.json', data: textEncoder.encode(JSON.stringify(payload, null, 2)) }, ...zipFiles])
+}
+
+export async function packCanvasClipboardWithAssets(clipboard: CanvasClipboard, fetchAsset: CanvasAssetFetcher = fetchCanvasAsset) {
+  const zipFiles: { name: string; data: Uint8Array }[] = []
+  const payload: ArtboardFlowClipboardExportFile = {
+    app: 'artboard-flow',
+    type: 'canvas-clipboard',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    ...(await externalizeClipboardMediaWithAssets(clipboard, zipFiles, fetchAsset)),
   }
   return createStoredZip([{ name: 'clipboard.json', data: textEncoder.encode(JSON.stringify(payload, null, 2)) }, ...zipFiles])
 }
@@ -98,6 +129,16 @@ function externalizeClipboardMedia(clipboard: CanvasClipboard, zipFiles: { name:
   return { clipboard: { ...clipboard, nodes: externalized.nodes }, files: externalized.files }
 }
 
+async function externalizeProjectMediaWithAssets(project: CanvasProject, zipFiles: { name: string; data: Uint8Array }[], fetchAsset: CanvasAssetFetcher) {
+  const externalized = await externalizeNodesMediaWithAssets(project.nodes, `projects/${safeFileName(project.id)}/files`, zipFiles, fetchAsset)
+  return { project: { ...project, nodes: externalized.nodes }, files: externalized.files }
+}
+
+async function externalizeClipboardMediaWithAssets(clipboard: CanvasClipboard, zipFiles: { name: string; data: Uint8Array }[], fetchAsset: CanvasAssetFetcher) {
+  const externalized = await externalizeNodesMediaWithAssets(clipboard.nodes, 'clipboard/files', zipFiles, fetchAsset)
+  return { clipboard: { ...clipboard, nodes: externalized.nodes }, files: externalized.files }
+}
+
 function externalizeNodesMedia(nodes: CanvasNode[], pathPrefix: string, zipFiles: { name: string; data: Uint8Array }[]) {
   const files: ArtboardFlowExportAsset[] = []
   return {
@@ -114,6 +155,38 @@ function externalizeNodesMedia(nodes: CanvasNode[], pathPrefix: string, zipFiles
       return { ...node, metadata: { ...node.metadata, content: `artboard-flow-file:${path}` } }
     }),
   }
+}
+
+async function externalizeNodesMediaWithAssets(nodes: CanvasNode[], pathPrefix: string, zipFiles: { name: string; data: Uint8Array }[], fetchAsset: CanvasAssetFetcher) {
+  const files: ArtboardFlowExportAsset[] = []
+  const externalizedNodes = await Promise.all(nodes.map(async (node) => {
+    const content = node.metadata.content
+    if (!(node.type === 'image' || node.type === 'video' || node.type === 'audio') || typeof content !== 'string') return node
+
+    const dataUrl = decodeDataUrl(content)
+    if (dataUrl) {
+      const path = `${pathPrefix}/${safeFileName(node.id)}-content.${fileExtension(dataUrl.mimeType)}`
+      files.push({ nodeId: node.id, metadataKey: 'content', path, mimeType: dataUrl.mimeType, bytes: dataUrl.data.length })
+      zipFiles.push({ name: path, data: dataUrl.data })
+      return nodeWithExternalizedContent(node, path)
+    }
+
+    if (!node.metadata.storageKey) return node
+    const asset = await fetchAsset(content, node)
+    if (!asset) return node
+    const mimeType = asset.mimeType || node.metadata.mimeType || 'application/octet-stream'
+    const path = `${pathPrefix}/${safeFileName(node.id)}-content.${fileExtension(mimeType)}`
+    files.push({ nodeId: node.id, metadataKey: 'content', path, mimeType, bytes: asset.bytes || asset.data.length })
+    zipFiles.push({ name: path, data: asset.data })
+    return nodeWithExternalizedContent(node, path)
+  }))
+  return { files, nodes: externalizedNodes }
+}
+
+function nodeWithExternalizedContent(node: CanvasNode, path: string) {
+  const { storageKey, ...metadata } = node.metadata
+  void storageKey
+  return { ...node, metadata: { ...metadata, content: `artboard-flow-file:${path}` } }
 }
 
 function restoreProjectMedia(project: CanvasProject, files: ArtboardFlowExportAsset[], entries: Map<string, Uint8Array> | null) {
@@ -145,6 +218,17 @@ function restoreNodesMedia(nodes: CanvasNode[], files: ArtboardFlowExportAsset[]
         },
       }
     })
+}
+
+async function fetchCanvasAsset(url: string): Promise<PackedAsset> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`ASSET_FETCH_FAILED_${response.status}`)
+  const data = new Uint8Array(await response.arrayBuffer())
+  return {
+    data,
+    mimeType: response.headers.get('content-type') || 'application/octet-stream',
+    bytes: data.length,
+  }
 }
 
 function decodeDataUrl(value: string) {
@@ -416,6 +500,7 @@ function fileExtension(mimeType: string) {
   if (mimeType.includes('jpeg')) return 'jpg'
   if (mimeType.includes('webp')) return 'webp'
   if (mimeType.includes('gif')) return 'gif'
+  if (mimeType.includes('svg')) return 'svg'
   if (mimeType.includes('mp4')) return 'mp4'
   if (mimeType.includes('webm')) return 'webm'
   if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3'
