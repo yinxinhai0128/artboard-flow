@@ -1630,6 +1630,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onCreateGenerationTask={(node) => createGenerationTaskNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
+            onPromoteSplitOutput={promoteSplitOutput}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
             onCopyContent={(node) => void copyNodePayload(node)}
             onUpload={openMediaUpload}
@@ -2099,6 +2100,7 @@ function NodeHoverToolbar({
   onCreateGenerationTask,
   onRetryGenerationTask,
   onStartConnection,
+  onPromoteSplitOutput,
   onDuplicate,
   onCopyContent,
   onUpload,
@@ -2114,6 +2116,7 @@ function NodeHoverToolbar({
   onCreateGenerationTask: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
+  onPromoteSplitOutput: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
   onCopyContent: (node: CanvasNode) => void
   onUpload: (node: CanvasNode) => void
@@ -2128,6 +2131,7 @@ function NodeHoverToolbar({
   const canCreateGenerationTask = node.type === 'config'
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
+  const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
   const canUpload = isUploadableMediaNode(node)
   const canToggleFreeResize = node.type === 'image' || node.type === 'video'
 
@@ -2165,6 +2169,12 @@ function NodeHoverToolbar({
         <button title="从此节点开始连线" onClick={() => onStartConnection(node)}>
           <Link2 size={15} />
           连线
+        </button>
+      ) : null}
+      {canPromoteSplitOutput ? (
+        <button title="设为源节点主结果" onClick={() => onPromoteSplitOutput(node)}>
+          <SquarePen size={15} />
+          设为主结果
         </button>
       ) : null}
       <button title="复制节点" onClick={() => onDuplicate(node)}>
