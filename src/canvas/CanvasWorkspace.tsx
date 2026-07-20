@@ -9,7 +9,7 @@ import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, ins
 import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForProject } from './graph'
-import { splitGenerationOutputsInProject } from './outputSplit'
+import { promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
 
 type CanvasWorkspaceProps = {
@@ -1094,6 +1094,16 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller, splitOutputCounts],
   )
 
+  const promoteSplitOutput = useCallback(
+    (node: CanvasNode) => {
+      const result = promoteSplitOutputInProject(controller.project, node.id)
+      if (!result) return
+      controller.replaceProject(result)
+      setToolbarNodeId(node.metadata.splitSourceNodeId ?? node.id)
+    },
+    [controller],
+  )
+
   const toggleMediaFreeResize = useCallback(
     (node: CanvasNode) => {
       if (node.type !== 'image' && node.type !== 'video') return
@@ -1666,6 +1676,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             if (contextNode) void copyNodePayload(contextNode)
             setContextMenu(null)
           }}
+          onPromoteSplitOutput={() => {
+            if (contextNode) promoteSplitOutput(contextNode)
+            setContextMenu(null)
+          }}
           onFocusNode={(node) => {
             focusNode(node)
             setContextMenu(null)
@@ -1956,6 +1970,7 @@ function CanvasContextMenuView({
   onDuplicate,
   onPreview,
   onCopyContent,
+  onPromoteSplitOutput,
   onFocusNode,
   onDelete,
 }: {
@@ -1966,6 +1981,7 @@ function CanvasContextMenuView({
   onDuplicate: () => void
   onPreview: () => void
   onCopyContent: () => void
+  onPromoteSplitOutput: () => void
   onFocusNode: (node: CanvasNode) => void
   onDelete: () => void
 }) {
@@ -1997,6 +2013,11 @@ function CanvasContextMenuView({
             </button>
           ) : null}
         </>
+      ) : null}
+      {menu.type === 'node' && node?.metadata.splitSourceNodeId && node.metadata.content ? (
+        <button onClick={onPromoteSplitOutput}>
+          <SquarePen size={15} /> 设为主结果
+        </button>
       ) : null}
       {menu.type === 'connection' && connectionPair ? (
         <div className="connection-menu-details">

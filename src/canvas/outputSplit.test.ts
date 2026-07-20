@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { generationOutputsForNode, splitGenerationOutputsInProject } from './outputSplit'
+import { generationOutputsForNode, promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import type { CanvasNode, CanvasProject } from './types'
 
 const imageNode = (patch: Partial<CanvasNode> = {}): CanvasNode => ({
@@ -137,5 +137,50 @@ describe('canvas generation output split', () => {
     expect(splitGenerationOutputsInProject(projectWith([text]), 'text-1', idFactory('unused'))).toBeNull()
     expect(splitGenerationOutputsInProject(projectWith([config]), 'config-1', idFactory('unused'))).toBeNull()
     expect(splitGenerationOutputsInProject(projectWith([]), 'missing', idFactory('unused'))).toBeNull()
+  })
+
+  it('promotes a split result node back to the source active output', () => {
+    const source = imageNode({
+      metadata: {
+        content: 'data:image/png;base64,one',
+        activeOutputIndex: 0,
+        generationOutputs: [
+          { content: 'data:image/png;base64,one', mimeType: 'image/png', naturalWidth: 64, naturalHeight: 64 },
+          { content: 'data:image/png;base64,two', mimeType: 'image/png', naturalWidth: 128, naturalHeight: 96 },
+        ],
+      },
+    })
+    const child = imageNode({
+      id: 'child-2',
+      title: 'Result 2',
+      width: 320,
+      height: 240,
+      metadata: {
+        content: 'data:image/png;base64,two',
+        mimeType: 'image/png',
+        naturalWidth: 128,
+        naturalHeight: 96,
+        splitSourceNodeId: 'source',
+        splitOutputIndex: 1,
+        generatedAt: '2026-07-19T12:00:00.000Z',
+      },
+    })
+
+    const result = promoteSplitOutputInProject(projectWith([source, child]), 'child-2')
+    const promotedSource = result?.nodes.find((node) => node.id === 'source')
+
+    expect(promotedSource).toMatchObject({
+      width: 320,
+      height: 240,
+      metadata: {
+        content: 'data:image/png;base64,two',
+        mimeType: 'image/png',
+        naturalWidth: 128,
+        naturalHeight: 96,
+        activeOutputIndex: 1,
+        generationOutputs: source.metadata.generationOutputs,
+        generatedAt: '2026-07-19T12:00:00.000Z',
+      },
+    })
   })
 })

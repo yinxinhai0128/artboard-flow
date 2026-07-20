@@ -68,6 +68,37 @@ export function splitGenerationOutputsInProject(project: CanvasProject, nodeId: 
   return nodes.length ? { project: nextProject, nodeIds: nodes.map((node) => node.id) } : null
 }
 
+export function promoteSplitOutputInProject(project: CanvasProject, childNodeId: string): CanvasProject | null {
+  const child = project.nodes.find((node) => node.id === childNodeId)
+  const sourceId = child?.metadata.splitSourceNodeId
+  const outputIndex = child?.metadata.splitOutputIndex
+  if (!child || !sourceId || !Number.isInteger(outputIndex) || !child.metadata.content) return null
+
+  let changed = false
+  const nodes = project.nodes.map((node) => {
+    if (node.id !== sourceId) return node
+    changed = true
+    return {
+      ...node,
+      width: child.width,
+      height: child.height,
+      metadata: {
+        ...node.metadata,
+        content: child.metadata.content,
+        mimeType: child.metadata.mimeType,
+        bytes: child.metadata.bytes,
+        naturalWidth: child.metadata.naturalWidth,
+        naturalHeight: child.metadata.naturalHeight,
+        generatedAt: child.metadata.generatedAt ?? node.metadata.generatedAt,
+        activeOutputIndex: outputIndex,
+        status: 'success' as const,
+      },
+    }
+  })
+
+  return changed ? { ...project, nodes } : null
+}
+
 function splitNodePosition(source: CanvasNode, outputIndex: number) {
   return {
     x: source.position.x + source.width + 120,
