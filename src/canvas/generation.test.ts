@@ -264,4 +264,25 @@ describe('canvas generation context', () => {
       ],
     })
   })
+
+  it('maps cancelled adapter jobs back to an idle retryable task', () => {
+    const payload = buildCanvasGenerationPayload(buildCanvasGenerationContext('config', [configNode, imageNode], [{ id: 'c1', fromNodeId: 'image', toNodeId: 'config' }]))
+    const metadata = metadataFromGenerationJob({
+      id: 'job-cancelled',
+      projectId: 'project-1',
+      nodeId: 'node-1',
+      status: 'cancelled',
+      createdAt: '2026-07-19T10:00:00.000Z',
+      updatedAt: '2026-07-19T10:05:00.000Z',
+      payload,
+      result: null,
+      error: '用户已停止生成',
+    })
+
+    expect(metadata).toMatchObject({
+      generationJobStatus: 'cancelled',
+      status: 'idle',
+      errorDetails: '用户已停止生成',
+    })
+  })
 })

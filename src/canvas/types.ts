@@ -27,7 +27,7 @@ export type CanvasGenerationPayload = {
   createdAt: string
 }
 
-export type CanvasGenerationJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+export type CanvasGenerationJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 export type CanvasGenerationJobResult = {
   content: string

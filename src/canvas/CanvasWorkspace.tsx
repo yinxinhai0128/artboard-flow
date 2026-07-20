@@ -179,12 +179,12 @@ const statusLabels: Record<NonNullable<CanvasNode['metadata']['status']>, string
   error: '失败',
 }
 
-const jobStatusLabels = {
+const jobStatusLabels: Partial<Record<NonNullable<CanvasNode['metadata']['generationJobStatus']>, string>> = {
   queued: '已提交',
   running: '运行中',
   succeeded: '已完成',
   failed: '失败',
-} satisfies Record<NonNullable<CanvasNode['metadata']['generationJobStatus']>, string>
+}
 
 const activeGenerationJobStatuses = new Set<NonNullable<CanvasNode['metadata']['generationJobStatus']>>(['queued', 'running'])
 
@@ -1223,6 +1223,28 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller, nodesById],
   )
 
+  const cancelGenerationTaskNode = useCallback(
+    async (taskNodeId: string) => {
+      const taskNode = nodesById.get(taskNodeId)
+      const jobId = taskNode?.metadata.generationJobId
+      if (!jobId) return
+      try {
+        const job = await canvasApi.cancelGenerationJob(jobId)
+        controller.updateNode(taskNodeId, {
+          metadata: metadataFromGenerationJob(job, taskNode.metadata),
+        })
+      } catch (error) {
+        controller.updateNode(taskNodeId, {
+          metadata: {
+            status: 'error',
+            errorDetails: error instanceof Error ? error.message : '停止生成任务失败',
+          },
+        })
+      }
+    },
+    [controller, nodesById],
+  )
+
   useEffect(() => {
     const activeTasks = controller.project.nodes.filter(isActiveGenerationJob)
     if (!activeTasks.length) return
@@ -1468,6 +1490,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onRetryGenerationTask={retryGenerationTaskNode}
                 onSubmitGenerationTask={submitGenerationTaskNode}
                 onRefreshGenerationTask={refreshGenerationTaskNode}
+                onCancelGenerationTask={cancelGenerationTaskNode}
                 mentionReferences={mentionReferencesByNodeId.get(node.id) ?? []}
                 splitOutputCount={splitOutputCounts.get(node.id) ?? 0}
                 onSplitGenerationOutputs={splitGenerationOutputs}
@@ -1736,6 +1759,7 @@ function CanvasNodeView({
   onRetryGenerationTask,
   onSubmitGenerationTask,
   onRefreshGenerationTask,
+  onCancelGenerationTask,
   mentionReferences,
   splitOutputCount,
   onSplitGenerationOutputs,
@@ -1764,6 +1788,7 @@ function CanvasNodeView({
   onRetryGenerationTask: (nodeId: string) => void
   onSubmitGenerationTask: (nodeId: string) => void
   onRefreshGenerationTask: (nodeId: string) => void
+  onCancelGenerationTask: (nodeId: string) => void
   mentionReferences: CanvasResourceReference[]
   splitOutputCount: number
   onSplitGenerationOutputs: (node: CanvasNode) => void
@@ -1831,6 +1856,7 @@ function CanvasNodeView({
         onRetryGenerationTask={onRetryGenerationTask}
         onSubmitGenerationTask={onSubmitGenerationTask}
         onRefreshGenerationTask={onRefreshGenerationTask}
+        onCancelGenerationTask={onCancelGenerationTask}
         mentionReferences={mentionReferences}
         splitOutputCount={splitOutputCount}
         onSplitGenerationOutputs={onSplitGenerationOutputs}
@@ -2386,6 +2412,7 @@ function NodeBody({
   onRetryGenerationTask,
   onSubmitGenerationTask,
   onRefreshGenerationTask,
+  onCancelGenerationTask,
   splitOutputCount,
   onSplitGenerationOutputs,
   onToggleSplitOutputs,
@@ -2399,6 +2426,7 @@ function NodeBody({
   onRetryGenerationTask: (nodeId: string) => void
   onSubmitGenerationTask: (nodeId: string) => void
   onRefreshGenerationTask: (nodeId: string) => void
+  onCancelGenerationTask: (nodeId: string) => void
   splitOutputCount: number
   onSplitGenerationOutputs: (node: CanvasNode) => void
   onToggleSplitOutputs: (node: CanvasNode) => void
@@ -2419,7 +2447,7 @@ function NodeBody({
     && (!node.metadata.content || node.metadata.status === 'loading' || node.metadata.status === 'error')
 
   if (shouldRenderGenerationTask) {
-    return <GenerationTaskBody node={node} onRetry={onRetryGenerationTask} onSubmit={onSubmitGenerationTask} onRefresh={onRefreshGenerationTask} />
+    return <GenerationTaskBody node={node} onRetry={onRetryGenerationTask} onSubmit={onSubmitGenerationTask} onRefresh={onRefreshGenerationTask} onCancel={onCancelGenerationTask} />
   }
   if (node.type === 'group') {
     return (
@@ -2624,11 +2652,13 @@ function GenerationTaskBody({
   onRetry,
   onSubmit,
   onRefresh,
+  onCancel,
 }: {
   node: CanvasNode
   onRetry: (nodeId: string) => void
   onSubmit: (nodeId: string) => void
   onRefresh: (nodeId: string) => void
+  onCancel: (nodeId: string) => void
 }) {
   const payload = node.metadata.generationPayload
   if (!payload) return null
@@ -2669,6 +2699,9 @@ function GenerationTaskBody({
         </button>
         <button data-canvas-input disabled={!node.metadata.generationJobId} onClick={() => onRefresh(node.id)}>
           刷新状态
+        </button>
+        <button data-canvas-input disabled={status !== 'loading' || !node.metadata.generationJobId} onClick={() => onCancel(node.id)}>
+          停止任务
         </button>
         <button data-canvas-input onClick={() => void navigator.clipboard?.writeText(serializedPayload)}>
           复制 Payload

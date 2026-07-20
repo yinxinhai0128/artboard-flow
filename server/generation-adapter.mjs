@@ -1,4 +1,4 @@
-export const GENERATION_JOB_STATUSES = new Set(['queued', 'running', 'succeeded', 'failed'])
+export const GENERATION_JOB_STATUSES = new Set(['queued', 'running', 'succeeded', 'failed', 'cancelled'])
 
 export function normalizeGenerationJobPayload(input = {}) {
   const payload = input && typeof input === 'object' && !Array.isArray(input) ? input : {}

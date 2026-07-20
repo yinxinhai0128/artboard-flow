@@ -43,4 +43,9 @@ export const canvasApi = {
       body: JSON.stringify({ projectId, nodeId, payload }),
     }),
   getGenerationJob: (id: string) => request<CanvasGenerationJob>(`/api/generation/jobs/${id}`),
+  cancelGenerationJob: (id: string) =>
+    request<CanvasGenerationJob>(`/api/generation/jobs/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
 }

@@ -139,6 +139,13 @@ export function metadataFromGenerationJob(job: CanvasGenerationJob, current: Can
       errorDetails: job.error || '生成任务失败',
     }
   }
+  if (job.status === 'cancelled') {
+    return {
+      ...base,
+      status: 'idle',
+      errorDetails: job.error || '用户已停止生成',
+    }
+  }
   if (job.status === 'succeeded') {
     return {
       ...base,

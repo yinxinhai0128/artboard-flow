@@ -299,6 +299,26 @@ app.get('/api/generation/jobs/:id', async (request, reply) => {
   return parseGenerationJob(row)
 })
 
+app.post('/api/generation/jobs/:id/cancel', async (request, reply) => {
+  const previous = db.prepare('select * from generation_jobs where id = ?').get(request.params.id)
+  if (!previous) return reply.code(404).send({ error: 'GENERATION_JOB_NOT_FOUND' })
+
+  const currentStatus = normalizeGenerationJobStatus(previous.status)
+  if (currentStatus === 'succeeded' || currentStatus === 'failed' || currentStatus === 'cancelled') {
+    return parseGenerationJob(previous)
+  }
+
+  const updatedAt = nowIso()
+  db.prepare(`
+    update generation_jobs
+    set status = 'cancelled', updated_at = ?, error = ?
+    where id = ?
+  `).run(updatedAt, '用户已停止生成', request.params.id)
+
+  const row = db.prepare('select * from generation_jobs where id = ?').get(request.params.id)
+  return parseGenerationJob(row)
+})
+
 app.put('/api/generation/jobs/:id', async (request, reply) => {
   const previous = db.prepare('select * from generation_jobs where id = ?').get(request.params.id)
   if (!previous) return reply.code(404).send({ error: 'GENERATION_JOB_NOT_FOUND' })

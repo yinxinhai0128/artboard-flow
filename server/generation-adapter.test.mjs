@@ -29,6 +29,7 @@ describe('generation adapter normalization', () => {
 
   it('normalizes job statuses and external results', () => {
     expect(normalizeGenerationJobStatus('running')).toBe('running')
+    expect(normalizeGenerationJobStatus('cancelled')).toBe('cancelled')
     expect(normalizeGenerationJobStatus('unknown')).toBe('queued')
     expect(normalizeGenerationJobResult({ url: 'https://cdn/result.png', mimeType: 'image/png', width: 640, height: 480 })).toEqual({
       content: 'https://cdn/result.png',
