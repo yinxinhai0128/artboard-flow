@@ -174,7 +174,7 @@ export function applyGenerationJobToProject(project: CanvasProject, taskNodeId: 
   if (!taskNode) return project
 
   const taskMetadata = metadataFromGenerationJob(job, taskNode.metadata)
-  const outputNodeId = taskNode.metadata.outputNodeId
+  const outputNodeId = taskNode.metadata.outputNodeId ?? taskNode.id
 
   const updatedProject = {
     ...project,
@@ -198,7 +198,7 @@ export function applyGenerationJobToProject(project: CanvasProject, taskNodeId: 
       return node
     }),
   }
-  if (!outputNodeId || job.status !== 'succeeded' || !createId) return updatedProject
+  if (job.status !== 'succeeded' || !createId) return updatedProject
   return splitGenerationOutputsInProject(updatedProject, outputNodeId, createId)?.project ?? updatedProject
 }
 
