@@ -1193,7 +1193,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!payload) return
       try {
         const job = await canvasApi.submitGenerationJob(controller.project.id, taskNodeId, payload)
-        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job))
+        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job, () => crypto.randomUUID()))
       } catch (error) {
         controller.updateNode(taskNodeId, {
           metadata: {
@@ -1213,7 +1213,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!jobId) return
       try {
         const job = await canvasApi.getGenerationJob(jobId)
-        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job))
+        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job, () => crypto.randomUUID()))
       } catch (error) {
         controller.updateNode(taskNodeId, {
           metadata: {
@@ -1233,7 +1233,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!jobId) return
       try {
         const job = await canvasApi.cancelGenerationJob(jobId)
-        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job))
+        controller.updateProject((current) => applyGenerationJobToProject(current, taskNodeId, job, () => crypto.randomUUID()))
       } catch (error) {
         controller.updateNode(taskNodeId, {
           metadata: {
@@ -1263,7 +1263,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             if (!latestNode) return
             const metadata = metadataFromGenerationJob(job, latestNode.metadata)
             if (hasGenerationMetadataChanged(latestNode.metadata, metadata)) {
-              controller.updateProject((current) => applyGenerationJobToProject(current, taskNode.id, job), false)
+              controller.updateProject((current) => applyGenerationJobToProject(current, taskNode.id, job, () => crypto.randomUUID()), false)
             }
           } catch {
             // 自动轮询不把临时网络错误写成节点失败；用户仍可手动刷新查看详细错误。

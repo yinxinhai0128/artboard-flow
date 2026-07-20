@@ -1,4 +1,5 @@
 import { CONFIG_REFERENCE_PATTERN, getGenerationResourceNodes } from './resourceReferences'
+import { splitGenerationOutputsInProject } from './outputSplit'
 import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasProject, CanvasResourceNodeKind } from './types'
 
 export type CanvasGenerationInput = {
@@ -168,14 +169,14 @@ export function metadataFromGenerationJob(job: CanvasGenerationJob, current: Can
   }
 }
 
-export function applyGenerationJobToProject(project: CanvasProject, taskNodeId: string, job: CanvasGenerationJob): CanvasProject {
+export function applyGenerationJobToProject(project: CanvasProject, taskNodeId: string, job: CanvasGenerationJob, createId?: () => string): CanvasProject {
   const taskNode = project.nodes.find((node) => node.id === taskNodeId)
   if (!taskNode) return project
 
   const taskMetadata = metadataFromGenerationJob(job, taskNode.metadata)
   const outputNodeId = taskNode.metadata.outputNodeId
 
-  return {
+  const updatedProject = {
     ...project,
     nodes: project.nodes.map((node) => {
       if (node.id === taskNode.id) {
@@ -197,6 +198,8 @@ export function applyGenerationJobToProject(project: CanvasProject, taskNodeId: 
       return node
     }),
   }
+  if (!outputNodeId || job.status !== 'succeeded' || !createId) return updatedProject
+  return splitGenerationOutputsInProject(updatedProject, outputNodeId, createId)?.project ?? updatedProject
 }
 
 function generationInputFromNode(node: CanvasNode): CanvasGenerationInput | null {

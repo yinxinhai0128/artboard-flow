@@ -365,4 +365,74 @@ describe('canvas generation context', () => {
     })
     expect(updated.connections).toEqual(project.connections)
   })
+
+  it('materializes multiple completed outputs as connected result nodes', () => {
+    const payload = buildCanvasGenerationPayload(buildCanvasGenerationContext('config', [configNode, imageNode], [{ id: 'c1', fromNodeId: 'image', toNodeId: 'config' }]))
+    const taskNode: CanvasNode = {
+      ...imageNode,
+      id: 'task',
+      title: 'Image generation task',
+      metadata: {
+        generationPayload: payload,
+        outputNodeId: 'output',
+        status: 'loading',
+        prompt: payload.prompt,
+      },
+    }
+    const outputNode: CanvasNode = {
+      ...imageNode,
+      id: 'output',
+      title: 'Generated image',
+      position: { x: 420, y: 100 },
+      width: 320,
+      height: 240,
+      metadata: {
+        generationPayload: payload,
+        status: 'loading',
+        prompt: payload.prompt,
+      },
+    }
+    const project: CanvasProject = {
+      id: 'project-1',
+      title: 'Generation project',
+      createdAt: '2026-07-19T00:00:00.000Z',
+      updatedAt: '2026-07-19T00:00:00.000Z',
+      nodes: [configNode, taskNode, outputNode],
+      connections: [{ id: 'config-output', fromNodeId: 'config', toNodeId: 'output' }],
+      backgroundMode: 'dots',
+      viewport: { x: 0, y: 0, k: 1 },
+    }
+    const job: CanvasGenerationJob = {
+      id: 'job-1',
+      projectId: 'project-1',
+      nodeId: 'task',
+      status: 'succeeded',
+      createdAt: '2026-07-19T10:00:00.000Z',
+      updatedAt: '2026-07-19T10:05:00.000Z',
+      payload,
+      result: {
+        content: 'data:image/png;base64,first',
+        mimeType: 'image/png',
+        outputs: [
+          { content: 'data:image/png;base64,first', mimeType: 'image/png', naturalWidth: 64, naturalHeight: 64 },
+          { content: 'data:image/png;base64,second', mimeType: 'image/png', naturalWidth: 128, naturalHeight: 96 },
+        ],
+      },
+    }
+    const ids = ['child-1', 'edge-1', 'child-2', 'edge-2']
+
+    const updated = applyGenerationJobToProject(project, 'task', job, () => ids.shift()!)
+    const splitNodes = updated.nodes.filter((node) => node.metadata.splitSourceNodeId === 'output')
+
+    expect(splitNodes.map((node) => node.id)).toEqual(['child-1', 'child-2'])
+    expect(splitNodes.map((node) => node.metadata.content)).toEqual([
+      'data:image/png;base64,first',
+      'data:image/png;base64,second',
+    ])
+    expect(updated.connections).toEqual([
+      { id: 'config-output', fromNodeId: 'config', toNodeId: 'output' },
+      { id: 'edge-1', fromNodeId: 'output', toNodeId: 'child-1' },
+      { id: 'edge-2', fromNodeId: 'output', toNodeId: 'child-2' },
+    ])
+  })
 })
