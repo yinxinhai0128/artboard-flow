@@ -9,6 +9,7 @@ import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, ins
 import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForProject } from './graph'
+import { materializeClipboardMediaAssets } from './mediaAssets'
 import { promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
 
@@ -536,7 +537,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (!isCanvasFragmentFile(file)) return false
       try {
         const clipboard = await readCanvasClipboardFile(file)
-        return controller.pasteClipboard(clipboard, targetCenter)
+        const materialized = await materializeClipboardMediaAssets(clipboard, canvasApi.uploadAsset)
+        return controller.pasteClipboard(materialized, targetCenter)
       } catch {
         return false
       }

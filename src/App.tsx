@@ -3,6 +3,7 @@ import { Code2, Download, Edit3, FileUp, Plus, Trash2 } from 'lucide-react'
 import { canvasApi } from './canvas/api'
 import { CanvasWorkspace } from './canvas/CanvasWorkspace'
 import { downloadCanvasProjects, readCanvasProjectsFile } from './canvas/export'
+import { materializeProjectMediaAssets } from './canvas/mediaAssets'
 import { createProjectSaveQueue } from './canvas/saveQueue'
 import type { CanvasProject } from './canvas/types'
 
@@ -145,7 +146,8 @@ function App() {
       const parsedProjects = await readCanvasProjectsFile(file)
       const importedProjects: CanvasProject[] = []
       for (const parsed of parsedProjects) {
-        importedProjects.push(await canvasApi.importProject(parsed))
+        const materialized = await materializeProjectMediaAssets(parsed, canvasApi.uploadAsset)
+        importedProjects.push(await canvasApi.importProject(materialized))
       }
       setProjects((current) => [...importedProjects, ...current])
       if (importedProjects[0]) openProject(importedProjects[0].id)
