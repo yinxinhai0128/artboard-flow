@@ -7,6 +7,7 @@ import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFro
 import { canvasApi } from './api'
 import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
+import { relationCountsForProject } from './graph'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -358,17 +359,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     () => visibleNodesInViewport(renderableNodes, controller.project.viewport, canvasSize),
     [canvasSize, controller.project.viewport, renderableNodes],
   )
-  const relationCounts = useMemo(() => {
-    const counts = new Map<string, { incoming: number; outgoing: number }>()
-    controller.project.nodes.forEach((node) => counts.set(node.id, { incoming: 0, outgoing: 0 }))
-    controller.project.connections.forEach((connection) => {
-      const from = counts.get(connection.fromNodeId)
-      const to = counts.get(connection.toNodeId)
-      if (from) from.outgoing += 1
-      if (to) to.incoming += 1
-    })
-    return counts
-  }, [controller.project.connections, controller.project.nodes])
+  const relationCounts = useMemo(() => relationCountsForProject(controller.project), [controller.project])
   const splitOutputCounts = useMemo(() => {
     const counts = new Map<string, number>()
     controller.project.nodes.forEach((node) => {
