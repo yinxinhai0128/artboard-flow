@@ -5,7 +5,7 @@ import type { CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDr
 import { useCanvasController } from './useCanvasController'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext, type CanvasGenerationInput } from './generation'
 import { canvasApi } from './api'
-import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, resolveConnectionToNode, type ConnectionNodePair, type NodeRelations } from './document'
+import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -521,9 +521,30 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [canvasCenterWorld, controller],
   )
 
+  const pasteCanvasClipboardText = useCallback(
+    (text: string) => {
+      const clipboard = parseCanvasClipboardText(text)
+      return Boolean(clipboard && controller.pasteClipboard(clipboard, canvasCenterWorld()))
+    },
+    [canvasCenterWorld, controller],
+  )
+
+  const writeCanvasClipboardText = useCallback((clipboard: CanvasClipboard | null) => {
+    const text = serializeCanvasClipboard(clipboard)
+    if (!text) return
+    void navigator.clipboard?.writeText?.(text).catch(() => undefined)
+  }, [])
+
+  const copySelectionToClipboard = useCallback(() => {
+    const clipboard = controller.copySelection()
+    writeCanvasClipboardText(clipboard)
+  }, [controller, writeCanvasClipboardText])
+
   const pasteClipboardData = useCallback(
     async (clipboardData: DataTransfer | null) => {
       if (!clipboardData) return false
+      const text = clipboardData.getData('text/plain')
+      if (pasteCanvasClipboardText(text)) return true
       const files = [
         ...Array.from(clipboardData.files),
         ...Array.from(clipboardData.items)
@@ -536,9 +557,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         for (const file of uniqueFiles) await addClipboardFileNode(file)
         return true
       }
-      return addClipboardTextNode(clipboardData.getData('text/plain'))
+      return addClipboardTextNode(text)
     },
-    [addClipboardFileNode, addClipboardTextNode],
+    [addClipboardFileNode, addClipboardTextNode, pasteCanvasClipboardText],
   )
 
   const pasteSystemClipboard = useCallback(async () => {
@@ -560,11 +581,12 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     try {
       const text = (await navigator.clipboard?.readText?.())?.trim()
       if (!text) return false
+      if (pasteCanvasClipboardText(text)) return true
       return addClipboardTextNode(text)
     } catch {
       return false
     }
-  }, [addClipboardFileNode, addClipboardTextNode])
+  }, [addClipboardFileNode, addClipboardTextNode, pasteCanvasClipboardText])
 
   const openMediaUpload = useCallback((node: CanvasNode) => {
     if (!isUploadableMediaNode(node)) return
@@ -911,7 +933,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }
       if (mod && !event.altKey && key === 'c') {
         event.preventDefault()
-        controller.copySelection()
+        copySelectionToClipboard()
         return
       }
       if (mod && !event.altKey && key === 'v') {
@@ -961,7 +983,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('keyup', keyup)
     }
-  }, [canvasCenterWorld, controller, pasteSystemClipboard, setActiveConnectionDraft])
+  }, [canvasCenterWorld, controller, copySelectionToClipboard, pasteSystemClipboard, setActiveConnectionDraft])
 
   useEffect(() => {
     const paste = (event: ClipboardEvent) => {
@@ -1568,7 +1590,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             count={controller.selectedNodeIds.length}
             onDeselect={controller.clearSelection}
             onGroup={controller.groupSelection}
-            onCopy={controller.copySelection}
+            onCopy={copySelectionToClipboard}
             onDuplicate={() => {
               controller.copySelection()
               controller.pasteSelection()

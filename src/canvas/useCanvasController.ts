@@ -298,24 +298,26 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
   )
 
   const copySelection = useCallback(() => {
-    clipboardRef.current = copySelectionToClipboard(localProject, selectedNodeIds)
+    const clipboard = copySelectionToClipboard(localProject, selectedNodeIds)
+    clipboardRef.current = clipboard
+    return clipboard
   }, [localProject, selectedNodeIds])
 
-  const pasteSelection = useCallback((targetCenter?: Point) => {
-    const clipboard = clipboardRef.current
+  const pasteClipboard = useCallback((clipboard: CanvasClipboard | null, targetCenter?: Point) => {
     if (!clipboard?.nodes.length) return false
-    let pastedNodeIds: string[] = []
     commit((current) => {
       const pasted = pasteClipboardIntoProject(current, clipboard, createId, targetCenter)
       if (!pasted) return current
-      pastedNodeIds = pasted.nodeIds
+      queueMicrotask(() => {
+        setSelectedNodeIds(pasted.nodeIds)
+        setSelectedConnectionId(null)
+      })
       return pasted.project
     })
-    if (!pastedNodeIds.length) return false
-    setSelectedNodeIds(pastedNodeIds)
-    setSelectedConnectionId(null)
     return true
   }, [commit])
+
+  const pasteSelection = useCallback((targetCenter?: Point) => pasteClipboard(clipboardRef.current, targetCenter), [pasteClipboard])
 
   const undo = useCallback(() => {
     setHistory((value) => {
@@ -367,6 +369,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
     clearSelection,
     applySelectionBox,
     copySelection,
+    pasteClipboard,
     pasteSelection,
     captureHistory,
     undo,

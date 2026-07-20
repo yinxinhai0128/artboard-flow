@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, pasteClipboardIntoProject, resolveConnectionToNode, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, parseCanvasClipboardText, pasteClipboardIntoProject, resolveConnectionToNode, serializeCanvasClipboard, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -242,6 +242,34 @@ describe('canvas document operations', () => {
     expect(child?.metadata.splitSourceNodeId).toBeUndefined()
     expect(child?.metadata.splitOutputIndex).toBeUndefined()
     expect(isHiddenSplitChild(child!, pasted!.project.nodes)).toBe(false)
+  })
+
+  it('serializes canvas clipboard fragments for cross-session paste', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...groupNode('group'), position: { x: 100, y: 100 }, width: 300, height: 240 },
+        { ...baseNode('a'), position: { x: 150, y: 150 }, metadata: { groupId: 'group' } },
+        { ...baseNode('b'), position: { x: 280, y: 160 }, metadata: { groupId: 'group' } },
+      ],
+      connections: [{ id: 'a-b', fromNodeId: 'a', toNodeId: 'b' }],
+    }
+    const clipboard = copySelectionToClipboard(source, ['group', 'a', 'b'])
+    const serialized = serializeCanvasClipboard(clipboard)
+    const ids = ['group-copy', 'a-copy', 'b-copy', 'a-b-copy']
+    const parsed = parseCanvasClipboardText(serialized)
+    const pasted = pasteClipboardIntoProject(project, parsed, () => ids.shift()!, { x: 900, y: 500 })
+
+    expect(serialized).toContain('"type":"canvas-clipboard"')
+    expect(parsed?.nodes.map((node) => node.id)).toEqual(['group', 'a', 'b'])
+    expect(pasted?.project.nodes.find((node) => node.id === 'a-copy')?.metadata.groupId).toBe('group-copy')
+    expect(pasted?.project.connections.at(-1)).toEqual({ id: 'a-b-copy', fromNodeId: 'a-copy', toNodeId: 'b-copy' })
+  })
+
+  it('rejects ordinary text and incomplete canvas clipboard fragments', () => {
+    expect(parseCanvasClipboardText('hello world')).toBeNull()
+    expect(parseCanvasClipboardText(JSON.stringify({ app: 'artboard-flow', type: 'canvas-clipboard', version: 1, clipboard: { nodes: [], connections: [] } }))).toBeNull()
+    expect(serializeCanvasClipboard(null)).toBe('')
   })
 
   it('deletes a selected connection without removing nodes', () => {

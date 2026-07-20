@@ -24,6 +24,13 @@ export type CanvasClipboard = {
   connections: CanvasConnection[]
 }
 
+type CanvasClipboardFile = {
+  app: 'artboard-flow'
+  type: 'canvas-clipboard'
+  version: 1
+  clipboard: CanvasClipboard
+}
+
 export const CONNECTION_HANDLE_HIT_RADIUS = 40
 export const CONNECTION_NODE_HIT_PADDING = 32
 
@@ -253,6 +260,69 @@ export function copySelectionToClipboard(project: CanvasProject, nodeIds: string
       .filter((connection) => selected.has(connection.fromNodeId) && selected.has(connection.toNodeId))
       .map((connection) => ({ ...connection })),
   }
+}
+
+export function serializeCanvasClipboard(clipboard: CanvasClipboard | null) {
+  if (!clipboard?.nodes.length) return ''
+  return JSON.stringify({
+    app: 'artboard-flow',
+    type: 'canvas-clipboard',
+    version: 1,
+    clipboard,
+  } satisfies CanvasClipboardFile)
+}
+
+export function parseCanvasClipboardText(text: string): CanvasClipboard | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!isCanvasClipboardFile(parsed)) return null
+  const nodeIds = new Set(parsed.clipboard.nodes.map((node) => node.id))
+  const connections = parsed.clipboard.connections.filter((connection) => nodeIds.has(connection.fromNodeId) && nodeIds.has(connection.toNodeId))
+  return connections.length === parsed.clipboard.connections.length
+    ? parsed.clipboard
+    : { ...parsed.clipboard, connections }
+}
+
+function isCanvasClipboardFile(value: unknown): value is CanvasClipboardFile {
+  if (!value || typeof value !== 'object') return false
+  const file = value as CanvasClipboardFile
+  return file.app === 'artboard-flow' &&
+    file.type === 'canvas-clipboard' &&
+    file.version === 1 &&
+    Boolean(file.clipboard) &&
+    Array.isArray(file.clipboard.nodes) &&
+    file.clipboard.nodes.length > 0 &&
+    file.clipboard.nodes.every(isClipboardNode) &&
+    Array.isArray(file.clipboard.connections) &&
+    file.clipboard.connections.every(isClipboardConnection)
+}
+
+function isClipboardNode(value: unknown): value is CanvasNode {
+  if (!value || typeof value !== 'object') return false
+  const node = value as CanvasNode
+  return typeof node.id === 'string' &&
+    typeof node.type === 'string' &&
+    typeof node.title === 'string' &&
+    isClipboardPoint(node.position) &&
+    Number.isFinite(node.width) &&
+    Number.isFinite(node.height) &&
+    Boolean(node.metadata) &&
+    typeof node.metadata === 'object' &&
+    !Array.isArray(node.metadata)
+}
+
+function isClipboardConnection(value: unknown): value is CanvasConnection {
+  if (!value || typeof value !== 'object') return false
+  const connection = value as CanvasConnection
+  return typeof connection.id === 'string' && typeof connection.fromNodeId === 'string' && typeof connection.toNodeId === 'string'
+}
+
+function isClipboardPoint(value: unknown): value is Point {
+  return Boolean(value && typeof value === 'object' && Number.isFinite((value as Point).x) && Number.isFinite((value as Point).y))
 }
 
 export function pasteClipboardIntoProject(
