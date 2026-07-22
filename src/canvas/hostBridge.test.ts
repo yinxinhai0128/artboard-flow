@@ -315,6 +315,41 @@ describe('canvas host bridge', () => {
     expect(videoResult.generationRequests[0]?.prompt).toContain('@[node:text-')
   })
 
+  it('keeps an image prompt flow shortcut compatible with agent-style commands', () => {
+    let currentProject = project
+    let counter = 1
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: (prefix = 'id') => `${prefix}-${counter++}`,
+      now: () => '2026-07-20T07:30:00.000Z',
+    })
+
+    const result = bridge.createImagePromptFlow({
+      prompt: 'agent compatible image flow',
+      x: 120,
+      y: 160,
+      model: 'image-model',
+      size: '1024x1024',
+      count: 2,
+      autoRun: true,
+    })
+    const textNode = result.project.nodes.find((node) => node.type === 'text')
+    const configNode = result.project.nodes.find((node) => node.type === 'config')
+    const taskNode = result.project.nodes.find((node) => node.type === 'image' && node.metadata.generationPayload?.mode === 'image' && !node.metadata.outputNodeId)
+
+    expect(textNode?.position).toEqual({ x: 120, y: 160 })
+    expect(configNode?.metadata).toMatchObject({ generationMode: 'image', model: 'image-model', size: '1024x1024', count: 2 })
+    expect(taskNode?.metadata.generationPayload?.prompt).toContain('agent compatible image flow')
+    expect(result.generationRequests).toHaveLength(1)
+  })
+
   it('updates arbitrary node fields and metadata for host-side generated results', () => {
     let currentProject = project
     const bridge = createCanvasHostBridge({

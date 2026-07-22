@@ -60,7 +60,7 @@ npm run build
 - 读取：`getSnapshot()`、`getGraph()`、`exportSnapshot()`、`getSelection()`。
 - 节点：`createNode()`、`createTextNode()`、`createTextNodes()`、`createConfigNode()`、`updateNode()`、`updateNodeText()`、`moveNodes()`、`resizeNode()`、`deleteNodes()`。
 - 连线与视口：`connectNodes()`、`deleteConnections()`、`selectNodes()`、`setViewport()`。
-- 生成流程：`createGenerationFlow()`、`generateImage()`、`generateVideo()`、`generateText()`、`runGeneration()` 会创建配置/任务节点与关系；`submitGenerationTask()` 会把任务节点提交给宿主生成适配器；`getGenerationStatus()` 可按 `taskId`、`nodeIds`、`scope`、`limit` 查询真实任务状态。
+- 生成流程：`createGenerationFlow()`、`createImagePromptFlow()`、`generateImage()`、`generateVideo()`、`generateText()`、`runGeneration()` 会创建配置/任务节点与关系；`submitGenerationTask()` 会把任务节点提交给宿主生成适配器；`getGenerationStatus()` 可按 `taskId`、`nodeIds`、`scope`、`limit` 查询真实任务状态。
 - 素材：`listAssets()`、`addAsset()`、`addAssetNode()` 可对接宿主素材库。
 - 历史：`undo()`、`canUndo()` 支持宿主侧撤销入口。
 
