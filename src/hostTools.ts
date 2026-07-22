@@ -7,7 +7,23 @@ export type ArtboardFlowHostToolInfo = {
   name: string
   scope: ArtboardFlowHostToolScope
   description: string
+  inputSchema: HostToolInputSchema
 }
+
+type HostToolInputSchema = {
+  type: 'object'
+  required?: string[]
+  properties: Record<string, HostToolInputSchemaProperty>
+  additionalProperties?: boolean
+}
+
+type HostToolInputSchemaProperty =
+  | { type: 'string' | 'number' | 'boolean' | 'object'; description?: string }
+  | { type: 'array'; description?: string; items?: HostToolInputArrayItemSchema }
+
+type HostToolInputArrayItemSchema =
+  | { type: 'string' | 'number' | 'boolean' }
+  | { type: 'object'; required?: string[]; properties: Record<string, HostToolInputSchemaProperty> }
 
 type HostToolContext = {
   app?: Partial<ArtboardFlowAppHostBridge>
@@ -66,8 +82,8 @@ export type ArtboardFlowHostToolName = (typeof artboardFlowHostToolNames)[number
 
 export function listArtboardFlowHostTools(): ArtboardFlowHostToolInfo[] {
   return [
-    ...appToolNames.map((name) => ({ name, scope: 'app' as const, description: hostToolDescriptions[name] })),
-    ...canvasToolNames.map((name) => ({ name, scope: 'canvas' as const, description: hostToolDescriptions[name] })),
+    ...appToolNames.map((name) => ({ name, scope: 'app' as const, description: hostToolDescriptions[name], inputSchema: hostToolInputSchemas[name] })),
+    ...canvasToolNames.map((name) => ({ name, scope: 'canvas' as const, description: hostToolDescriptions[name], inputSchema: hostToolInputSchemas[name] })),
   ]
 }
 
@@ -105,6 +121,159 @@ const hostToolDescriptions: Record<ArtboardFlowHostToolName, string> = {
   assets_add: '新增文本或图片素材到宿主素材库。',
 }
 
+const emptyInputSchema = objectSchema({})
+const pointProperties = {
+  x: { type: 'number' as const },
+  y: { type: 'number' as const },
+}
+const generationProperties = {
+  prompt: { type: 'string' as const },
+  title: { type: 'string' as const },
+  x: { type: 'number' as const },
+  y: { type: 'number' as const },
+  model: { type: 'string' as const },
+  size: { type: 'string' as const },
+  count: { type: 'number' as const },
+}
+
+const hostToolInputSchemas: Record<ArtboardFlowHostToolName, HostToolInputSchema> = {
+  canvas_list_projects: objectSchema({
+    keyword: { type: 'string' },
+    page: { type: 'number' },
+    pageSize: { type: 'number' },
+  }),
+  canvas_get_active_project: emptyInputSchema,
+  canvas_open_project: objectSchema({
+    id: { type: 'string' },
+    replace: { type: 'boolean' },
+  }),
+  canvas_create_project: objectSchema({
+    title: { type: 'string' },
+    open: { type: 'boolean' },
+  }),
+  canvas_get_state: emptyInputSchema,
+  canvas_get_graph: emptyInputSchema,
+  canvas_get_selection: emptyInputSchema,
+  canvas_export_snapshot: emptyInputSchema,
+  canvas_apply_ops: objectSchema({
+    ops: { type: 'array', items: { type: 'object', required: ['type'], properties: { type: { type: 'string' } } } },
+  }, ['ops']),
+  canvas_create_node: objectSchema({
+    nodeType: { type: 'string' },
+    title: { type: 'string' },
+    x: { type: 'number' },
+    y: { type: 'number' },
+    width: { type: 'number' },
+    height: { type: 'number' },
+    metadata: { type: 'object' },
+  }, ['nodeType']),
+  canvas_create_text_node: objectSchema({
+    text: { type: 'string' },
+    title: { type: 'string' },
+    x: { type: 'number' },
+    y: { type: 'number' },
+    width: { type: 'number' },
+    height: { type: 'number' },
+  }),
+  canvas_create_text_nodes: objectSchema({
+    items: { type: 'array', items: { type: 'object', properties: { text: { type: 'string' }, title: { type: 'string' }, ...pointProperties } } },
+    x: { type: 'number' },
+    y: { type: 'number' },
+    gap: { type: 'number' },
+    direction: { type: 'string' },
+  }, ['items']),
+  canvas_create_config_node: objectSchema({
+    ...generationProperties,
+    mode: { type: 'string' },
+    width: { type: 'number' },
+    height: { type: 'number' },
+    autoRun: { type: 'boolean' },
+  }),
+  canvas_create_image_prompt_flow: objectSchema({
+    ...generationProperties,
+    autoRun: { type: 'boolean' },
+  }, ['prompt']),
+  canvas_create_generation_flow: objectSchema({
+    ...generationProperties,
+    mode: { type: 'string' },
+    referenceNodeIds: { type: 'array', items: { type: 'string' } },
+    autoRun: { type: 'boolean' },
+  }, ['prompt']),
+  canvas_generate_text: objectSchema(generationProperties, ['prompt']),
+  canvas_generate_image: objectSchema(generationProperties, ['prompt']),
+  canvas_generate_video: objectSchema(generationProperties, ['prompt']),
+  canvas_update_node: objectSchema({
+    id: { type: 'string' },
+    patch: { type: 'object' },
+    metadata: { type: 'object' },
+  }, ['id']),
+  canvas_update_node_text: objectSchema({
+    id: { type: 'string' },
+    text: { type: 'string' },
+    title: { type: 'string' },
+  }, ['id', 'text']),
+  canvas_move_nodes: objectSchema({
+    items: { type: 'array', items: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' }, dx: { type: 'number' }, dy: { type: 'number' } } } },
+  }, ['items']),
+  canvas_resize_node: objectSchema({
+    id: { type: 'string' },
+    width: { type: 'number' },
+    height: { type: 'number' },
+    freeResize: { type: 'boolean' },
+  }, ['id', 'width', 'height']),
+  canvas_delete_nodes: objectSchema({
+    ids: { type: 'array', items: { type: 'string' } },
+  }, ['ids']),
+  canvas_delete_connections: objectSchema({
+    id: { type: 'string' },
+    ids: { type: 'array', items: { type: 'string' } },
+    all: { type: 'boolean' },
+  }),
+  canvas_connect_nodes: objectSchema({
+    connections: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['fromNodeId', 'toNodeId'],
+        properties: {
+          id: { type: 'string' },
+          fromNodeId: { type: 'string' },
+          toNodeId: { type: 'string' },
+        },
+      },
+    },
+  }, ['connections']),
+  canvas_select_nodes: objectSchema({
+    ids: { type: 'array', items: { type: 'string' } },
+  }, ['ids']),
+  canvas_set_viewport: objectSchema({
+    viewport: { type: 'object' },
+  }, ['viewport']),
+  canvas_run_generation: objectSchema({
+    nodeId: { type: 'string' },
+    mode: { type: 'string' },
+    prompt: { type: 'string' },
+  }, ['nodeId']),
+  generation_get_status: objectSchema({
+    scope: { type: 'string' },
+    taskId: { type: 'string' },
+    nodeIds: { type: 'array', items: { type: 'string' } },
+    limit: { type: 'number' },
+  }),
+  assets_list: objectSchema({
+    kind: { type: 'string' },
+    keyword: { type: 'string' },
+    page: { type: 'number' },
+    pageSize: { type: 'number' },
+  }),
+  assets_add: objectSchema({
+    kind: { type: 'string' },
+    title: { type: 'string' },
+    content: { type: 'string' },
+    imageUrl: { type: 'string' },
+  }, ['kind']),
+}
+
 export function createArtboardFlowHostTools(options: HostToolRuntimeOptions): ArtboardFlowHostToolsRuntime {
   return {
     listTools: listArtboardFlowHostTools,
@@ -113,8 +282,9 @@ export function createArtboardFlowHostTools(options: HostToolRuntimeOptions): Ar
 }
 
 export async function runArtboardFlowHostTool(context: HostToolContext, name: string, input: unknown = {}) {
-  if (isAppToolName(name)) return runAppTool(requireApp(context), name, objectInput(input))
-  if (isCanvasToolName(name)) return runCanvasTool(requireCanvas(context), name, objectInput(input))
+  const parsedInput = objectInput(input)
+  if (isAppToolName(name)) return runAppTool(requireApp(context), name, validateHostToolInput(name, parsedInput))
+  if (isCanvasToolName(name)) return runCanvasTool(requireCanvas(context), name, validateHostToolInput(name, parsedInput))
   throw new Error('UNKNOWN_HOST_TOOL')
 }
 
@@ -185,4 +355,56 @@ function objectInput(input: unknown): Record<string, unknown> {
 
 function stringField(value: unknown) {
   return typeof value === 'string' ? value : ''
+}
+
+function objectSchema(properties: HostToolInputSchema['properties'], required: string[] = []): HostToolInputSchema {
+  return { type: 'object', properties, required, additionalProperties: true }
+}
+
+function validateHostToolInput(name: ArtboardFlowHostToolName, input: Record<string, unknown>) {
+  const schema = hostToolInputSchemas[name]
+  for (const key of schema.required ?? []) {
+    if (input[key] === undefined) throwInvalidInput(name, `${key} is required`)
+  }
+  Object.entries(schema.properties).forEach(([key, property]) => {
+    const value = input[key]
+    if (value === undefined) return
+    if (property.type === 'array') {
+      if (!Array.isArray(value)) throwInvalidInput(name, `${key} must be an array`)
+      validateArrayItems(name, key, value, property.items)
+      return
+    }
+    if (property.type === 'object') {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throwInvalidInput(name, `${key} must be an object`)
+      return
+    }
+    if (typeof value !== property.type) throwInvalidInput(name, `${key} must be ${property.type}`)
+  })
+  return input
+}
+
+function validateArrayItems(
+  name: ArtboardFlowHostToolName,
+  key: string,
+  items: unknown[],
+  schema: Extract<HostToolInputSchemaProperty, { type: 'array' }>['items'],
+) {
+  if (!schema) return
+  items.forEach((item, index) => {
+    if (schema.type !== 'object') {
+      if (typeof item !== schema.type) throwInvalidInput(name, `${key}[${index}] must be ${schema.type}`)
+      return
+    }
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throwInvalidInput(name, `${key}[${index}] must be an object`)
+    const objectItem = item as Record<string, unknown>
+    for (const requiredKey of schema.required ?? []) {
+      if (typeof objectItem[requiredKey] !== 'string' || !objectItem[requiredKey]) {
+        throwInvalidInput(name, `${key}[${index}].${requiredKey} is required`)
+      }
+    }
+  })
+}
+
+function throwInvalidInput(name: string, reason: string): never {
+  throw new Error(`INVALID_HOST_TOOL_INPUT:${name}:${reason}`)
 }

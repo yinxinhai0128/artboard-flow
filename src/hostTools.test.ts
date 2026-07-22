@@ -65,15 +65,47 @@ describe('artboard flow host tools', () => {
       expect.objectContaining({ name: 'assets_add', scope: 'canvas' }),
     ]))
     expect(listArtboardFlowHostTools()).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: 'canvas_connect_nodes', description: expect.stringContaining('连接节点') }),
+      expect.objectContaining({
+        name: 'canvas_connect_nodes',
+        description: expect.stringContaining('连接节点'),
+        inputSchema: expect.objectContaining({
+          required: ['connections'],
+          properties: expect.objectContaining({
+            connections: expect.objectContaining({ type: 'array' }),
+          }),
+        }),
+      }),
     ]))
     expect(listArtboardFlowHostTools().every((tool) => tool.description.trim().length > 0)).toBe(true)
+    expect(listArtboardFlowHostTools().every((tool) => tool.inputSchema.type === 'object')).toBe(true)
   })
 
   it('reports missing bridges and unknown tools clearly', async () => {
     await expect(runArtboardFlowHostTool({}, 'canvas_get_state', {})).rejects.toThrow('HOST_CANVAS_UNAVAILABLE')
     await expect(runArtboardFlowHostTool({}, 'canvas_list_projects', {})).rejects.toThrow('HOST_APP_UNAVAILABLE')
     await expect(runArtboardFlowHostTool({}, 'not_a_tool', {})).rejects.toThrow('UNKNOWN_HOST_TOOL')
+  })
+
+  it('validates required tool inputs before calling host bridges', async () => {
+    let called = false
+    const canvas = {
+      connectNodes: (input: unknown) => {
+        called = true
+        return { input }
+      },
+    } as unknown as Partial<CanvasHostBridge>
+
+    await expect(runArtboardFlowHostTool({ canvas }, 'canvas_connect_nodes', {
+      connections: [{ fromNodeId: 'source-1' }],
+    })).rejects.toThrow('INVALID_HOST_TOOL_INPUT')
+    expect(called).toBe(false)
+
+    await expect(runArtboardFlowHostTool({ canvas }, 'canvas_connect_nodes', {
+      connections: [{ fromNodeId: 'source-1', toNodeId: 'target-1' }],
+    })).resolves.toEqual({
+      input: { connections: [{ fromNodeId: 'source-1', toNodeId: 'target-1' }] },
+    })
+    expect(called).toBe(true)
   })
 
   it('creates a runtime tool facade from lazy bridge getters', async () => {

@@ -105,4 +105,6 @@ await tools.runTool('canvas_connect_nodes', {
 - AI 工作流：`canvas_create_image_prompt_flow`、`canvas_create_generation_flow`、`canvas_generate_text`、`canvas_generate_image`、`canvas_generate_video`、`canvas_run_generation`、`generation_get_status`。
 - 素材：`assets_list`、`assets_add`。
 
+`listTools()` 返回的每个工具都包含 `name`、`scope`、`description` 和轻量 JSON Schema 风格的 `inputSchema`。`runTool()` 会在进入真实 Host Bridge 前校验关键输入；例如 `canvas_connect_nodes` 必须传入 `connections: [{ fromNodeId, toNodeId }]`，非法输入会抛出 `INVALID_HOST_TOOL_INPUT:*` 错误，方便宿主或 Agent 在外层提示用户修正。
+
 这层不是 UI 空壳，而是薄适配层：它复用真实的画布状态、持久化、节点、连线、素材和生成任务接口。后续接入你已有的网站时，可以直接把这层包装为宿主网站内部的 Agent 工具协议。
