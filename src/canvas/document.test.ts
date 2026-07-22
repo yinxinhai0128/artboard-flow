@@ -405,6 +405,24 @@ describe('canvas document operations', () => {
     expect(findConnectionDropTarget(source, { x: 900, y: 300 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: null, isNearNode: false, blockedNodeId: null })
   })
 
+  it('marks duplicate connection drop targets as blocked', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...baseNode('prompt'), position: { x: 0, y: 0 }, width: 100, height: 80 },
+        { ...imageNode('image'), position: { x: 220, y: 0 }, width: 100, height: 80 },
+      ],
+      connections: [{ id: 'prompt-image', fromNodeId: 'prompt', toNodeId: 'image' }],
+    }
+
+    expect(findConnectionDropTarget(source, { x: 250, y: 30 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({
+      nodeId: null,
+      isNearNode: true,
+      blockedNodeId: 'image',
+    })
+    expect(resolveConnectionToNode(source, { nodeId: 'prompt', handleType: 'source' }, 'image')).toBeNull()
+  })
+
   it('prevents config nodes from acting as connection sources in the document layer', () => {
     const source = {
       ...project,

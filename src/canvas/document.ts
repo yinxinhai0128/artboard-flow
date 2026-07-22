@@ -58,13 +58,18 @@ export function normalizeConnectionForProject(
   return { fromNodeId: first.id, toNodeId: second.id }
 }
 
+function hasConnection(project: CanvasProject, connection: Omit<CanvasConnection, 'id'>): boolean {
+  return project.connections.some((current) => current.fromNodeId === connection.fromNodeId && current.toNodeId === connection.toNodeId)
+}
+
 export function resolveConnectionToNode(
   project: CanvasProject,
   draft: { nodeId: string; handleType: 'source' | 'target' },
   targetNodeId: string,
 ): Omit<CanvasConnection, 'id'> | null {
   if (draft.nodeId === targetNodeId) return null
-  return normalizeConnectionForProject(project, draft.nodeId, targetNodeId, draft.handleType)
+  const connection = normalizeConnectionForProject(project, draft.nodeId, targetNodeId, draft.handleType)
+  return connection && !hasConnection(project, connection) ? connection : null
 }
 
 export function findConnectionDropTarget(
@@ -99,7 +104,8 @@ export function findConnectionDropTarget(
     isNearNode = true
 
     const priority = inside ? 0 : hitsHandle ? 1 : 2
-    if (node.id === draft.nodeId || !normalizeConnectionForProject(project, draft.nodeId, node.id, draft.handleType)) {
+    const connection = normalizeConnectionForProject(project, draft.nodeId, node.id, draft.handleType)
+    if (node.id === draft.nodeId || !connection || hasConnection(project, connection)) {
       if (priority < bestBlockedPriority) {
         bestBlockedNodeId = node.id
         bestBlockedPriority = priority
@@ -463,8 +469,7 @@ export function addConnectionToProject(project: CanvasProject, connection: Canva
   if (!source || !target) return project
   if (source.type === 'group' || target.type === 'group') return project
   if (source.type === 'config' && !isGenerationTaskNode(target)) return project
-  const exists = project.connections.some((current) => current.fromNodeId === connection.fromNodeId && current.toNodeId === connection.toNodeId)
-  if (exists) return project
+  if (hasConnection(project, connection)) return project
   return {
     ...project,
     connections: [...project.connections, connection],
