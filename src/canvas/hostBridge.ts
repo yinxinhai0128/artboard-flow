@@ -37,12 +37,37 @@ type CanvasHostTextNodeInput = {
   width?: number
   height?: number
 }
+type CanvasHostCreateNodeInput = {
+  id?: string
+  nodeType: NodeKind
+  title?: string
+  position?: Point
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  metadata?: Partial<CanvasNode['metadata']>
+}
 type CanvasHostTextNodesInput = {
   items: CanvasHostTextNodeInput[]
   x?: number
   y?: number
   gap?: number
   direction?: 'row' | 'column'
+}
+type CanvasHostConfigNodeInput = {
+  id?: string
+  title?: string
+  mode?: CanvasGenerationMode
+  prompt?: string
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  model?: string
+  size?: string
+  count?: number
+  autoRun?: boolean
 }
 type CanvasHostUpdateNodeTextInput = {
   id: string
@@ -109,7 +134,10 @@ export type CanvasHostBridge = {
   exportSnapshot: () => CanvasHostExportSnapshot
   getSelection: () => CanvasHostSelection
   applyOps: (ops?: CanvasAgentOp[]) => CanvasHostBridgeApplyResult
+  createNode: (input: CanvasHostCreateNodeInput) => CanvasHostBridgeApplyResult
+  createTextNode: (input: CanvasHostTextNodeInput) => CanvasHostBridgeApplyResult
   createTextNodes: (input: CanvasHostTextNodesInput) => CanvasHostBridgeApplyResult
+  createConfigNode: (input: CanvasHostConfigNodeInput) => CanvasHostBridgeApplyResult
   updateNodeText: (input: CanvasHostUpdateNodeTextInput) => CanvasHostBridgeApplyResult
   moveNodes: (input: CanvasHostMoveNodesInput) => CanvasHostBridgeApplyResult
   resizeNode: (input: CanvasHostResizeNodeInput) => CanvasHostBridgeApplyResult
@@ -155,7 +183,10 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     exportSnapshot: () => exportSnapshot(latestSnapshot),
     getSelection: () => getSelection(latestSnapshot),
     applyOps,
+    createNode: (input) => applyOps([createNodeOp(input)]),
+    createTextNode: (input) => applyOps(createTextNodeOps({ items: [input], x: input.x, y: input.y })),
     createTextNodes: (input) => applyOps(createTextNodeOps(input)),
+    createConfigNode: (input) => applyOps(createConfigNodeOps(input)),
     updateNodeText: (input) => applyOps([{
       type: 'update_node',
       id: input.id,
@@ -247,6 +278,19 @@ function getSelection(snapshot: CanvasAgentSnapshot): CanvasHostSelection {
   }
 }
 
+function createNodeOp(input: CanvasHostCreateNodeInput): Extract<CanvasAgentOp, { type: 'add_node' }> {
+  return {
+    type: 'add_node',
+    id: input.id,
+    nodeType: input.nodeType,
+    title: input.title,
+    position: input.position ?? (input.x !== undefined || input.y !== undefined ? { x: input.x ?? 0, y: input.y ?? 0 } : undefined),
+    width: input.width,
+    height: input.height,
+    metadata: input.metadata,
+  }
+}
+
 function createTextNodeOps(input: CanvasHostTextNodesInput): CanvasAgentOp[] {
   const x = input.x ?? 0
   const y = input.y ?? 0
@@ -270,12 +314,50 @@ function createTextNodeOps(input: CanvasHostTextNodesInput): CanvasAgentOp[] {
   }))
 }
 
+function createConfigNodeOps(input: CanvasHostConfigNodeInput): CanvasAgentOp[] {
+  const mode = input.mode ?? 'image'
+  const prompt = input.prompt ?? ''
+  const id = input.id ?? `config-${crypto.randomUUID()}`
+  const ops: CanvasAgentOp[] = [
+    {
+      type: 'add_node',
+      id,
+      nodeType: 'config',
+      title: input.title ?? configNodeTitle(mode),
+      position: { x: input.x ?? 0, y: input.y ?? 0 },
+      width: input.width,
+      height: input.height,
+      metadata: cleanHostMetadata({
+        generationMode: mode,
+        composerContent: prompt,
+        prompt,
+        status: 'idle',
+        model: input.model,
+        size: input.size,
+        count: input.count,
+      }),
+    },
+  ]
+  if (input.autoRun) ops.push({ type: 'run_generation', nodeId: id, mode, prompt })
+  return ops
+}
+
 function movedNodePosition(nodes: CanvasNode[], item: CanvasHostMoveNodesInput['items'][number]): Point {
   const current = nodes.find((node) => node.id === item.id)
   return {
     x: item.x ?? ((current?.position.x ?? 0) + (item.dx ?? 0)),
     y: item.y ?? ((current?.position.y ?? 0) + (item.dy ?? 0)),
   }
+}
+
+function configNodeTitle(mode: CanvasGenerationMode) {
+  if (mode === 'video') return '视频生成'
+  if (mode === 'text') return '文本生成'
+  return '图片生成'
+}
+
+function cleanHostMetadata(metadata: Partial<CanvasNode['metadata']>) {
+  return Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== undefined && value !== '')) as Partial<CanvasNode['metadata']>
 }
 
 function nodeTypeFromMime(mimeType: string): NodeKind {

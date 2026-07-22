@@ -448,4 +448,102 @@ describe('canvas host bridge', () => {
       { id: 'id-3', fromNodeId: 'config-1', toNodeId: 'task-2' },
     ])
   })
+
+  it('provides high-level generic node, text node, and config node creation commands', () => {
+    let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    let counter = 1
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: (prefix = 'id') => `${prefix}-${counter++}`,
+      now: () => '2026-07-20T06:00:00.000Z',
+    })
+
+    bridge.createNode({
+      id: 'image-1',
+      nodeType: 'image',
+      title: 'Reference',
+      x: 120,
+      y: 80,
+      metadata: { content: '/api/assets/ref.png', status: 'success', mimeType: 'image/png' },
+    })
+    bridge.createTextNode({
+      id: 'text-1',
+      title: 'Prompt',
+      text: 'single prompt',
+      x: 460,
+      y: 80,
+      width: 320,
+    })
+    const generated = bridge.createConfigNode({
+      id: 'config-1',
+      title: 'Image Config',
+      mode: 'image',
+      prompt: 'direct config prompt',
+      x: 840,
+      y: 80,
+      model: 'image-model',
+      size: '1024x1024',
+      count: 2,
+      autoRun: true,
+    })
+
+    expect(generated.generationRequests).toEqual([
+      { nodeId: 'config-1', mode: 'image', prompt: 'direct config prompt' },
+    ])
+    expect(bridge.getSnapshot().project.nodes).toMatchObject([
+      {
+        id: 'image-1',
+        type: 'image',
+        title: 'Reference',
+        position: { x: 120, y: 80 },
+        metadata: { content: '/api/assets/ref.png', status: 'success', mimeType: 'image/png' },
+      },
+      {
+        id: 'text-1',
+        type: 'text',
+        title: 'Prompt',
+        position: { x: 460, y: 80 },
+        width: 320,
+        metadata: { content: 'single prompt', status: 'success' },
+      },
+      {
+        id: 'config-1',
+        type: 'config',
+        title: 'Image Config',
+        position: { x: 840, y: 80 },
+        metadata: {
+          generationMode: 'image',
+          composerContent: 'direct config prompt',
+          prompt: 'direct config prompt',
+          model: 'image-model',
+          size: '1024x1024',
+          count: 2,
+          status: 'success',
+          outputNodeId: 'task-1',
+        },
+      },
+      {
+        id: 'task-1',
+        type: 'image',
+        title: '图片生成任务',
+        metadata: {
+          status: 'idle',
+          prompt: 'direct config prompt',
+          model: 'image-model',
+          size: '1024x1024',
+          count: 2,
+        },
+      },
+    ])
+    expect(bridge.getSnapshot().project.connections).toEqual([
+      { id: 'id-2', fromNodeId: 'config-1', toNodeId: 'task-1' },
+    ])
+  })
 })
