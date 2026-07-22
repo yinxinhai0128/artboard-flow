@@ -328,7 +328,7 @@ button:disabled {
   left: 20px;
   top: 20px;
   bottom: 20px;
-  width: 300px;
+  width: var(--side-panel-width, 300px);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
@@ -336,6 +336,40 @@ button:disabled {
   background: rgba(18, 18, 18, 0.9);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(18px);
+}
+
+.node-side-panel-resize-handle {
+  position: absolute;
+  top: 16px;
+  right: -7px;
+  bottom: 16px;
+  width: 14px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.node-side-panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 24px 5px;
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.44);
+  opacity: 0;
+  transition: opacity 0.16s ease, background 0.16s ease;
+}
+
+.node-side-panel-resize-handle:hover::after,
+.node-side-panel-resize-handle:focus-visible::after {
+  opacity: 1;
+}
+
+.node-side-panel-resize-handle:active::after {
+  opacity: 1;
+  background: rgba(134, 239, 172, 0.68);
 }
 
 .node-side-panel-header {
@@ -2157,7 +2191,7 @@ button:disabled {
 }
 
 .canvas-toolbar.with-side-panel {
-  left: 340px;
+  left: calc(var(--side-panel-width, 300px) + 40px);
 }
 
 .canvas-toolbar button {

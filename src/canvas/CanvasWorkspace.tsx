@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
@@ -38,6 +38,7 @@ type PendingConnectionCreate = {
 } | null
 
 type SidePanelTab = 'nodes' | 'assets'
+type SidePanelResizeState = { pointerId: number; startX: number; startWidth: number; maxWidth: number } | null
 
 const nodeIcons = {
   text: Type,
@@ -58,6 +59,9 @@ const nodeKindLabels: Record<NodeKind, string> = {
 }
 
 const resizeCorners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const SIDE_PANEL_DEFAULT_WIDTH = 300
+const SIDE_PANEL_MIN_WIDTH = 260
+const SIDE_PANEL_MAX_WIDTH = 520
 
 async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<CanvasNode> & { type: NodeKind; position: Point }> {
   if (file.type.startsWith('image/')) {
@@ -409,6 +413,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const mediaUploadInputRef = useRef<HTMLInputElement | null>(null)
   const mediaUploadTargetNodeIdRef = useRef<string | null>(null)
   const dragRef = useRef<DragState>(null)
+  const sidePanelResizeRef = useRef<SidePanelResizeState>(null)
   const connectionDraftRef = useRef<ConnectionDraft | null>(null)
   const focusAnimationRef = useRef<number | null>(null)
   const pasteHandledAtRef = useRef(0)
@@ -421,6 +426,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(project.title)
   const [sidePanelOpen, setSidePanelOpen] = useState(false)
+  const [sidePanelWidth, setSidePanelWidth] = useState(SIDE_PANEL_DEFAULT_WIDTH)
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('nodes')
   const [sidePanelQuery, setSidePanelQuery] = useState('')
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
@@ -511,6 +517,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     () => infoNode ? getNodeRelations(controller.project, infoNode.id) : { incoming: [], outgoing: [] },
     [controller.project, infoNode],
   )
+  const canvasShellStyle = useMemo(() => ({ '--side-panel-width': `${sidePanelWidth}px` }) as CSSProperties, [sidePanelWidth])
   const contextConnectionPair = useMemo(
     () => contextMenu?.type === 'connection' ? getConnectionNodePair(controller.project, contextMenu.connectionId) : null,
     [contextMenu, controller.project],
@@ -520,6 +527,32 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const clientPoint = useCallback((event: { clientX: number; clientY: number }) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) }
+  }, [])
+
+  const startSidePanelResize = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const maxWidth = Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, canvasSize.width - 180))
+      sidePanelResizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: sidePanelWidth, maxWidth }
+      event.currentTarget.setPointerCapture(event.pointerId)
+    },
+    [canvasSize.width, sidePanelWidth],
+  )
+
+  const resizeSidePanel = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const resize = sidePanelResizeRef.current
+    if (!resize || resize.pointerId !== event.pointerId) return
+    event.preventDefault()
+    const width = Math.min(resize.maxWidth, Math.max(SIDE_PANEL_MIN_WIDTH, resize.startWidth + event.clientX - resize.startX))
+    setSidePanelWidth(width)
+  }, [])
+
+  const stopSidePanelResize = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const resize = sidePanelResizeRef.current
+    if (!resize || resize.pointerId !== event.pointerId) return
+    sidePanelResizeRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }, [])
 
   const clientWorld = useCallback(
@@ -1554,7 +1587,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         </div>
       </header>
 
-      <div className="canvas-shell">
+      <div className="canvas-shell" style={canvasShellStyle}>
         <input
           ref={mediaUploadInputRef}
           className="visually-hidden"
@@ -1573,6 +1606,16 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         />
         {sidePanelOpen ? (
           <aside className="node-side-panel" data-toolbar>
+            <button
+              className="node-side-panel-resize-handle"
+              aria-label="调整节点面板宽度"
+              title="拖拽调整面板宽度"
+              data-side-panel-resize-handle
+              onPointerDown={startSidePanelResize}
+              onPointerMove={resizeSidePanel}
+              onPointerUp={stopSidePanelResize}
+              onPointerCancel={stopSidePanelResize}
+            />
             <div className="node-side-panel-header">
               <div>
                 <strong>{sidePanelTab === 'nodes' ? '画布节点' : '资产库'}</strong>
