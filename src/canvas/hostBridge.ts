@@ -2,16 +2,24 @@ import { applyCanvasAgentOps, createCanvasGenerationFlowOps, type CanvasAgentOp,
 import { addConnectionToProject } from './document'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
 import { createCanvasNode } from './nodeFactory'
-import type { CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind } from './types'
+import type { CanvasAssetRecord, CanvasAssetUpload, CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind } from './types'
 
 type CanvasHostBridgeOptions = {
   getSnapshot: () => CanvasAgentSnapshot
   commit: (snapshot: CanvasAgentSnapshot) => void
   createId?: (prefix?: string) => string
   now?: () => string
+  assets?: CanvasHostAssetAdapter
 }
 
 type CanvasGenerationFlowInput = Parameters<typeof createCanvasGenerationFlowOps>[0]
+type CanvasHostAssetAdapter = {
+  list: () => Promise<CanvasAssetRecord[]> | CanvasAssetRecord[]
+  add: (dataUrl: string) => Promise<CanvasAssetUpload> | CanvasAssetUpload
+}
+type CanvasHostAssetFilter = {
+  kind?: CanvasAssetRecord['kind'] | 'all'
+}
 
 export type CanvasHostBridgeApplyResult = CanvasAgentSnapshot & {
   generationRequests: CanvasAgentGenerationRequest[]
@@ -21,6 +29,8 @@ export type CanvasHostBridge = {
   getSnapshot: () => CanvasAgentSnapshot
   applyOps: (ops?: CanvasAgentOp[]) => CanvasHostBridgeApplyResult
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
+  listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
+  addAsset: (input: { dataUrl: string }) => Promise<CanvasAssetUpload>
   undo: () => CanvasAgentSnapshot | null
   canUndo: () => boolean
 }
@@ -49,6 +59,15 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     getSnapshot: options.getSnapshot,
     applyOps,
     createGenerationFlow: (input) => applyOps(createCanvasGenerationFlowOps(input, { createId: (prefix) => createId(prefix) })),
+    listAssets: async (filter = {}) => {
+      const assets = await options.assets?.list()
+      const list = assets ?? []
+      return filter.kind && filter.kind !== 'all' ? list.filter((asset) => asset.kind === filter.kind) : list
+    },
+    addAsset: async (input) => {
+      if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
+      return options.assets.add(input.dataUrl)
+    },
     undo: () => {
       if (!undoSnapshot) return null
       const restored = undoSnapshot

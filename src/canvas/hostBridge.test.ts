@@ -79,4 +79,54 @@ describe('canvas host bridge', () => {
     expect(currentSelection).toEqual([])
     expect(currentConnection).toBeNull()
   })
+
+  it('lists and adds assets through the host bridge adapter', async () => {
+    const assets = [
+      {
+        storageKey: 'text-1.txt',
+        url: '/api/assets/text-1.txt',
+        mimeType: 'text/plain',
+        bytes: 11,
+        extension: 'txt',
+        kind: 'text' as const,
+        updatedAt: '2026-07-20T01:00:00.000Z',
+      },
+      {
+        storageKey: 'image-1.png',
+        url: '/api/assets/image-1.png',
+        mimeType: 'image/png',
+        bytes: 128,
+        extension: 'png',
+        kind: 'image' as const,
+        updatedAt: '2026-07-20T01:00:00.000Z',
+      },
+    ]
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: () => {},
+      assets: {
+        list: async () => assets,
+        add: async (dataUrl) => ({
+          storageKey: 'new-image.png',
+          url: dataUrl,
+          mimeType: 'image/png',
+          bytes: 256,
+          extension: 'png',
+        }),
+      },
+    })
+
+    await expect(bridge.listAssets({ kind: 'image' })).resolves.toEqual([assets[1]])
+    await expect(bridge.addAsset({ dataUrl: 'data:image/png;base64,abc' })).resolves.toEqual({
+      storageKey: 'new-image.png',
+      url: 'data:image/png;base64,abc',
+      mimeType: 'image/png',
+      bytes: 256,
+      extension: 'png',
+    })
+  })
 })

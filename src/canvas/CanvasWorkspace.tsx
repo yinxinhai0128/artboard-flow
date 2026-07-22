@@ -525,6 +525,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         snapshot.selectedNodeIds.forEach((nodeId, index) => bridgeSelectNode(nodeId, index > 0))
         if (snapshot.selectedConnectionId) bridgeSelectConnection(snapshot.selectedConnectionId)
       },
+      assets: {
+        list: canvasApi.listAssets,
+        add: canvasApi.uploadAsset,
+      },
     })
     window.artboardFlowCanvas = bridge
     return () => {
