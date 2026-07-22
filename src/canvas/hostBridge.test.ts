@@ -129,4 +129,57 @@ describe('canvas host bridge', () => {
       extension: 'png',
     })
   })
+
+  it('uploads an external asset and inserts it as a selected canvas node', async () => {
+    let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    let currentSelection: string[] = []
+    let counter = 1
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: currentSelection,
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+        currentSelection = next.selectedNodeIds
+      },
+      createId: (prefix = 'id') => `${prefix}-${counter++}`,
+      now: () => '2026-07-20T02:00:00.000Z',
+      assets: {
+        list: async () => [],
+        add: async () => ({
+          storageKey: 'generated-result.png',
+          url: '/api/assets/generated-result.png',
+          mimeType: 'image/png',
+          bytes: 1024,
+          extension: 'png',
+        }),
+      },
+    })
+
+    const result = await bridge.addAssetNode({
+      dataUrl: 'data:image/png;base64,abc',
+      title: 'Generated result',
+      position: { x: 240, y: 120 },
+    })
+
+    expect(result.asset.storageKey).toBe('generated-result.png')
+    expect(result.project.nodes).toHaveLength(1)
+    expect(result.project.nodes[0]).toMatchObject({
+      id: 'node-1',
+      type: 'image',
+      title: 'Generated result',
+      position: { x: 240, y: 120 },
+      metadata: {
+        content: '/api/assets/generated-result.png',
+        storageKey: 'generated-result.png',
+        mimeType: 'image/png',
+        bytes: 1024,
+        status: 'success',
+      },
+    })
+    expect(currentProject.updatedAt).toBe('2026-07-20T02:00:00.000Z')
+    expect(currentSelection).toEqual(['node-1'])
+  })
 })

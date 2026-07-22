@@ -2,7 +2,7 @@ import { applyCanvasAgentOps, createCanvasGenerationFlowOps, type CanvasAgentOp,
 import { addConnectionToProject } from './document'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
 import { createCanvasNode } from './nodeFactory'
-import type { CanvasAssetRecord, CanvasAssetUpload, CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind } from './types'
+import type { CanvasAssetRecord, CanvasAssetUpload, CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind, Point } from './types'
 
 type CanvasHostBridgeOptions = {
   getSnapshot: () => CanvasAgentSnapshot
@@ -20,9 +20,19 @@ type CanvasHostAssetAdapter = {
 type CanvasHostAssetFilter = {
   kind?: CanvasAssetRecord['kind'] | 'all'
 }
+type CanvasHostAssetNodeInput = {
+  dataUrl: string
+  title?: string
+  position?: Point
+  x?: number
+  y?: number
+}
 
 export type CanvasHostBridgeApplyResult = CanvasAgentSnapshot & {
   generationRequests: CanvasAgentGenerationRequest[]
+}
+export type CanvasHostBridgeAssetNodeResult = CanvasHostBridgeApplyResult & {
+  asset: CanvasAssetUpload
 }
 
 export type CanvasHostBridge = {
@@ -31,6 +41,7 @@ export type CanvasHostBridge = {
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
   addAsset: (input: { dataUrl: string }) => Promise<CanvasAssetUpload>
+  addAssetNode: (input: CanvasHostAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
   undo: () => CanvasAgentSnapshot | null
   canUndo: () => boolean
 }
@@ -68,6 +79,27 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
       return options.assets.add(input.dataUrl)
     },
+    addAssetNode: async (input) => {
+      if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
+      const asset = await options.assets.add(input.dataUrl)
+      const result = applyOps([
+        {
+          type: 'add_node',
+          id: createId('node'),
+          nodeType: nodeTypeFromMime(asset.mimeType),
+          title: input.title,
+          position: input.position ?? { x: input.x ?? 0, y: input.y ?? 0 },
+          metadata: {
+            content: asset.url,
+            storageKey: asset.storageKey,
+            mimeType: asset.mimeType,
+            bytes: asset.bytes,
+            status: 'success',
+          },
+        },
+      ])
+      return { ...result, asset }
+    },
     undo: () => {
       if (!undoSnapshot) return null
       const restored = undoSnapshot
@@ -77,6 +109,13 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     },
     canUndo: () => Boolean(undoSnapshot),
   }
+}
+
+function nodeTypeFromMime(mimeType: string): NodeKind {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'text'
 }
 
 function materializeGenerationRequests(
