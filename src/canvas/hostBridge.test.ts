@@ -315,6 +315,46 @@ describe('canvas host bridge', () => {
     expect(videoResult.generationRequests[0]?.prompt).toContain('@[node:text-')
   })
 
+  it('updates arbitrary node fields and metadata for host-side generated results', () => {
+    let currentProject = project
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+    })
+
+    const result = bridge.updateNode({
+      id: 'image-1',
+      patch: { title: 'Generated output', width: 512, height: 512 },
+      metadata: {
+        content: '/api/assets/generated.png',
+        status: 'success',
+        mimeType: 'image/png',
+        naturalWidth: 1024,
+        naturalHeight: 1024,
+      },
+    })
+
+    expect(result.project.nodes.find((node) => node.id === 'image-1')).toMatchObject({
+      title: 'Generated output',
+      width: 512,
+      height: 512,
+      metadata: {
+        content: '/api/assets/generated.png',
+        status: 'success',
+        mimeType: 'image/png',
+        naturalWidth: 1024,
+        naturalHeight: 1024,
+      },
+    })
+    expect(bridge.undo()?.project.nodes.find((node) => node.id === 'image-1')?.metadata.content).toBe('data:image/png;base64,abc')
+  })
+
   it('uploads an external asset and inserts it as a selected canvas node', async () => {
     let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
     let currentSelection: string[] = []

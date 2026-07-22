@@ -96,6 +96,11 @@ type CanvasHostUpdateNodeTextInput = {
   text: string
   title?: string
 }
+type CanvasHostUpdateNodeInput = {
+  id: string
+  patch?: Partial<CanvasNode>
+  metadata?: Partial<CanvasNode['metadata']>
+}
 type CanvasHostMoveNodesInput = {
   items: Array<{ id: string; x?: number; y?: number; dx?: number; dy?: number }>
 }
@@ -166,6 +171,7 @@ export type CanvasHostBridge = {
   createTextNode: (input: CanvasHostTextNodeInput) => CanvasHostBridgeApplyResult
   createTextNodes: (input: CanvasHostTextNodesInput) => CanvasHostBridgeApplyResult
   createConfigNode: (input: CanvasHostConfigNodeInput) => CanvasHostBridgeApplyResult
+  updateNode: (input: CanvasHostUpdateNodeInput) => CanvasHostBridgeApplyResult
   updateNodeText: (input: CanvasHostUpdateNodeTextInput) => CanvasHostBridgeApplyResult
   moveNodes: (input: CanvasHostMoveNodesInput) => CanvasHostBridgeApplyResult
   resizeNode: (input: CanvasHostResizeNodeInput) => CanvasHostBridgeApplyResult
@@ -220,6 +226,7 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     createTextNode: (input) => applyOps(createTextNodeOps({ items: [input], x: input.x, y: input.y })),
     createTextNodes: (input) => applyOps(createTextNodeOps(input)),
     createConfigNode: (input) => applyOps(createConfigNodeOps(input)),
+    updateNode: (input) => applyOps([{ type: 'update_node', id: input.id, patch: input.patch, metadata: input.metadata }]),
     updateNodeText: (input) => applyOps([{
       type: 'update_node',
       id: input.id,
