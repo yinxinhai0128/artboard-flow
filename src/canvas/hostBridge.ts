@@ -44,6 +44,17 @@ export type CanvasHostGenerationStatus = {
 type CanvasHostAssetFilter = {
   kind?: CanvasAssetRecord['kind'] | 'all'
 }
+type CanvasHostAssetSearchFilter = CanvasHostAssetFilter & {
+  keyword?: string
+  page?: number
+  pageSize?: number
+}
+export type CanvasHostAssetSearchResult = {
+  total: number
+  page: number
+  pageSize: number
+  items: CanvasAssetRecord[]
+}
 type CanvasHostAssetNodeInput = {
   dataUrl: string
   title?: string
@@ -199,6 +210,7 @@ export type CanvasHostBridge = {
   getGenerationStatus: (filter?: CanvasHostGenerationStatusFilter) => Promise<CanvasHostGenerationStatus>
   submitGenerationTask: (input: CanvasHostGenerationTaskInput) => Promise<CanvasHostGenerationTaskResult>
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
+  searchAssets: (filter?: CanvasHostAssetSearchFilter) => Promise<CanvasHostAssetSearchResult>
   addAsset: (input: { dataUrl: string }) => Promise<CanvasAssetUpload>
   addAssetNode: (input: CanvasHostAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
   addTextAsset: (input: CanvasHostTextAssetInput) => Promise<CanvasAssetUpload>
@@ -297,6 +309,10 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       const list = assets ?? []
       return filter.kind && filter.kind !== 'all' ? list.filter((asset) => asset.kind === filter.kind) : list
     },
+    searchAssets: async (filter = {}) => {
+      const assets = await options.assets?.list()
+      return searchAssets(assets ?? [], filter)
+    },
     addAsset: async (input) => {
       if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
       return options.assets.add(input.dataUrl)
@@ -365,6 +381,45 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
 
 function textDataUrl(text: string) {
   return `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`
+}
+
+function searchAssets(assets: CanvasAssetRecord[], filter: CanvasHostAssetSearchFilter): CanvasHostAssetSearchResult {
+  const kind = filter.kind ?? 'all'
+  const keyword = filter.keyword?.trim().toLowerCase() ?? ''
+  const filtered = assets
+    .filter((asset) => kind === 'all' || asset.kind === kind)
+    .filter((asset) => !keyword || assetSearchText(asset).includes(keyword))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  const { page, pageSize, start, end } = paginate(filter.page, filter.pageSize, filtered.length)
+  return {
+    total: filtered.length,
+    page,
+    pageSize,
+    items: filtered.slice(start, end),
+  }
+}
+
+function assetSearchText(asset: CanvasAssetRecord) {
+  return [
+    asset.storageKey,
+    asset.url,
+    asset.mimeType,
+    asset.extension,
+    asset.kind,
+  ].join(' ').toLowerCase()
+}
+
+function paginate(pageInput: number | undefined, pageSizeInput: number | undefined, total: number) {
+  const pageSize = normalizePageSize(pageSizeInput)
+  const maxPage = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(maxPage, Math.max(1, Math.floor(pageInput ?? 1)))
+  const start = (page - 1) * pageSize
+  return { page, pageSize, start, end: start + pageSize }
+}
+
+function normalizePageSize(pageSize: number | undefined) {
+  if (typeof pageSize !== 'number' || !Number.isFinite(pageSize)) return 20
+  return Math.max(1, Math.min(100, Math.floor(pageSize)))
 }
 
 function createGenerationStatus(

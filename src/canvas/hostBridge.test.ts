@@ -130,6 +130,57 @@ describe('canvas host bridge', () => {
     })
   })
 
+  it('searches host assets with kind, keyword, and pagination for agent-style listing', async () => {
+    const assets = [
+      {
+        storageKey: 'hero-a.png',
+        url: '/api/assets/hero-a.png',
+        mimeType: 'image/png',
+        bytes: 128,
+        extension: 'png',
+        kind: 'image' as const,
+        updatedAt: '2026-07-20T03:00:00.000Z',
+      },
+      {
+        storageKey: 'note-hero.txt',
+        url: '/api/assets/note-hero.txt',
+        mimeType: 'text/plain',
+        bytes: 64,
+        extension: 'txt',
+        kind: 'text' as const,
+        updatedAt: '2026-07-20T04:00:00.000Z',
+      },
+      {
+        storageKey: 'hero-b.png',
+        url: '/api/assets/hero-b.png',
+        mimeType: 'image/png',
+        bytes: 256,
+        extension: 'png',
+        kind: 'image' as const,
+        updatedAt: '2026-07-20T05:00:00.000Z',
+      },
+    ]
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: () => {},
+      assets: {
+        list: async () => assets,
+        add: async () => assets[0],
+      },
+    })
+
+    await expect(bridge.searchAssets({ kind: 'image', keyword: 'hero', page: 2, pageSize: 1 })).resolves.toEqual({
+      total: 2,
+      page: 2,
+      pageSize: 1,
+      items: [assets[0]],
+    })
+  })
+
   it('returns generation job status for external hosts with task, node, scope, and limit filters', async () => {
     const jobs: CanvasGenerationJob[] = [
       {
