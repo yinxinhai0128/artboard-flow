@@ -260,4 +260,71 @@ describe('canvas host bridge', () => {
       { connectionId: 'edge-1', nodeId: 'config-1' },
     ])
   })
+
+  it('exports a compact canvas snapshot for agent-style host integrations', () => {
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project,
+        selectedNodeIds: ['image-1'],
+        selectedConnectionId: null,
+      }),
+      commit: () => {},
+    })
+
+    expect(bridge.exportSnapshot()).toEqual({
+      projectId: 'project-1',
+      title: 'Host bridge test',
+      nodes: project.nodes,
+      connections: [],
+      selectedNodeIds: ['image-1'],
+      selectedConnectionId: null,
+      viewport: { x: 0, y: 0, k: 1 },
+    })
+  })
+
+  it('returns selected nodes and selected-node relations for host tools', () => {
+    const selectionProject: CanvasProject = {
+      ...project,
+      nodes: [
+        project.nodes[0],
+        {
+          id: 'config-1',
+          type: 'config',
+          title: 'Generation config',
+          position: { x: 420, y: 0 },
+          width: 300,
+          height: 300,
+          metadata: {},
+        },
+        {
+          id: 'text-1',
+          type: 'text',
+          title: 'Prompt',
+          position: { x: -320, y: 0 },
+          width: 260,
+          height: 180,
+          metadata: { content: 'prompt' },
+        },
+      ],
+      connections: [
+        { id: 'selected-edge', fromNodeId: 'image-1', toNodeId: 'config-1' },
+        { id: 'outside-edge', fromNodeId: 'text-1', toNodeId: 'image-1' },
+      ],
+    }
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: selectionProject,
+        selectedNodeIds: ['image-1', 'config-1'],
+        selectedConnectionId: null,
+      }),
+      commit: () => {},
+    })
+
+    expect(bridge.getSelection()).toEqual({
+      nodes: [selectionProject.nodes[0], selectionProject.nodes[1]],
+      connections: [{ id: 'selected-edge', fromNodeId: 'image-1', toNodeId: 'config-1' }],
+      selectedNodeIds: ['image-1', 'config-1'],
+      selectedConnectionId: null,
+    })
+  })
 })

@@ -3,7 +3,7 @@ import { addConnectionToProject } from './document'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
 import { createCanvasGraphSnapshot, type CanvasGraphSnapshot } from './graph'
 import { createCanvasNode } from './nodeFactory'
-import type { CanvasAssetRecord, CanvasAssetUpload, CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind, Point } from './types'
+import type { CanvasAssetRecord, CanvasAssetUpload, CanvasConnection, CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind, Point, Viewport } from './types'
 
 type CanvasHostBridgeOptions = {
   getSnapshot: () => CanvasAgentSnapshot
@@ -35,10 +35,27 @@ export type CanvasHostBridgeApplyResult = CanvasAgentSnapshot & {
 export type CanvasHostBridgeAssetNodeResult = CanvasHostBridgeApplyResult & {
   asset: CanvasAssetUpload
 }
+export type CanvasHostExportSnapshot = {
+  projectId: string
+  title: string
+  nodes: CanvasNode[]
+  connections: CanvasConnection[]
+  selectedNodeIds: string[]
+  selectedConnectionId: string | null
+  viewport: Viewport
+}
+export type CanvasHostSelection = {
+  nodes: CanvasNode[]
+  connections: CanvasConnection[]
+  selectedNodeIds: string[]
+  selectedConnectionId: string | null
+}
 
 export type CanvasHostBridge = {
   getSnapshot: () => CanvasAgentSnapshot
   getGraph: () => CanvasGraphSnapshot
+  exportSnapshot: () => CanvasHostExportSnapshot
+  getSelection: () => CanvasHostSelection
   applyOps: (ops?: CanvasAgentOp[]) => CanvasHostBridgeApplyResult
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
@@ -73,6 +90,8 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
   return {
     getSnapshot: () => cloneSnapshot(latestSnapshot),
     getGraph: () => createCanvasGraphSnapshot(latestSnapshot.project),
+    exportSnapshot: () => exportSnapshot(latestSnapshot),
+    getSelection: () => getSelection(latestSnapshot),
     applyOps,
     createGenerationFlow: (input) => applyOps(createCanvasGenerationFlowOps(input, { createId: (prefix) => createId(prefix) })),
     listAssets: async (filter = {}) => {
@@ -114,6 +133,31 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       return restored
     },
     canUndo: () => Boolean(undoSnapshot),
+  }
+}
+
+function exportSnapshot(snapshot: CanvasAgentSnapshot): CanvasHostExportSnapshot {
+  return {
+    projectId: snapshot.project.id,
+    title: snapshot.project.title,
+    nodes: snapshot.project.nodes,
+    connections: snapshot.project.connections,
+    selectedNodeIds: snapshot.selectedNodeIds,
+    selectedConnectionId: snapshot.selectedConnectionId,
+    viewport: snapshot.project.viewport,
+  }
+}
+
+function getSelection(snapshot: CanvasAgentSnapshot): CanvasHostSelection {
+  const selected = new Set(snapshot.selectedNodeIds)
+  return {
+    nodes: snapshot.project.nodes.filter((node) => selected.has(node.id)),
+    connections: snapshot.project.connections.filter((connection) => (
+      selected.has(connection.fromNodeId) &&
+      selected.has(connection.toNodeId)
+    )),
+    selectedNodeIds: snapshot.selectedNodeIds,
+    selectedConnectionId: snapshot.selectedConnectionId,
   }
 }
 
