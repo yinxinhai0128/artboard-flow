@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, serializeCanvasGenerationPayload } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload } from './generation'
 import type { CanvasConnection, CanvasGenerationJob, CanvasNode, CanvasProject } from './types'
 
 const configNode: CanvasNode = {
@@ -518,5 +518,44 @@ describe('canvas generation context', () => {
       { id: 'edge-1', fromNodeId: 'task-output', toNodeId: 'child-1' },
       { id: 'edge-2', fromNodeId: 'task-output', toNodeId: 'child-2' },
     ])
+  })
+
+  it('resets a failed generation task with a saved payload so text-origin tasks can be retried', () => {
+    const payload = buildCanvasGenerationPayload(buildTextNodeImageGenerationContext('text', [textNode, imageNode], [{ id: 'image-text', fromNodeId: 'image', toNodeId: 'text' }]))
+    const taskNode: CanvasNode = {
+      ...imageNode,
+      id: 'task-from-text',
+      title: 'Image generation task',
+      position: { x: 420, y: 0 },
+      metadata: {
+        ...imageNode.metadata,
+        content: '',
+        generationPayload: payload,
+        generationJobId: 'failed-job',
+        generationJobStatus: 'failed',
+        status: 'error',
+        errorDetails: 'adapter failed',
+      },
+    }
+    const project: CanvasProject = {
+      id: 'project-1',
+      title: 'Generation project',
+      createdAt: '2026-07-19T00:00:00.000Z',
+      updatedAt: '2026-07-19T00:00:00.000Z',
+      nodes: [textNode, taskNode],
+      connections: [{ id: 'text-task', fromNodeId: 'text', toNodeId: 'task-from-text' }],
+      backgroundMode: 'dots',
+      viewport: { x: 0, y: 0, k: 1 },
+    }
+
+    const updated = resetGenerationTaskNodeForRetry(project, 'task-from-text')
+    const retriedTask = updated.nodes.find((node) => node.id === 'task-from-text')
+
+    expect(retriedTask?.metadata.status).toBe('idle')
+    expect(retriedTask?.metadata.errorDetails).toBe('')
+    expect(retriedTask?.metadata.generationPayload).toBe(payload)
+    expect(retriedTask?.metadata.generationJobId).toBeUndefined()
+    expect(retriedTask?.metadata.generationJobStatus).toBeUndefined()
+    expect(updated.connections).toEqual(project.connections)
   })
 })

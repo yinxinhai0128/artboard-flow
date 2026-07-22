@@ -145,6 +145,33 @@ export function serializeCanvasGenerationPayload(payload: CanvasGenerationPayloa
   return JSON.stringify(payload, null, 2)
 }
 
+export function resetGenerationTaskNodeForRetry(project: CanvasProject, taskNodeId: string): CanvasProject {
+  const taskNode = project.nodes.find((node) => node.id === taskNodeId)
+  if (!taskNode?.metadata.generationPayload) return project
+
+  return {
+    ...project,
+    nodes: project.nodes.map((node) => (
+      node.id === taskNodeId
+        ? {
+            ...node,
+            metadata: {
+              ...node.metadata,
+              status: 'idle',
+              errorDetails: '',
+              content: '',
+              generationJobId: undefined,
+              generationJobStatus: undefined,
+              submittedAt: undefined,
+              generationOutputs: undefined,
+              activeOutputIndex: undefined,
+            },
+          }
+        : node
+    )),
+  }
+}
+
 export function metadataFromGenerationJob(job: CanvasGenerationJob, current: CanvasNode['metadata'] = {}): Partial<CanvasNode['metadata']> {
   const outputs = job.result?.outputs?.filter((output) => output.content) ?? []
   const activeOutputIndex = outputs.length > 1 ? Math.min(Math.max(current.activeOutputIndex ?? 0, 0), outputs.length - 1) : undefined

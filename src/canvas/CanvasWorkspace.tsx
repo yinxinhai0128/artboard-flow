@@ -3,7 +3,7 @@ import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Group, HelpCircle, 
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
@@ -1539,8 +1539,13 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
   const retryGenerationTaskNode = useCallback(
     (taskNodeId: string) => {
+      const taskNode = nodesById.get(taskNodeId)
       const sourceConfigId = controller.project.connections.find((connection) => connection.toNodeId === taskNodeId && nodesById.get(connection.fromNodeId)?.type === 'config')?.fromNodeId
       if (!sourceConfigId) {
+        if (taskNode?.metadata.generationPayload) {
+          controller.updateProject((current) => resetGenerationTaskNodeForRetry(current, taskNodeId))
+          return
+        }
         controller.updateNode(taskNodeId, {
           metadata: {
             status: 'error',
@@ -3246,7 +3251,7 @@ function GenerationTaskBody({
         <button data-canvas-input onClick={() => void navigator.clipboard?.writeText(serializedPayload)}>
           复制 Payload
         </button>
-        <button data-canvas-input onClick={() => onRetry(node.id)}>
+        <button data-canvas-input data-generation-action="retry" onClick={() => onRetry(node.id)}>
           重建任务
         </button>
       </div>
