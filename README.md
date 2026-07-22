@@ -51,5 +51,17 @@ npm run build
 - `types.ts`：项目、节点、连线、视口、资产数据结构。
 - `api.ts`：示例应用使用的项目持久化 API 客户端。
 - `geometry.ts`：坐标变换、端口、连线路径等纯函数。
+- `hostBridge.ts`：暴露给外部宿主或自动化 Agent 的画布操作桥接层。
 
-后续嵌入已有 AI 创作网站时，可以复用 `src/canvas/`，由宿主网站负责传入项目数据、保存项目数据，并在生成完成后调用节点更新能力插入图片、视频或文本结果。
+后续嵌入已有 AI 创作网站时，可以复用 `src/canvas/`，由宿主网站负责传入项目数据、保存项目数据，并通过 `createCanvasHostBridge` 暴露清晰的外部操作接口。
+
+当前 Host Bridge 已覆盖这些核心能力：
+
+- 读取：`getSnapshot()`、`getGraph()`、`exportSnapshot()`、`getSelection()`。
+- 节点：`createNode()`、`createTextNode()`、`createTextNodes()`、`createConfigNode()`、`updateNodeText()`、`moveNodes()`、`resizeNode()`、`deleteNodes()`。
+- 连线与视口：`connectNodes()`、`deleteConnections()`、`selectNodes()`、`setViewport()`。
+- 生成流程：`createGenerationFlow()`、`runGeneration()` 会创建配置/任务节点与关系；`submitGenerationTask()` 会把任务节点提交给宿主生成适配器；`getGenerationStatus()` 可按 `taskId`、`nodeIds`、`scope`、`limit` 查询真实任务状态。
+- 素材：`listAssets()`、`addAsset()`、`addAssetNode()` 可对接宿主素材库。
+- 历史：`undo()`、`canUndo()` 支持宿主侧撤销入口。
+
+示例应用已经把 `window.artboardFlowCanvas` 绑定到当前打开的画布页，便于本地调试和外部自动化验证。真正接入生产网站时，建议宿主显式保存 bridge 实例，并把素材上传、生成任务提交、生成状态查询等能力接到自己的后端适配器。
