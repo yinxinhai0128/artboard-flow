@@ -24,6 +24,22 @@ const baseProject: CanvasProject = {
 }
 
 describe('artboard flow app host bridge', () => {
+  it('describes available app host commands for external agents', () => {
+    const bridge = createArtboardFlowAppHostBridge({
+      getProjects: () => [baseProject],
+      getActiveProjectId: () => null,
+      openProject: () => {},
+      createProject: async () => baseProject,
+    })
+
+    expect(bridge.getCapabilities()).toEqual([
+      { name: 'listProjects', scope: 'app', description: '列出画布项目摘要，支持关键词和分页。' },
+      { name: 'getActiveProjectId', scope: 'app', description: '读取当前打开的画布项目 ID。' },
+      { name: 'openProject', scope: 'app', description: '按项目 ID 打开画布或返回画布库。' },
+      { name: 'createProject', scope: 'app', description: '新建画布项目，并可选择立即打开。' },
+    ])
+  })
+
   it('lists, opens, and creates projects for external hosts', async () => {
     let projects: CanvasProject[] = [
       baseProject,

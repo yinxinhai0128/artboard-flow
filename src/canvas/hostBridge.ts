@@ -41,6 +41,12 @@ export type CanvasHostGenerationStatus = {
   summary: CanvasHostGenerationStatusSummary
   jobs: CanvasGenerationJob[]
 }
+export type CanvasHostCapabilityScope = 'canvas' | 'generation' | 'assets' | 'history'
+export type CanvasHostCapability = {
+  name: string
+  scope: CanvasHostCapabilityScope
+  description: string
+}
 type CanvasHostAssetFilter = {
   kind?: CanvasAssetRecord['kind'] | 'all'
 }
@@ -183,6 +189,7 @@ export type CanvasHostSelection = {
 }
 
 export type CanvasHostBridge = {
+  getCapabilities: () => CanvasHostCapability[]
   getSnapshot: () => CanvasAgentSnapshot
   getGraph: () => CanvasGraphSnapshot
   exportSnapshot: () => CanvasHostExportSnapshot
@@ -219,6 +226,43 @@ export type CanvasHostBridge = {
   canUndo: () => boolean
 }
 
+const canvasHostCapabilities: CanvasHostCapability[] = [
+  { name: 'getSnapshot', scope: 'canvas', description: '读取当前画布项目、选区和连线状态。' },
+  { name: 'getGraph', scope: 'canvas', description: '读取节点关系图、入度出度和资源引用摘要。' },
+  { name: 'exportSnapshot', scope: 'canvas', description: '导出当前画布快照。' },
+  { name: 'getSelection', scope: 'canvas', description: '读取当前选中的节点和关系。' },
+  { name: 'applyOps', scope: 'canvas', description: '批量执行底层画布操作。' },
+  { name: 'createNode', scope: 'canvas', description: '创建任意类型节点。' },
+  { name: 'createTextNode', scope: 'canvas', description: '创建单个文本节点。' },
+  { name: 'createTextNodes', scope: 'canvas', description: '批量创建文本节点。' },
+  { name: 'createConfigNode', scope: 'generation', description: '创建生成配置节点。' },
+  { name: 'updateNode', scope: 'canvas', description: '更新节点基础字段或 metadata。' },
+  { name: 'updateNodeText', scope: 'canvas', description: '更新文本节点内容和标题。' },
+  { name: 'moveNodes', scope: 'canvas', description: '移动一个或多个节点。' },
+  { name: 'resizeNode', scope: 'canvas', description: '调整节点尺寸。' },
+  { name: 'deleteNodes', scope: 'canvas', description: '删除指定节点及相关连线。' },
+  { name: 'deleteConnections', scope: 'canvas', description: '删除指定连线或清空连线。' },
+  { name: 'connectNodes', scope: 'canvas', description: '批量创建节点之间的关系连线。' },
+  { name: 'selectNodes', scope: 'canvas', description: '设置当前选中节点。' },
+  { name: 'setViewport', scope: 'canvas', description: '调整画布视口。' },
+  { name: 'runGeneration', scope: 'generation', description: '触发指定节点生成并创建生成任务节点。' },
+  { name: 'createGenerationFlow', scope: 'generation', description: '创建通用生成流程节点关系链。' },
+  { name: 'createImagePromptFlow', scope: 'generation', description: '创建提示词文本、图片生成配置和任务节点关系链。' },
+  { name: 'generateText', scope: 'generation', description: '创建文本生成流程并立即触发生成。' },
+  { name: 'generateImage', scope: 'generation', description: '创建图片生成流程并立即触发生成。' },
+  { name: 'generateVideo', scope: 'generation', description: '创建视频生成流程并立即触发生成。' },
+  { name: 'getGenerationStatus', scope: 'generation', description: '查询宿主生成任务状态。' },
+  { name: 'submitGenerationTask', scope: 'generation', description: '把已有生成任务节点提交给宿主生成适配器。' },
+  { name: 'listAssets', scope: 'assets', description: '按类型列出宿主素材库。' },
+  { name: 'searchAssets', scope: 'assets', description: '按类型、关键词和分页查询宿主素材库。' },
+  { name: 'addAsset', scope: 'assets', description: '上传 data URL 素材到宿主素材库。' },
+  { name: 'addAssetNode', scope: 'assets', description: '上传素材并插入为画布节点。' },
+  { name: 'addTextAsset', scope: 'assets', description: '上传文本内容为 text/plain 素材。' },
+  { name: 'addTextAssetNode', scope: 'assets', description: '上传文本素材并插入为画布文本节点。' },
+  { name: 'undo', scope: 'history', description: '撤销最近一次 Host Bridge 操作。' },
+  { name: 'canUndo', scope: 'history', description: '检查是否存在可撤销的 Host Bridge 操作。' },
+]
+
 export function createCanvasHostBridge(options: CanvasHostBridgeOptions): CanvasHostBridge {
   const createId = options.createId ?? ((prefix = 'id') => `${prefix}-${crypto.randomUUID()}`)
   const now = options.now ?? (() => new Date().toISOString())
@@ -242,6 +286,7 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
   }
 
   return {
+    getCapabilities: () => canvasHostCapabilities,
     getSnapshot: () => cloneSnapshot(latestSnapshot),
     getGraph: () => createCanvasGraphSnapshot(latestSnapshot.project),
     exportSnapshot: () => exportSnapshot(latestSnapshot),

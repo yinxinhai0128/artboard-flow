@@ -67,3 +67,5 @@ npm run build
 示例应用已经把 `window.artboardFlowCanvas` 绑定到当前打开的画布页，便于本地调试和外部自动化验证。真正接入生产网站时，建议宿主显式保存 bridge 实例，并把素材上传、生成任务提交、生成状态查询等能力接到自己的后端适配器。
 
 示例应用还会把 `window.artboardFlowApp` 绑定到站点级桥接层，提供 `listProjects()`、`getActiveProjectId()`、`openProject()`、`createProject()`。这部分用于 Agent 或宿主先定位/打开画布；单个画布内部操作仍使用 `window.artboardFlowCanvas`。
+
+两个桥接层都支持 `getCapabilities()`，用于在运行时读取可用命令名、能力范围和简短说明，方便后续接入 Agent 工具协议或已有 AI 创作网站的宿主脚本。

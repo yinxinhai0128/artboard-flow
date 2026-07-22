@@ -40,15 +40,30 @@ export type AppHostProjectList = {
   items: AppHostProjectSummary[]
 }
 
+export type AppHostCapability = {
+  name: string
+  scope: 'app'
+  description: string
+}
+
 export type ArtboardFlowAppHostBridge = {
+  getCapabilities: () => AppHostCapability[]
   listProjects: (filter?: AppHostProjectListFilter) => AppHostProjectList
   getActiveProjectId: () => string | null
   openProject: (input: AppHostOpenProjectInput) => { ok: true; id: string | null; path: string }
   createProject: (input?: AppHostCreateProjectInput) => Promise<{ ok: true; project: AppHostProjectSummary }>
 }
 
+const appHostCapabilities: AppHostCapability[] = [
+  { name: 'listProjects', scope: 'app', description: '列出画布项目摘要，支持关键词和分页。' },
+  { name: 'getActiveProjectId', scope: 'app', description: '读取当前打开的画布项目 ID。' },
+  { name: 'openProject', scope: 'app', description: '按项目 ID 打开画布或返回画布库。' },
+  { name: 'createProject', scope: 'app', description: '新建画布项目，并可选择立即打开。' },
+]
+
 export function createArtboardFlowAppHostBridge(options: AppHostBridgeOptions): ArtboardFlowAppHostBridge {
   return {
+    getCapabilities: () => appHostCapabilities,
     listProjects: (filter = {}) => listProjects(options.getProjects(), filter),
     getActiveProjectId: options.getActiveProjectId,
     openProject: (input) => {

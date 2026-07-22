@@ -28,6 +28,25 @@ const project: CanvasProject = {
 }
 
 describe('canvas host bridge', () => {
+  it('describes available canvas host commands for external agents', () => {
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: () => {},
+    })
+
+    expect(bridge.getCapabilities()).toEqual(expect.arrayContaining([
+      { name: 'getSnapshot', scope: 'canvas', description: '读取当前画布项目、选区和连线状态。' },
+      { name: 'connectNodes', scope: 'canvas', description: '批量创建节点之间的关系连线。' },
+      { name: 'createImagePromptFlow', scope: 'generation', description: '创建提示词文本、图片生成配置和任务节点关系链。' },
+      { name: 'submitGenerationTask', scope: 'generation', description: '把已有生成任务节点提交给宿主生成适配器。' },
+      { name: 'searchAssets', scope: 'assets', description: '按类型、关键词和分页查询宿主素材库。' },
+    ]))
+  })
+
   it('creates a generation flow and materializes autorun tasks for external hosts', () => {
     let currentProject = project
     let currentSelection: string[] = []
