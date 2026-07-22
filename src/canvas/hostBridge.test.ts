@@ -182,4 +182,82 @@ describe('canvas host bridge', () => {
     expect(currentProject.updatedAt).toBe('2026-07-20T02:00:00.000Z')
     expect(currentSelection).toEqual(['node-1'])
   })
+
+  it('exposes a relationship graph snapshot for external hosts', () => {
+    const graphProject: CanvasProject = {
+      ...project,
+      nodes: [
+        project.nodes[0],
+        {
+          id: 'config-1',
+          type: 'config',
+          title: 'Generation config',
+          position: { x: 420, y: 0 },
+          width: 300,
+          height: 300,
+          metadata: {},
+        },
+      ],
+      connections: [{ id: 'edge-1', fromNodeId: 'image-1', toNodeId: 'config-1' }],
+    }
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: graphProject,
+        selectedNodeIds: ['config-1'],
+        selectedConnectionId: null,
+      }),
+      commit: () => {},
+    })
+
+    const graph = bridge.getGraph()
+
+    expect(graph).toMatchObject({
+      projectId: 'project-1',
+      title: 'Host bridge test',
+      nodeCount: 2,
+      connectionCount: 1,
+      nodeTypes: { image: 1, config: 1 },
+    })
+    expect(graph.nodes.find((node) => node.id === 'image-1')).toMatchObject({
+      outgoing: [{ connectionId: 'edge-1', nodeId: 'config-1' }],
+      outgoingCount: 1,
+    })
+    expect(graph.nodes.find((node) => node.id === 'config-1')).toMatchObject({
+      incoming: [{ connectionId: 'edge-1', nodeId: 'image-1' }],
+      incomingCount: 1,
+    })
+  })
+
+  it('keeps bridge reads current immediately after applying ops', () => {
+    const currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    let committedNodeIds: string[] = []
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        committedNodeIds = next.project.nodes.map((node) => node.id)
+      },
+      now: () => '2026-07-20T03:00:00.000Z',
+    })
+
+    bridge.applyOps([
+      { type: 'add_node', id: 'text-1', nodeType: 'text', title: 'Prompt' },
+      { type: 'add_node', id: 'config-1', nodeType: 'config', title: 'Config' },
+      { type: 'connect_nodes', id: 'edge-1', fromNodeId: 'text-1', toNodeId: 'config-1' },
+    ])
+
+    expect(committedNodeIds).toEqual(['text-1', 'config-1'])
+    expect(bridge.getSnapshot().project.nodes.map((node) => node.id)).toEqual(['text-1', 'config-1'])
+    expect(bridge.getGraph()).toMatchObject({
+      nodeCount: 2,
+      connectionCount: 1,
+      nodeTypes: { text: 1, config: 1 },
+    })
+    expect(bridge.getGraph().nodes.find((node) => node.id === 'text-1')?.outgoing).toEqual([
+      { connectionId: 'edge-1', nodeId: 'config-1' },
+    ])
+  })
 })

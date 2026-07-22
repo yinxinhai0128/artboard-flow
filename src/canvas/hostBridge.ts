@@ -1,6 +1,7 @@
 import { applyCanvasAgentOps, createCanvasGenerationFlowOps, type CanvasAgentOp, type CanvasAgentSnapshot, type CanvasAgentGenerationRequest } from './agentOps'
 import { addConnectionToProject } from './document'
 import { buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
+import { createCanvasGraphSnapshot, type CanvasGraphSnapshot } from './graph'
 import { createCanvasNode } from './nodeFactory'
 import type { CanvasAssetRecord, CanvasAssetUpload, CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind, Point } from './types'
 
@@ -37,6 +38,7 @@ export type CanvasHostBridgeAssetNodeResult = CanvasHostBridgeApplyResult & {
 
 export type CanvasHostBridge = {
   getSnapshot: () => CanvasAgentSnapshot
+  getGraph: () => CanvasGraphSnapshot
   applyOps: (ops?: CanvasAgentOp[]) => CanvasHostBridgeApplyResult
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
@@ -50,9 +52,10 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
   const createId = options.createId ?? ((prefix = 'id') => `${prefix}-${crypto.randomUUID()}`)
   const now = options.now ?? (() => new Date().toISOString())
   let undoSnapshot: CanvasAgentSnapshot | null = null
+  let latestSnapshot = cloneSnapshot(options.getSnapshot())
 
   const applyOps = (ops: CanvasAgentOp[] = []): CanvasHostBridgeApplyResult => {
-    const before = cloneSnapshot(options.getSnapshot())
+    const before = cloneSnapshot(latestSnapshot)
     const applied = applyCanvasAgentOps(before, ops, { createId: () => createId(), now })
     const materialized = materializeGenerationRequests(applied.project, applied.generationRequests, createId, now)
     const next: CanvasHostBridgeApplyResult = {
@@ -62,12 +65,14 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       generationRequests: applied.generationRequests,
     }
     undoSnapshot = before
+    latestSnapshot = cloneSnapshot(next)
     options.commit(next)
     return next
   }
 
   return {
-    getSnapshot: options.getSnapshot,
+    getSnapshot: () => cloneSnapshot(latestSnapshot),
+    getGraph: () => createCanvasGraphSnapshot(latestSnapshot.project),
     applyOps,
     createGenerationFlow: (input) => applyOps(createCanvasGenerationFlowOps(input, { createId: (prefix) => createId(prefix) })),
     listAssets: async (filter = {}) => {
@@ -104,6 +109,7 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       if (!undoSnapshot) return null
       const restored = undoSnapshot
       undoSnapshot = null
+      latestSnapshot = cloneSnapshot(restored)
       options.commit(restored)
       return restored
     },
