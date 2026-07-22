@@ -32,6 +32,7 @@ const appToolNames = [
 
 const canvasToolNames = [
   'canvas_get_state',
+  'canvas_get_graph',
   'canvas_get_selection',
   'canvas_export_snapshot',
   'canvas_apply_ops',
@@ -91,6 +92,7 @@ function runAppTool(app: Partial<ArtboardFlowAppHostBridge>, name: (typeof appTo
 
 function runCanvasTool(canvas: Partial<CanvasHostBridge>, name: (typeof canvasToolNames)[number], input: Record<string, unknown>) {
   if (name === 'canvas_get_state') return canvas.getSnapshot?.()
+  if (name === 'canvas_get_graph') return canvas.getGraph?.()
   if (name === 'canvas_get_selection') return canvas.getSelection?.()
   if (name === 'canvas_export_snapshot') return canvas.exportSnapshot?.()
   if (name === 'canvas_apply_ops') return canvas.applyOps?.(Array.isArray(input.ops) ? input.ops : [])

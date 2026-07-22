@@ -100,7 +100,7 @@ await tools.runTool('canvas_connect_nodes', {
 `window.artboardFlowTools` 当前会把以下命令映射到 App/Canvas Host Bridge：
 
 - 项目级：`canvas_list_projects`、`canvas_get_active_project`、`canvas_open_project`、`canvas_create_project`。
-- 画布读取：`canvas_get_state`、`canvas_get_selection`、`canvas_export_snapshot`。
+- 画布读取：`canvas_get_state`、`canvas_get_graph`、`canvas_get_selection`、`canvas_export_snapshot`。
 - 节点/连线/视口：`canvas_create_node`、`canvas_create_text_node`、`canvas_create_text_nodes`、`canvas_create_config_node`、`canvas_update_node`、`canvas_update_node_text`、`canvas_move_nodes`、`canvas_resize_node`、`canvas_delete_nodes`、`canvas_delete_connections`、`canvas_connect_nodes`、`canvas_select_nodes`、`canvas_set_viewport`、`canvas_apply_ops`。
 - AI 工作流：`canvas_create_image_prompt_flow`、`canvas_create_generation_flow`、`canvas_generate_text`、`canvas_generate_image`、`canvas_generate_video`、`canvas_run_generation`、`generation_get_status`。
 - 素材：`assets_list`、`assets_add`。

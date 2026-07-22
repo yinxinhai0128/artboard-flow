@@ -14,6 +14,7 @@ describe('artboard flow host tools', () => {
     } as unknown as Partial<ArtboardFlowAppHostBridge>
     const canvas = {
       getSnapshot: () => ({ project: { id: 'project-1' }, selectedNodeIds: [], selectedConnectionId: null }),
+      getGraph: () => ({ projectId: 'project-1', nodeCount: 2, connectionCount: 1, nodes: [] }),
       createTextNode: (input: unknown) => {
         calls.push('createTextNode')
         return { input }
@@ -36,6 +37,10 @@ describe('artboard flow host tools', () => {
     await expect(runArtboardFlowHostTool({ app, canvas }, 'canvas_generate_image', { prompt: 'robot' })).resolves.toEqual({
       input: { prompt: 'robot' },
     })
+    await expect(runArtboardFlowHostTool({ app, canvas }, 'canvas_get_graph', {})).resolves.toMatchObject({
+      projectId: 'project-1',
+      connectionCount: 1,
+    })
     await expect(runArtboardFlowHostTool({ app, canvas }, 'generation_get_status', { scope: 'image' })).resolves.toMatchObject({
       total: 0,
     })
@@ -54,6 +59,7 @@ describe('artboard flow host tools', () => {
     expect(listArtboardFlowHostTools()).toEqual(expect.arrayContaining([
       { name: 'canvas_list_projects', scope: 'app' },
       { name: 'canvas_get_state', scope: 'canvas' },
+      { name: 'canvas_get_graph', scope: 'canvas' },
       { name: 'canvas_generate_video', scope: 'canvas' },
       { name: 'generation_get_status', scope: 'canvas' },
       { name: 'assets_add', scope: 'canvas' },
