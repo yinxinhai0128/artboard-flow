@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Code2, Download, Edit3, FileUp, Plus, Trash2 } from 'lucide-react'
+import { createArtboardFlowAppHostBridge, type ArtboardFlowAppHostBridge } from './appHostBridge'
 import { canvasApi } from './canvas/api'
 import { CanvasWorkspace } from './canvas/CanvasWorkspace'
 import { downloadCanvasProjects, readCanvasProjectsFile } from './canvas/export'
 import { materializeProjectMediaAssets } from './canvas/mediaAssets'
 import { createProjectSaveQueue } from './canvas/saveQueue'
 import type { CanvasProject } from './canvas/types'
+
+declare global {
+  interface Window {
+    artboardFlowApp?: ArtboardFlowAppHostBridge
+  }
+}
 
 function projectPath(id: string) {
   return `/canvas/${encodeURIComponent(id)}`
@@ -83,20 +90,34 @@ function App() {
     setError('没有找到这个画布，已返回画布库。')
   }, [activeId, loading, projects])
 
-  const openProject = (id: string | null, replace = false) => {
+  const openProject = useCallback((id: string | null, replace = false) => {
     if (activeId && activeId !== id) void saveQueue.current?.flush(activeId)
     setActiveId(id)
     const path = id ? projectPath(id) : '/'
     if (window.location.pathname === path) return
     window.history[replace ? 'replaceState' : 'pushState'](null, '', path)
-  }
+  }, [activeId])
 
-  const createProject = async () => {
-    const title = `无限画布 ${projects.length + 1}`
+  const createProject = useCallback(async (titleOverride?: string, open = true) => {
+    const title = titleOverride?.trim() || `无限画布 ${projects.length + 1}`
     const project = await canvasApi.createProject(title)
     setProjects((current) => [project, ...current])
-    openProject(project.id)
-  }
+    if (open) openProject(project.id)
+    return project
+  }, [openProject, projects.length])
+
+  useEffect(() => {
+    const bridge = createArtboardFlowAppHostBridge({
+      getProjects: () => projects,
+      getActiveProjectId: () => activeId,
+      openProject,
+      createProject: (title) => createProject(title, false),
+    })
+    window.artboardFlowApp = bridge
+    return () => {
+      if (window.artboardFlowApp === bridge) delete window.artboardFlowApp
+    }
+  }, [activeId, createProject, openProject, projects])
 
   const updateProject = (project: CanvasProject) => {
     setProjects((current) => current.map((item) => (item.id === project.id ? project : item)))
@@ -192,7 +213,7 @@ function App() {
               <FileUp size={16} /> 导入画布
               <input type="file" accept="application/json,.json,application/zip,.zip" onChange={importProject} />
             </label>
-            <button className="primary-button" onClick={createProject}>
+            <button className="primary-button" onClick={() => void createProject()}>
               <Plus size={17} /> 新建画布
             </button>
           </div>
