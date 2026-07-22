@@ -2485,12 +2485,23 @@ function NodeCreateMenu({
       description: '模型、尺寸、数量和输入顺序',
     },
   ]
+  const visibleOptions = variant === 'standalone'
+    ? [
+        ...options,
+        {
+          type: 'group' as NodeKind,
+          Icon: Group,
+          label: '分组节点',
+          description: '整理一组节点和它们的关系',
+        },
+      ]
+    : options
 
   return (
     <div className="node-create-menu" data-toolbar style={{ left: position.x, top: position.y }} onPointerDown={(event) => event.stopPropagation()}>
       <div>{title}</div>
-      {options.map(({ type, Icon, label, description }) => (
-        <button className="node-create-option" key={type} onClick={() => onCreate(type)}>
+      {visibleOptions.map(({ type, Icon, label, description }) => (
+        <button className="node-create-option" data-node-create-type={type} key={type} onClick={() => onCreate(type)}>
           <span className="node-create-icon">
             <Icon size={17} />
           </span>

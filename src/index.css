@@ -2283,6 +2283,12 @@ button:disabled {
   border-radius: 12px;
   background: rgba(18, 18, 18, 0.86);
   backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.zoom-panel > *,
+.background-panel > * {
+  pointer-events: auto;
 }
 
 .zoom-panel {
