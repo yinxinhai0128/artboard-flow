@@ -496,6 +496,52 @@ button:disabled {
   border-color: rgba(125, 211, 252, 0.28);
 }
 
+.node-list-check {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: 6px;
+  border: 1px solid rgba(244, 244, 245, 0.36);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
+}
+
+.node-list-check.checked {
+  border-color: rgba(125, 211, 252, 0.82);
+  background: var(--blue);
+  box-shadow: inset 0 0 0 3px rgba(7, 89, 133, 0.65);
+}
+
+.node-side-panel-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 12, 0.48);
+}
+
+.node-side-panel-selection button {
+  min-height: 30px;
+  padding: 5px 9px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+}
+
+.node-side-panel-selection button:disabled {
+  cursor: not-allowed;
+  opacity: 0.44;
+}
+
+.node-side-panel-selection span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .asset-list-item.disabled {
   cursor: not-allowed;
   opacity: 0.58;

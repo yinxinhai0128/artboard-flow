@@ -6,7 +6,7 @@ import { useCanvasController } from './useCanvasController'
 import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
-import { expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
+import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForProject } from './graph'
 import { materializeClipboardMediaAssets } from './mediaAssets'
@@ -448,6 +448,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('nodes')
   const [sidePanelQuery, setSidePanelQuery] = useState('')
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
+  const [sidePanelSelectMode, setSidePanelSelectMode] = useState(false)
+  const [sidePanelCheckedNodeIds, setSidePanelCheckedNodeIds] = useState<string[]>([])
   const [assets, setAssets] = useState<CanvasAssetRecord[]>([])
   const [assetsLoading, setAssetsLoading] = useState(false)
   const [assetError, setAssetError] = useState('')
@@ -592,6 +594,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     titleInputRef.current?.focus()
     titleInputRef.current?.select()
   }, [editingTitle])
+
+  useEffect(() => {
+    const nodeIds = new Set(controller.project.nodes.map((node) => node.id))
+    setSidePanelCheckedNodeIds((current) => current.filter((id) => nodeIds.has(id)))
+  }, [controller.project.nodes])
 
   useEffect(() => {
     const element = canvasRef.current
@@ -1258,6 +1265,36 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       .toLowerCase()
       .includes(query))
   }, [assets, sidePanelQuery])
+  const sidePanelCheckedNodeSet = useMemo(() => new Set(sidePanelCheckedNodeIds), [sidePanelCheckedNodeIds])
+  const sidePanelAllFilteredChecked = filteredPanelNodes.length > 0 && filteredPanelNodes.every((node) => sidePanelCheckedNodeSet.has(node.id))
+
+  const toggleSidePanelSelectMode = useCallback(() => {
+    setSidePanelSelectMode((value) => {
+      if (value) setSidePanelCheckedNodeIds([])
+      return !value
+    })
+  }, [])
+
+  const toggleSidePanelNodeChecked = useCallback((nodeId: string) => {
+    setSidePanelCheckedNodeIds((current) => current.includes(nodeId) ? current.filter((id) => id !== nodeId) : [...current, nodeId])
+  }, [])
+
+  const toggleAllFilteredPanelNodes = useCallback(() => {
+    setSidePanelCheckedNodeIds((current) => {
+      const filteredIds = filteredPanelNodes.map((node) => node.id)
+      const currentSet = new Set(current)
+      const allChecked = filteredIds.length > 0 && filteredIds.every((id) => currentSet.has(id))
+      if (allChecked) return current.filter((id) => !filteredIds.includes(id))
+      return Array.from(new Set([...current, ...filteredIds]))
+    })
+  }, [filteredPanelNodes])
+
+  const exportSidePanelCheckedNodes = useCallback(() => {
+    const clipboard = copyProjectSelectionToClipboard(controller.project, sidePanelCheckedNodeIds)
+    void downloadCanvasClipboard(clipboard, `ArtboardFlow-节点片段-${clipboard?.nodes.length ?? 0}个`)
+    setSidePanelSelectMode(false)
+    setSidePanelCheckedNodeIds([])
+  }, [controller.project, sidePanelCheckedNodeIds])
 
   const focusNode = useCallback(
     (node: CanvasNode) => {
@@ -1657,12 +1694,17 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 onChange={(event) => setSidePanelQuery(event.target.value)}
               />
               {sidePanelTab === 'nodes' ? (
-                <select value={sidePanelType} onChange={(event) => setSidePanelType(event.target.value as NodeKind | 'all')}>
-                  <option value="all">全部类型</option>
-                  {(['text', 'image', 'video', 'audio', 'config'] as const).map((type) => (
-                    <option key={type} value={type}>{nodeKindLabels[type]}</option>
-                  ))}
-                </select>
+                <>
+                  <select value={sidePanelType} onChange={(event) => setSidePanelType(event.target.value as NodeKind | 'all')}>
+                    <option value="all">全部类型</option>
+                    {(['text', 'image', 'video', 'audio', 'config'] as const).map((type) => (
+                      <option key={type} value={type}>{nodeKindLabels[type]}</option>
+                    ))}
+                  </select>
+                  <button className="node-side-panel-refresh" data-side-panel-action="select-nodes" onClick={toggleSidePanelSelectMode}>
+                    {sidePanelSelectMode ? '取消选择' : '选择节点'}
+                  </button>
+                </>
               ) : (
                 <>
                   <button className="node-side-panel-refresh" data-side-panel-action="upload-assets" aria-label="上传资产" title="上传资产" onClick={() => canvasFileInputRef.current?.click()}>
@@ -1679,9 +1721,15 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 filteredPanelNodes.length ? (
                   filteredPanelNodes.map((node) => {
                     const counts = relationCounts.get(node.id) ?? { incoming: 0, outgoing: 0 }
-                    const selected = controller.selectedNodeIds.includes(node.id)
+                    const selected = sidePanelSelectMode ? sidePanelCheckedNodeSet.has(node.id) : controller.selectedNodeIds.includes(node.id)
                     return (
-                      <button key={node.id} className={`node-list-item ${selected ? 'active' : ''}`} onClick={() => focusNode(node)}>
+                      <button
+                        key={node.id}
+                        className={`node-list-item ${selected ? 'active' : ''}`}
+                        data-side-panel-node-id={node.id}
+                        onClick={() => sidePanelSelectMode ? toggleSidePanelNodeChecked(node.id) : focusNode(node)}
+                      >
+                        {sidePanelSelectMode ? <span className={`node-list-check ${selected ? 'checked' : ''}`} /> : null}
                         <span className={`node-list-icon ${node.type}`}>{nodeKindLabels[node.type].slice(0, 1)}</span>
                         <span className="node-list-main">
                           <span className="node-list-title">{node.title || '未命名节点'}</span>
@@ -1723,6 +1771,17 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 <div className="node-side-empty">暂无资产。拖入或粘贴图片/视频/音频后会出现在这里。</div>
               )}
             </div>
+            {sidePanelTab === 'nodes' && sidePanelSelectMode ? (
+              <div className="node-side-panel-selection" data-side-panel-selection-bar>
+                <button data-side-panel-action="toggle-all-nodes" onClick={toggleAllFilteredPanelNodes}>
+                  {sidePanelAllFilteredChecked ? '取消全选' : '全选'}
+                </button>
+                <span>已选 {sidePanelCheckedNodeIds.length}</span>
+                <button data-side-panel-action="export-selected-nodes" disabled={!sidePanelCheckedNodeIds.length} onClick={exportSidePanelCheckedNodes}>
+                  导出选中
+                </button>
+              </div>
+            ) : null}
           </aside>
         ) : null}
 
