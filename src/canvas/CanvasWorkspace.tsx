@@ -1692,7 +1692,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
         <div
           ref={canvasRef}
-          className={`canvas-stage ${controller.project.backgroundMode} ${spacePressed ? 'space-pan' : ''}`}
+          className={`canvas-stage ${controller.project.backgroundMode} ${spacePressed ? 'space-pan' : ''} ${activeRelationNodeId ? 'relation-focus' : ''}`}
+          data-relation-focus={activeRelationNodeId ? 'true' : undefined}
+          data-relation-active-node-id={activeRelationNodeId ?? undefined}
           style={canvasStageStyle}
           onPointerDown={handleCanvasPointerDown}
           onAuxClick={(event) => event.preventDefault()}

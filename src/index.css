@@ -614,6 +614,11 @@ button:disabled {
   stroke: rgba(161, 161, 170, 0.72);
   stroke-width: 2;
   pointer-events: none;
+  transition: stroke 0.16s ease, stroke-width 0.16s ease, opacity 0.16s ease, filter 0.16s ease;
+}
+
+.canvas-stage.relation-focus .connection-path:not(.related):not(.selected):not(.draft) {
+  opacity: 0.18;
 }
 
 .connection-hit {
@@ -1295,6 +1300,7 @@ button:disabled {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
   color: var(--text);
   overflow: visible;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease, filter 0.16s ease;
 }
 
 .canvas-node.group {
@@ -1348,6 +1354,11 @@ button:disabled {
 .canvas-node.related:not(.selected) {
   z-index: 20;
   border-color: rgba(125, 211, 252, 0.45);
+}
+
+.canvas-stage.relation-focus .canvas-node:not(.related):not(.selected) {
+  opacity: 0.36;
+  filter: saturate(0.72);
 }
 
 .canvas-node.split-root::before {
