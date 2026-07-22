@@ -28,6 +28,36 @@ type CanvasHostAssetNodeInput = {
   x?: number
   y?: number
 }
+type CanvasHostTextNodeInput = {
+  id?: string
+  text?: string
+  title?: string
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+}
+type CanvasHostTextNodesInput = {
+  items: CanvasHostTextNodeInput[]
+  x?: number
+  y?: number
+  gap?: number
+  direction?: 'row' | 'column'
+}
+type CanvasHostUpdateNodeTextInput = {
+  id: string
+  text: string
+  title?: string
+}
+type CanvasHostMoveNodesInput = {
+  items: Array<{ id: string; x?: number; y?: number; dx?: number; dy?: number }>
+}
+type CanvasHostResizeNodeInput = {
+  id: string
+  width: number
+  height: number
+  freeResize?: boolean
+}
 
 export type CanvasHostBridgeApplyResult = CanvasAgentSnapshot & {
   generationRequests: CanvasAgentGenerationRequest[]
@@ -57,6 +87,10 @@ export type CanvasHostBridge = {
   exportSnapshot: () => CanvasHostExportSnapshot
   getSelection: () => CanvasHostSelection
   applyOps: (ops?: CanvasAgentOp[]) => CanvasHostBridgeApplyResult
+  createTextNodes: (input: CanvasHostTextNodesInput) => CanvasHostBridgeApplyResult
+  updateNodeText: (input: CanvasHostUpdateNodeTextInput) => CanvasHostBridgeApplyResult
+  moveNodes: (input: CanvasHostMoveNodesInput) => CanvasHostBridgeApplyResult
+  resizeNode: (input: CanvasHostResizeNodeInput) => CanvasHostBridgeApplyResult
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
   addAsset: (input: { dataUrl: string }) => Promise<CanvasAssetUpload>
@@ -93,6 +127,24 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     exportSnapshot: () => exportSnapshot(latestSnapshot),
     getSelection: () => getSelection(latestSnapshot),
     applyOps,
+    createTextNodes: (input) => applyOps(createTextNodeOps(input)),
+    updateNodeText: (input) => applyOps([{
+      type: 'update_node',
+      id: input.id,
+      patch: input.title ? { title: input.title } : undefined,
+      metadata: { content: input.text, status: 'success' },
+    }]),
+    moveNodes: (input) => applyOps(input.items.map((item) => ({
+      type: 'update_node',
+      id: item.id,
+      patch: { position: movedNodePosition(latestSnapshot.project.nodes, item) },
+    }))),
+    resizeNode: (input) => applyOps([{
+      type: 'update_node',
+      id: input.id,
+      patch: { width: input.width, height: input.height },
+      metadata: input.freeResize === undefined ? undefined : { freeResize: input.freeResize },
+    }]),
     createGenerationFlow: (input) => applyOps(createCanvasGenerationFlowOps(input, { createId: (prefix) => createId(prefix) })),
     listAssets: async (filter = {}) => {
       const assets = await options.assets?.list()
@@ -158,6 +210,37 @@ function getSelection(snapshot: CanvasAgentSnapshot): CanvasHostSelection {
     )),
     selectedNodeIds: snapshot.selectedNodeIds,
     selectedConnectionId: snapshot.selectedConnectionId,
+  }
+}
+
+function createTextNodeOps(input: CanvasHostTextNodesInput): CanvasAgentOp[] {
+  const x = input.x ?? 0
+  const y = input.y ?? 0
+  const gap = input.gap ?? 40
+  const direction = input.direction ?? 'column'
+  return input.items.map((item, index) => ({
+    type: 'add_node',
+    id: item.id,
+    nodeType: 'text',
+    title: item.title,
+    position: {
+      x: item.x ?? (direction === 'row' ? x + index * (340 + gap) : x),
+      y: item.y ?? (direction === 'row' ? y : y + index * (240 + gap)),
+    },
+    width: item.width,
+    height: item.height,
+    metadata: {
+      content: item.text ?? '',
+      status: 'success',
+    },
+  }))
+}
+
+function movedNodePosition(nodes: CanvasNode[], item: CanvasHostMoveNodesInput['items'][number]): Point {
+  const current = nodes.find((node) => node.id === item.id)
+  return {
+    x: item.x ?? ((current?.position.x ?? 0) + (item.dx ?? 0)),
+    y: item.y ?? ((current?.position.y ?? 0) + (item.dy ?? 0)),
   }
 }
 

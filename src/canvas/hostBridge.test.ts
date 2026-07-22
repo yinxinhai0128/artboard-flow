@@ -327,4 +327,62 @@ describe('canvas host bridge', () => {
       selectedConnectionId: null,
     })
   })
+
+  it('provides high-level text and layout commands for agent-style hosts', () => {
+    let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: (prefix = 'id') => `${prefix}-1`,
+      now: () => '2026-07-20T04:00:00.000Z',
+    })
+
+    bridge.createTextNodes({
+      items: [
+        { id: 'text-a', text: 'first prompt', title: 'Prompt A' },
+        { id: 'text-b', text: 'second prompt', title: 'Prompt B' },
+      ],
+      x: 100,
+      y: 80,
+      gap: 24,
+      direction: 'row',
+    })
+    bridge.updateNodeText({ id: 'text-a', text: 'updated prompt', title: 'Updated Prompt' })
+    bridge.moveNodes({ items: [{ id: 'text-a', dx: 10, dy: -20 }, { id: 'text-b', x: 640, y: 160 }] })
+    bridge.resizeNode({ id: 'text-a', width: 360, height: 220, freeResize: true })
+
+    expect(bridge.getSnapshot().project.nodes).toMatchObject([
+      {
+        id: 'text-a',
+        type: 'text',
+        title: 'Updated Prompt',
+        position: { x: 110, y: 60 },
+        width: 360,
+        height: 220,
+        metadata: {
+          content: 'updated prompt',
+          status: 'success',
+          freeResize: true,
+        },
+      },
+      {
+        id: 'text-b',
+        type: 'text',
+        title: 'Prompt B',
+        position: { x: 640, y: 160 },
+        metadata: {
+          content: 'second prompt',
+          status: 'success',
+        },
+      },
+    ])
+    expect(bridge.getSnapshot().selectedNodeIds).toEqual(['text-b'])
+    expect(currentProject.updatedAt).toBe('2026-07-20T04:00:00.000Z')
+  })
 })
