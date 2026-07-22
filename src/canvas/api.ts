@@ -48,6 +48,13 @@ export const canvasApi = {
       method: 'POST',
       body: JSON.stringify({ projectId, nodeId, payload }),
     }),
+  listGenerationJobs: (projectId: string, nodeId?: string) => {
+    const params = new URLSearchParams()
+    if (projectId) params.set('projectId', projectId)
+    if (nodeId) params.set('nodeId', nodeId)
+    const query = params.toString()
+    return request<CanvasGenerationJob[]>(`/api/generation/jobs${query ? `?${query}` : ''}`)
+  },
   getGenerationJob: (id: string) => request<CanvasGenerationJob>(`/api/generation/jobs/${id}`),
   cancelGenerationJob: (id: string) =>
     request<CanvasGenerationJob>(`/api/generation/jobs/${id}/cancel`, {

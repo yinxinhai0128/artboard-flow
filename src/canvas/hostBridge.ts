@@ -1,9 +1,9 @@
 import { applyCanvasAgentOps, createCanvasGenerationFlowOps, type CanvasAgentOp, type CanvasAgentSnapshot, type CanvasAgentGenerationRequest } from './agentOps'
 import { addConnectionToProject } from './document'
-import { buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
 import { createCanvasGraphSnapshot, type CanvasGraphSnapshot } from './graph'
 import { createCanvasNode } from './nodeFactory'
-import type { CanvasAssetRecord, CanvasAssetUpload, CanvasConnection, CanvasGenerationMode, CanvasNode, CanvasProject, NodeKind, Point, Viewport } from './types'
+import type { CanvasAssetRecord, CanvasAssetUpload, CanvasConnection, CanvasGenerationJob, CanvasGenerationJobStatus, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasProject, NodeKind, Point, Viewport } from './types'
 
 type CanvasHostBridgeOptions = {
   getSnapshot: () => CanvasAgentSnapshot
@@ -11,12 +11,33 @@ type CanvasHostBridgeOptions = {
   createId?: (prefix?: string) => string
   now?: () => string
   assets?: CanvasHostAssetAdapter
+  generation?: CanvasHostGenerationAdapter
 }
 
 type CanvasGenerationFlowInput = Parameters<typeof createCanvasGenerationFlowOps>[0]
 type CanvasHostAssetAdapter = {
   list: () => Promise<CanvasAssetRecord[]> | CanvasAssetRecord[]
   add: (dataUrl: string) => Promise<CanvasAssetUpload> | CanvasAssetUpload
+}
+type CanvasHostGenerationAdapter = {
+  list: (filter: CanvasHostGenerationSourceFilter) => Promise<CanvasGenerationJob[]> | CanvasGenerationJob[]
+  submit?: (projectId: string, nodeId: string, payload: CanvasGenerationPayload) => Promise<CanvasGenerationJob> | CanvasGenerationJob
+}
+type CanvasHostGenerationSourceFilter = {
+  projectId: string
+}
+type CanvasHostGenerationScope = 'all' | 'canvas' | CanvasGenerationMode
+type CanvasHostGenerationStatusFilter = {
+  scope?: CanvasHostGenerationScope
+  taskId?: string
+  nodeIds?: string[]
+  limit?: number
+}
+type CanvasHostGenerationStatusSummary = Record<CanvasGenerationJobStatus, number>
+export type CanvasHostGenerationStatus = {
+  total: number
+  summary: CanvasHostGenerationStatusSummary
+  jobs: CanvasGenerationJob[]
 }
 type CanvasHostAssetFilter = {
   kind?: CanvasAssetRecord['kind'] | 'all'
@@ -105,9 +126,15 @@ type CanvasHostRunGenerationInput = {
   mode?: CanvasGenerationMode
   prompt?: string
 }
+type CanvasHostGenerationTaskInput = {
+  nodeId: string
+}
 
 export type CanvasHostBridgeApplyResult = CanvasAgentSnapshot & {
   generationRequests: CanvasAgentGenerationRequest[]
+}
+export type CanvasHostGenerationTaskResult = CanvasHostBridgeApplyResult & {
+  job: CanvasGenerationJob
 }
 export type CanvasHostBridgeAssetNodeResult = CanvasHostBridgeApplyResult & {
   asset: CanvasAssetUpload
@@ -148,6 +175,8 @@ export type CanvasHostBridge = {
   setViewport: (input: CanvasHostSetViewportInput) => CanvasHostBridgeApplyResult
   runGeneration: (input: CanvasHostRunGenerationInput) => CanvasHostBridgeApplyResult
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
+  getGenerationStatus: (filter?: CanvasHostGenerationStatusFilter) => Promise<CanvasHostGenerationStatus>
+  submitGenerationTask: (input: CanvasHostGenerationTaskInput) => Promise<CanvasHostGenerationTaskResult>
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
   addAsset: (input: { dataUrl: string }) => Promise<CanvasAssetUpload>
   addAssetNode: (input: CanvasHostAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
@@ -211,6 +240,30 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     setViewport: (input) => applyOps([{ type: 'set_viewport', viewport: input.viewport }]),
     runGeneration: (input) => applyOps([{ type: 'run_generation', nodeId: input.nodeId, mode: input.mode, prompt: input.prompt }]),
     createGenerationFlow: (input) => applyOps(createCanvasGenerationFlowOps(input, { createId: (prefix) => createId(prefix) })),
+    getGenerationStatus: async (filter = {}) => {
+      if (!options.generation) throw new Error('HOST_GENERATION_UNAVAILABLE')
+      const jobs = await options.generation.list({ projectId: latestSnapshot.project.id })
+      return createGenerationStatus(jobs, latestSnapshot.project.id, filter)
+    },
+    submitGenerationTask: async (input) => {
+      if (!options.generation?.submit) throw new Error('HOST_GENERATION_UNAVAILABLE')
+      const taskNode = latestSnapshot.project.nodes.find((node) => node.id === input.nodeId)
+      const payload = taskNode?.metadata.generationPayload
+      if (!payload) throw new Error('HOST_GENERATION_PAYLOAD_UNAVAILABLE')
+      const before = cloneSnapshot(latestSnapshot)
+      const job = await options.generation.submit(latestSnapshot.project.id, input.nodeId, payload)
+      const next: CanvasHostGenerationTaskResult = {
+        project: applyGenerationJobToProject(latestSnapshot.project, input.nodeId, job, () => createId('node')),
+        selectedNodeIds: latestSnapshot.selectedNodeIds,
+        selectedConnectionId: latestSnapshot.selectedConnectionId,
+        generationRequests: [],
+        job,
+      }
+      undoSnapshot = before
+      latestSnapshot = cloneSnapshot(next)
+      options.commit(next)
+      return next
+    },
     listAssets: async (filter = {}) => {
       const assets = await options.assets?.list()
       const list = assets ?? []
@@ -251,6 +304,52 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     },
     canUndo: () => Boolean(undoSnapshot),
   }
+}
+
+function createGenerationStatus(
+  jobs: CanvasGenerationJob[],
+  projectId: string,
+  filter: CanvasHostGenerationStatusFilter,
+): CanvasHostGenerationStatus {
+  const scope = filter.scope ?? 'all'
+  const taskId = typeof filter.taskId === 'string' ? filter.taskId : ''
+  const nodeIds = new Set(filter.nodeIds?.filter(Boolean) ?? [])
+  const limit = normalizeLimit(filter.limit)
+  const filtered = jobs
+    .filter((job) => job.projectId === projectId)
+    .filter((job) => !taskId || job.id === taskId)
+    .filter((job) => !nodeIds.size || nodeIds.has(job.nodeId))
+    .filter((job) => scope === 'all' || scope === 'canvas' || job.payload.mode === scope)
+    .sort(compareGenerationJobs)
+
+  return {
+    total: filtered.length,
+    summary: summarizeGenerationJobs(filtered),
+    jobs: filtered.slice(0, limit),
+  }
+}
+
+function normalizeLimit(limit: number | undefined) {
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) return 20
+  return Math.max(1, Math.min(100, Math.floor(limit)))
+}
+
+function summarizeGenerationJobs(jobs: CanvasGenerationJob[]): CanvasHostGenerationStatusSummary {
+  const summary: CanvasHostGenerationStatusSummary = { queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 }
+  jobs.forEach((job) => {
+    summary[job.status] += 1
+  })
+  return summary
+}
+
+function compareGenerationJobs(a: CanvasGenerationJob, b: CanvasGenerationJob) {
+  return generationStatusOrder(a.status) - generationStatusOrder(b.status) || b.updatedAt.localeCompare(a.updatedAt)
+}
+
+function generationStatusOrder(status: CanvasGenerationJobStatus) {
+  if (status === 'running') return 0
+  if (status === 'queued') return 1
+  return 2
 }
 
 function exportSnapshot(snapshot: CanvasAgentSnapshot): CanvasHostExportSnapshot {

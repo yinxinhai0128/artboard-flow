@@ -529,6 +529,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         list: canvasApi.listAssets,
         add: canvasApi.uploadAsset,
       },
+      generation: {
+        list: ({ projectId }) => canvasApi.listGenerationJobs(projectId),
+        submit: canvasApi.submitGenerationJob,
+      },
     })
     window.artboardFlowCanvas = bridge
     return () => {

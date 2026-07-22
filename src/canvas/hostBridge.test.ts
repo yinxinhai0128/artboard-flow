@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createCanvasHostBridge } from './hostBridge'
-import type { CanvasProject } from './types'
+import type { CanvasGenerationJob, CanvasProject } from './types'
 
 const project: CanvasProject = {
   id: 'project-1',
@@ -127,6 +127,145 @@ describe('canvas host bridge', () => {
       mimeType: 'image/png',
       bytes: 256,
       extension: 'png',
+    })
+  })
+
+  it('returns generation job status for external hosts with task, node, scope, and limit filters', async () => {
+    const jobs: CanvasGenerationJob[] = [
+      {
+        id: 'job-queued',
+        projectId: 'project-1',
+        nodeId: 'task-1',
+        status: 'queued',
+        createdAt: '2026-07-20T01:00:00.000Z',
+        updatedAt: '2026-07-20T01:00:00.000Z',
+        payload: {
+          mode: 'image',
+          model: 'image-model',
+          size: '1024x1024',
+          count: 1,
+          prompt: 'queued prompt',
+          summary: { text: 1, image: 0, video: 0, audio: 0 },
+          inputs: [],
+          createdAt: '2026-07-20T01:00:00.000Z',
+        },
+        result: null,
+      },
+      {
+        id: 'job-succeeded',
+        projectId: 'project-1',
+        nodeId: 'task-1',
+        status: 'succeeded',
+        createdAt: '2026-07-20T02:00:00.000Z',
+        updatedAt: '2026-07-20T03:00:00.000Z',
+        payload: {
+          mode: 'image',
+          model: 'image-model',
+          size: '1024x1024',
+          count: 1,
+          prompt: 'finished prompt',
+          summary: { text: 1, image: 0, video: 0, audio: 0 },
+          inputs: [],
+          createdAt: '2026-07-20T02:00:00.000Z',
+        },
+        result: { content: '/api/assets/out.png', mimeType: 'image/png' },
+      },
+      {
+        id: 'job-video',
+        projectId: 'project-1',
+        nodeId: 'task-2',
+        status: 'running',
+        createdAt: '2026-07-20T04:00:00.000Z',
+        updatedAt: '2026-07-20T04:00:00.000Z',
+        payload: {
+          mode: 'video',
+          model: 'video-model',
+          size: '1280x720',
+          count: 1,
+          prompt: 'video prompt',
+          summary: { text: 1, image: 0, video: 0, audio: 0 },
+          inputs: [],
+          createdAt: '2026-07-20T04:00:00.000Z',
+        },
+        result: null,
+      },
+    ]
+    const requestedProjectIds: string[] = []
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: () => {},
+      generation: {
+        list: async (filter) => {
+          requestedProjectIds.push(filter.projectId)
+          return jobs
+        },
+      },
+    })
+
+    await expect(bridge.getGenerationStatus({ nodeIds: ['task-1'], scope: 'image', limit: 1 })).resolves.toEqual({
+      total: 2,
+      summary: { queued: 1, running: 0, succeeded: 1, failed: 0, cancelled: 0 },
+      jobs: [jobs[0]],
+    })
+    await expect(bridge.getGenerationStatus({ taskId: 'job-video' })).resolves.toMatchObject({
+      total: 1,
+      summary: { queued: 0, running: 1, succeeded: 0, failed: 0, cancelled: 0 },
+      jobs: [jobs[2]],
+    })
+    expect(requestedProjectIds).toEqual(['project-1', 'project-1'])
+  })
+
+  it('submits host-created generation task nodes through the generation adapter', async () => {
+    let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    let counter = 1
+    const submitted: Array<{ projectId: string; nodeId: string; prompt: string }> = []
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: (prefix = 'id') => `${prefix}-${counter++}`,
+      now: () => '2026-07-20T06:00:00.000Z',
+      generation: {
+        list: async () => [],
+        submit: async (projectId, nodeId, payload) => {
+          submitted.push({ projectId, nodeId, prompt: payload.prompt })
+          return {
+            id: 'job-1',
+            projectId,
+            nodeId,
+            status: 'queued',
+            createdAt: '2026-07-20T06:01:00.000Z',
+            updatedAt: '2026-07-20T06:01:00.000Z',
+            payload,
+            result: null,
+          }
+        },
+      },
+    })
+
+    bridge.createConfigNode({
+      id: 'config-1',
+      mode: 'image',
+      prompt: 'submit from host bridge',
+      autoRun: true,
+    })
+    const result = await bridge.submitGenerationTask({ nodeId: 'task-1' })
+
+    expect(submitted).toEqual([{ projectId: 'project-1', nodeId: 'task-1', prompt: 'submit from host bridge' }])
+    expect(result.job.id).toBe('job-1')
+    expect(currentProject.nodes.find((node) => node.id === 'task-1')?.metadata).toMatchObject({
+      generationJobId: 'job-1',
+      generationJobStatus: 'queued',
+      status: 'loading',
     })
   })
 
