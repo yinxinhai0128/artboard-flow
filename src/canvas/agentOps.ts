@@ -40,7 +40,70 @@ type CanvasAgentOptions = {
   now?: () => string
 }
 
+type CanvasGenerationFlowInput = {
+  prompt: string
+  mode?: CanvasGenerationMode
+  title?: string
+  x?: number
+  y?: number
+  referenceNodeIds?: string[]
+  model?: string
+  size?: string
+  count?: number
+  autoRun?: boolean
+}
+
+type CanvasGenerationFlowOptions = {
+  createId?: (prefix: 'text' | 'config') => string
+}
+
 const nodeKinds = new Set<NodeKind>(['text', 'image', 'video', 'audio', 'config', 'group'])
+
+export function createCanvasGenerationFlowOps(input: CanvasGenerationFlowInput, options: CanvasGenerationFlowOptions = {}): CanvasAgentOp[] {
+  const mode = input.mode ?? 'image'
+  const x = input.x ?? 0
+  const y = input.y ?? 0
+  const textId = options.createId?.('text') ?? `text-${crypto.randomUUID()}`
+  const configId = options.createId?.('config') ?? `config-${crypto.randomUUID()}`
+  const referenceNodeIds = input.referenceNodeIds?.filter(Boolean) ?? []
+  const tokens = [`@[node:${textId}]`, ...referenceNodeIds.map((id) => `@[node:${id}]`)]
+  const composerContent = tokens.join('\n')
+  const ops: CanvasAgentOp[] = [
+    {
+      type: 'add_node',
+      id: textId,
+      nodeType: 'text',
+      title: input.title || '提示词',
+      position: { x, y },
+      metadata: {
+        content: input.prompt,
+        prompt: input.prompt,
+        status: 'success',
+      },
+    },
+    {
+      type: 'add_node',
+      id: configId,
+      nodeType: 'config',
+      title: generationFlowTitle(mode),
+      position: { x: x + 420, y },
+      metadata: cleanMetadata({
+        generationMode: mode,
+        composerContent,
+        prompt: composerContent,
+        status: 'idle',
+        model: input.model,
+        size: input.size,
+        count: input.count,
+      }),
+    },
+    { type: 'connect_nodes', fromNodeId: textId, toNodeId: configId },
+    ...referenceNodeIds.map((fromNodeId): CanvasAgentOp => ({ type: 'connect_nodes', fromNodeId, toNodeId: configId })),
+    { type: 'select_nodes', ids: [configId] },
+  ]
+  if (input.autoRun) ops.push({ type: 'run_generation', nodeId: configId, mode, prompt: composerContent })
+  return ops
+}
 
 export function applyCanvasAgentOps(snapshot: CanvasAgentSnapshot, ops: CanvasAgentOp[] = [], options: CanvasAgentOptions = {}) {
   const createId = options.createId ?? (() => crypto.randomUUID())
@@ -158,6 +221,16 @@ function agentDeleteNodeIds(project: CanvasProject, op: Extract<CanvasAgentOp, {
   if (op.id) return [op.id]
   if (op.nodeType) return project.nodes.filter((node) => node.type === op.nodeType).map((node) => node.id)
   return []
+}
+
+function generationFlowTitle(mode: CanvasGenerationMode) {
+  if (mode === 'video') return '视频生成'
+  if (mode === 'text') return '文本生成'
+  return '图片生成'
+}
+
+function cleanMetadata(metadata: Partial<CanvasNode['metadata']>) {
+  return Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== undefined && value !== '')) as Partial<CanvasNode['metadata']>
 }
 
 function operationLabel(type: string) {

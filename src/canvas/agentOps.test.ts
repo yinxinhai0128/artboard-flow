@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyCanvasAgentOps, summarizeCanvasAgentOps, type CanvasAgentSnapshot } from './agentOps'
+import { applyCanvasAgentOps, createCanvasGenerationFlowOps, summarizeCanvasAgentOps, type CanvasAgentSnapshot } from './agentOps'
 import type { CanvasProject } from './types'
 
 const project: CanvasProject = {
@@ -37,6 +37,54 @@ const snapshot = (source: CanvasProject = project): CanvasAgentSnapshot => ({
   project: source,
   selectedNodeIds: [],
   selectedConnectionId: null,
+})
+
+it('creates a reusable generation flow operation batch with references and optional autorun', () => {
+  const ops = createCanvasGenerationFlowOps({
+    prompt: 'cinematic robot bird',
+    mode: 'image',
+    x: 120,
+    y: 80,
+    referenceNodeIds: ['text-1'],
+    model: 'image-model',
+    size: '1024x1024',
+    count: 2,
+    autoRun: true,
+  }, {
+    createId: (prefix) => `${prefix}-flow`,
+  })
+
+  const ids = ['edge-flow-1', 'edge-flow-2']
+  const result = applyCanvasAgentOps(snapshot(), ops, { createId: () => ids.shift()!, now: () => '2026-07-20T02:00:00.000Z' })
+
+  expect(result.project.nodes.map((node) => [node.id, node.type, node.position])).toEqual([
+    ['config-1', 'config', { x: 0, y: 0 }],
+    ['text-1', 'text', { x: 360, y: 0 }],
+    ['text-flow', 'text', { x: 120, y: 80 }],
+    ['config-flow', 'config', { x: 540, y: 80 }],
+  ])
+  expect(result.project.nodes.find((node) => node.id === 'text-flow')?.metadata).toMatchObject({
+    content: 'cinematic robot bird',
+    status: 'success',
+  })
+  expect(result.project.nodes.find((node) => node.id === 'config-flow')?.metadata).toMatchObject({
+    generationMode: 'image',
+    composerContent: '@[node:text-flow]\n@[node:text-1]',
+    prompt: '@[node:text-flow]\n@[node:text-1]',
+    model: 'image-model',
+    size: '1024x1024',
+    count: 2,
+    status: 'idle',
+  })
+  expect(result.project.connections).toEqual([
+    { id: 'edge-1', fromNodeId: 'text-1', toNodeId: 'config-1' },
+    { id: 'edge-flow-1', fromNodeId: 'text-flow', toNodeId: 'config-flow' },
+    { id: 'edge-flow-2', fromNodeId: 'text-1', toNodeId: 'config-flow' },
+  ])
+  expect(result.selectedNodeIds).toEqual(['config-flow'])
+  expect(result.generationRequests).toEqual([
+    { nodeId: 'config-flow', mode: 'image', prompt: '@[node:text-flow]\n@[node:text-1]' },
+  ])
 })
 
 describe('canvas agent operations', () => {
