@@ -2334,6 +2334,10 @@ button:disabled {
   cursor: pointer;
 }
 
+.canvas-stage.create-menu-open .mini-map {
+  pointer-events: none;
+}
+
 .mini-map > rect:first-child {
   fill: rgba(18, 18, 18, 0.88);
   stroke: var(--border);

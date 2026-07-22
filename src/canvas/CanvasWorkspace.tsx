@@ -1949,7 +1949,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
         <div
           ref={canvasRef}
-          className={`canvas-stage ${controller.project.backgroundMode} ${spacePressed ? 'space-pan' : ''} ${activeRelationNodeId ? 'relation-focus' : ''}`}
+          className={`canvas-stage ${controller.project.backgroundMode} ${spacePressed ? 'space-pan' : ''} ${activeRelationNodeId ? 'relation-focus' : ''} ${pendingConnectionCreate || nodeCreatePosition ? 'create-menu-open' : ''}`}
           data-relation-focus={activeRelationNodeId ? 'true' : undefined}
           data-relation-active-node-id={activeRelationNodeId ?? undefined}
           style={canvasStageStyle}
@@ -2453,6 +2453,7 @@ function NodeCreateMenu({
   onCreate: (type: NodeKind) => void
   onClose: () => void
 }) {
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const options: Array<{ type: NodeKind; Icon: typeof Type; label: string; description: string }> = [
     {
       type: 'text',
@@ -2497,8 +2498,18 @@ function NodeCreateMenu({
       ]
     : options
 
+  useEffect(() => {
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && menuRef.current?.contains(target)) return
+      onClose()
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePointerDown, true)
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointerDown, true)
+  }, [onClose])
+
   return (
-    <div className="node-create-menu" data-toolbar style={{ left: position.x, top: position.y }} onPointerDown={(event) => event.stopPropagation()}>
+    <div ref={menuRef} className="node-create-menu" data-toolbar style={{ left: position.x, top: position.y }} onPointerDown={(event) => event.stopPropagation()}>
       <div>{title}</div>
       {visibleOptions.map(({ type, Icon, label, description }) => (
         <button className="node-create-option" data-node-create-type={type} key={type} onClick={() => onCreate(type)}>
