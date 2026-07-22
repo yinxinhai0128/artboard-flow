@@ -330,6 +330,7 @@ describe('canvas host bridge', () => {
 
   it('provides high-level text and layout commands for agent-style hosts', () => {
     let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    let counter = 1
     const bridge = createCanvasHostBridge({
       getSnapshot: () => ({
         project: currentProject,
@@ -339,7 +340,7 @@ describe('canvas host bridge', () => {
       commit: (next) => {
         currentProject = next.project
       },
-      createId: (prefix = 'id') => `${prefix}-1`,
+      createId: (prefix = 'id') => `${prefix}-${counter++}`,
       now: () => '2026-07-20T04:00:00.000Z',
     })
 
@@ -384,5 +385,67 @@ describe('canvas host bridge', () => {
     ])
     expect(bridge.getSnapshot().selectedNodeIds).toEqual(['text-b'])
     expect(currentProject.updatedAt).toBe('2026-07-20T04:00:00.000Z')
+  })
+
+  it('provides high-level relation, selection, viewport, deletion, and generation commands', () => {
+    let currentProject: CanvasProject = {
+      ...project,
+      nodes: [
+        {
+          id: 'text-1',
+          type: 'text',
+          title: 'Prompt',
+          position: { x: 0, y: 0 },
+          width: 260,
+          height: 180,
+          metadata: { content: 'cinematic prompt', status: 'success' },
+        },
+        {
+          id: 'config-1',
+          type: 'config',
+          title: 'Config',
+          position: { x: 420, y: 0 },
+          width: 300,
+          height: 300,
+          metadata: { generationMode: 'image', composerContent: '@[node:text-1]', status: 'idle' },
+        },
+      ],
+      connections: [],
+    }
+    let counter = 1
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: (prefix = 'id') => `${prefix}-${counter++}`,
+      now: () => '2026-07-20T05:00:00.000Z',
+    })
+
+    bridge.connectNodes({ connections: [{ fromNodeId: 'text-1', toNodeId: 'config-1' }] })
+    bridge.selectNodes({ ids: ['text-1', 'config-1', 'missing'] })
+    bridge.setViewport({ viewport: { x: 120, y: 80, k: 1.25 } })
+    const generated = bridge.runGeneration({ nodeId: 'config-1', mode: 'image' })
+
+    expect(generated.generationRequests).toEqual([
+      { nodeId: 'config-1', mode: 'image', prompt: '@[node:text-1]' },
+    ])
+    expect(bridge.getSnapshot().selectedNodeIds).toEqual(['task-2'])
+    expect(bridge.getSnapshot().project.viewport).toEqual({ x: 120, y: 80, k: 1.25 })
+    expect(bridge.getSnapshot().project.connections).toEqual([
+      { id: 'id-1', fromNodeId: 'text-1', toNodeId: 'config-1' },
+      { id: 'id-3', fromNodeId: 'config-1', toNodeId: 'task-2' },
+    ])
+
+    bridge.deleteNodes({ ids: ['text-1'] })
+
+    expect(bridge.getSnapshot().project.nodes.map((node) => node.id)).toEqual(['config-1', 'task-2'])
+    expect(bridge.getSnapshot().project.connections).toEqual([
+      { id: 'id-3', fromNodeId: 'config-1', toNodeId: 'task-2' },
+    ])
   })
 })

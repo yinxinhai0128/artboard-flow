@@ -58,6 +58,28 @@ type CanvasHostResizeNodeInput = {
   height: number
   freeResize?: boolean
 }
+type CanvasHostDeleteNodesInput = {
+  ids: string[]
+}
+type CanvasHostDeleteConnectionsInput = {
+  id?: string
+  ids?: string[]
+  all?: boolean
+}
+type CanvasHostConnectNodesInput = {
+  connections: Array<{ id?: string; fromNodeId: string; toNodeId: string }>
+}
+type CanvasHostSelectNodesInput = {
+  ids: string[]
+}
+type CanvasHostSetViewportInput = {
+  viewport: Viewport
+}
+type CanvasHostRunGenerationInput = {
+  nodeId: string
+  mode?: CanvasGenerationMode
+  prompt?: string
+}
 
 export type CanvasHostBridgeApplyResult = CanvasAgentSnapshot & {
   generationRequests: CanvasAgentGenerationRequest[]
@@ -91,6 +113,12 @@ export type CanvasHostBridge = {
   updateNodeText: (input: CanvasHostUpdateNodeTextInput) => CanvasHostBridgeApplyResult
   moveNodes: (input: CanvasHostMoveNodesInput) => CanvasHostBridgeApplyResult
   resizeNode: (input: CanvasHostResizeNodeInput) => CanvasHostBridgeApplyResult
+  deleteNodes: (input: CanvasHostDeleteNodesInput) => CanvasHostBridgeApplyResult
+  deleteConnections: (input: CanvasHostDeleteConnectionsInput) => CanvasHostBridgeApplyResult
+  connectNodes: (input: CanvasHostConnectNodesInput) => CanvasHostBridgeApplyResult
+  selectNodes: (input: CanvasHostSelectNodesInput) => CanvasHostBridgeApplyResult
+  setViewport: (input: CanvasHostSetViewportInput) => CanvasHostBridgeApplyResult
+  runGeneration: (input: CanvasHostRunGenerationInput) => CanvasHostBridgeApplyResult
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
   addAsset: (input: { dataUrl: string }) => Promise<CanvasAssetUpload>
@@ -145,6 +173,12 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       patch: { width: input.width, height: input.height },
       metadata: input.freeResize === undefined ? undefined : { freeResize: input.freeResize },
     }]),
+    deleteNodes: (input) => applyOps([{ type: 'delete_node', ids: input.ids }]),
+    deleteConnections: (input) => applyOps([{ type: 'delete_connections', id: input.id, ids: input.ids, all: input.all }]),
+    connectNodes: (input) => applyOps(input.connections.map((connection) => ({ type: 'connect_nodes', ...connection }))),
+    selectNodes: (input) => applyOps([{ type: 'select_nodes', ids: input.ids }]),
+    setViewport: (input) => applyOps([{ type: 'set_viewport', viewport: input.viewport }]),
+    runGeneration: (input) => applyOps([{ type: 'run_generation', nodeId: input.nodeId, mode: input.mode, prompt: input.prompt }]),
     createGenerationFlow: (input) => applyOps(createCanvasGenerationFlowOps(input, { createId: (prefix) => createId(prefix) })),
     listAssets: async (filter = {}) => {
       const assets = await options.assets?.list()
