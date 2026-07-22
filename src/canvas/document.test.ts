@@ -368,10 +368,10 @@ describe('canvas document operations', () => {
     }
 
     expect(normalizeConnectionForProject(source, 'prompt', 'config', 'source')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
-    expect(normalizeConnectionForProject(source, 'prompt', 'config', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
+    expect(normalizeConnectionForProject(source, 'prompt', 'config', 'target')).toBeNull()
     expect(normalizeConnectionForProject(source, 'config', 'prompt', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
     expect(normalizeConnectionForProject(source, 'config', 'prompt', 'source')).toBeNull()
-    expect(normalizeConnectionForProject(source, 'prompt', 'image', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
+    expect(normalizeConnectionForProject(source, 'prompt', 'image', 'target')).toEqual({ fromNodeId: 'image', toNodeId: 'prompt' })
     expect(normalizeConnectionForProject(source, 'config', 'config-2', 'source')).toBeNull()
   })
 
@@ -385,6 +385,33 @@ describe('canvas document operations', () => {
     expect(resolveConnectionToNode(source, { nodeId: 'prompt', handleType: 'source' }, 'image')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
     expect(resolveConnectionToNode(source, { nodeId: 'config', handleType: 'target' }, 'prompt')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
     expect(resolveConnectionToNode(source, { nodeId: 'config', handleType: 'source' }, 'config-2')).toBeNull()
+  })
+
+  it('normalizes target-handle drags as incoming connections', () => {
+    const taskNode: CanvasNode = {
+      ...imageNode('task'),
+      metadata: {
+        generationPayload: {
+          mode: 'image',
+          model: 'image-model',
+          size: '1024x1024',
+          count: 1,
+          prompt: 'robot bird',
+          summary: { text: 0, image: 0, video: 0, audio: 0 },
+          inputs: [],
+          createdAt: '2026-07-19T00:00:00.000Z',
+        },
+      },
+    }
+    const source = {
+      ...project,
+      nodes: [baseNode('prompt'), imageNode('image'), configNode('config'), taskNode],
+      connections: [],
+    }
+
+    expect(resolveConnectionToNode(source, { nodeId: 'image', handleType: 'target' }, 'prompt')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
+    expect(resolveConnectionToNode(source, { nodeId: 'prompt', handleType: 'target' }, 'config')).toBeNull()
+    expect(resolveConnectionToNode(source, { nodeId: 'task', handleType: 'target' }, 'config')).toEqual({ fromNodeId: 'config', toNodeId: 'task' })
   })
 
   it('finds connection drop targets by node body, handle radius, and invalid nearby nodes', () => {

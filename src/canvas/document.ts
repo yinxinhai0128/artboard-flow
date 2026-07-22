@@ -50,12 +50,10 @@ export function normalizeConnectionForProject(
   const second = project.nodes.find((node) => node.id === secondNodeId)
   if (!first || !second || first.id === second.id) return null
   if (first.type === 'group' || second.type === 'group') return null
-  if (first.type === 'config') {
-    if (firstHandleType === 'source' && isGenerationTaskNode(second)) return { fromNodeId: first.id, toNodeId: second.id }
-    return firstHandleType === 'target' && second.type !== 'config' ? { fromNodeId: second.id, toNodeId: first.id } : null
-  }
-  if (second.type === 'config') return { fromNodeId: first.id, toNodeId: second.id }
-  return { fromNodeId: first.id, toNodeId: second.id }
+  const source = firstHandleType === 'source' ? first : second
+  const target = firstHandleType === 'source' ? second : first
+  if (source.type === 'config' && !isGenerationTaskNode(target)) return null
+  return { fromNodeId: source.id, toNodeId: target.id }
 }
 
 function hasConnection(project: CanvasProject, connection: Omit<CanvasConnection, 'id'>): boolean {
