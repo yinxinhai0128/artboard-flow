@@ -12,6 +12,13 @@ import { relationCountsForProject } from './graph'
 import { materializeClipboardMediaAssets } from './mediaAssets'
 import { promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
+import { createCanvasHostBridge, type CanvasHostBridge } from './hostBridge'
+
+declare global {
+  interface Window {
+    artboardFlowCanvas?: CanvasHostBridge
+  }
+}
 
 type CanvasWorkspaceProps = {
   project: CanvasProject
@@ -498,6 +505,40 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     })
     return contexts
   }, [controller.project.connections, controller.project.nodes])
+  const bridgeProject = controller.project
+  const bridgeSelectedNodeIds = controller.selectedNodeIds
+  const bridgeSelectedConnectionId = controller.selectedConnectionId
+  const bridgeUpdateProject = controller.updateProject
+  const bridgeClearSelection = controller.clearSelection
+  const bridgeSelectNode = controller.selectNode
+  const bridgeSelectConnection = controller.selectConnection
+  useEffect(() => {
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: bridgeProject,
+        selectedNodeIds: bridgeSelectedNodeIds,
+        selectedConnectionId: bridgeSelectedConnectionId,
+      }),
+      commit: (snapshot) => {
+        bridgeUpdateProject(() => snapshot.project)
+        bridgeClearSelection()
+        snapshot.selectedNodeIds.forEach((nodeId, index) => bridgeSelectNode(nodeId, index > 0))
+        if (snapshot.selectedConnectionId) bridgeSelectConnection(snapshot.selectedConnectionId)
+      },
+    })
+    window.artboardFlowCanvas = bridge
+    return () => {
+      if (window.artboardFlowCanvas === bridge) delete window.artboardFlowCanvas
+    }
+  }, [
+    bridgeClearSelection,
+    bridgeProject,
+    bridgeSelectConnection,
+    bridgeSelectedConnectionId,
+    bridgeSelectedNodeIds,
+    bridgeSelectNode,
+    bridgeUpdateProject,
+  ])
   const mentionReferencesByNodeId = useMemo(() => {
     const references = new Map<string, CanvasResourceReference[]>()
     controller.project.nodes.forEach((node) => {
