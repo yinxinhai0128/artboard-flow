@@ -1651,6 +1651,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           <button title="配置节点" onClick={() => addNodeNearCenter('config')}>
             <Settings2 size={18} />
           </button>
+          <button title="分组节点" data-toolbar-action="add-group" onClick={() => addNodeNearCenter('group')}>
+            <Group size={18} />
+          </button>
           <span />
           <button title="删除选中" onClick={controller.deleteSelection}>
             <Trash2 size={18} />
