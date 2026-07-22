@@ -448,6 +448,13 @@ button:disabled {
   color: var(--subtle);
 }
 
+.node-side-panel-refresh[data-side-panel-action='upload-assets'] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
 .node-side-panel-list {
   min-height: 0;
   flex: 1;

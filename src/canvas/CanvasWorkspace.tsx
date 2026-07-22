@@ -1664,9 +1664,14 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                   ))}
                 </select>
               ) : (
-                <button className="node-side-panel-refresh" disabled={assetsLoading} onClick={() => void loadAssets()}>
-                  {assetsLoading ? '刷新中' : '刷新'}
-                </button>
+                <>
+                  <button className="node-side-panel-refresh" data-side-panel-action="upload-assets" aria-label="上传资产" title="上传资产" onClick={() => canvasFileInputRef.current?.click()}>
+                    <Upload size={15} /> 上传资产
+                  </button>
+                  <button className="node-side-panel-refresh" disabled={assetsLoading} onClick={() => void loadAssets()}>
+                    {assetsLoading ? '刷新中' : '刷新'}
+                  </button>
+                </>
               )}
             </div>
             <div className="node-side-panel-list">
