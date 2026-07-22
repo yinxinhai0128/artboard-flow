@@ -986,7 +986,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement
-    if (target.closest('[data-canvas-input]')) return
+    if (target.closest('[data-canvas-input], [data-toolbar], [data-minimap], .node-create-menu, .canvas-context-menu')) return
     event.preventDefault()
     const factor = Math.pow(1.1, -event.deltaY / 100)
     zoomAt(clientPoint(event), controller.project.viewport.k * factor)
