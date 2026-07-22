@@ -415,4 +415,33 @@ describe('canvas document operations', () => {
     expect(addConnectionToProject(source, { id: 'config-edge', fromNodeId: 'config-a', toNodeId: 'config-b' }).connections).toHaveLength(0)
     expect(addConnectionToProject(source, { id: 'config-image', fromNodeId: 'config-a', toNodeId: 'image' }).connections).toHaveLength(0)
   })
+
+  it('allows config nodes to connect to generation task nodes only', () => {
+    const taskNode: CanvasNode = {
+      ...imageNode('task'),
+      metadata: {
+        generationPayload: {
+          mode: 'image',
+          model: 'image-model',
+          size: '1024x1024',
+          count: 1,
+          prompt: 'robot bird',
+          summary: { text: 0, image: 0, video: 0, audio: 0 },
+          inputs: [],
+          createdAt: '2026-07-19T00:00:00.000Z',
+        },
+      },
+    }
+    const source = {
+      ...project,
+      nodes: [configNode('config'), imageNode('plain-image'), taskNode],
+      connections: [],
+    }
+
+    expect(normalizeConnectionForProject(source, 'config', 'task', 'source')).toEqual({ fromNodeId: 'config', toNodeId: 'task' })
+    expect(addConnectionToProject(source, { id: 'config-task', fromNodeId: 'config', toNodeId: 'task' }).connections).toEqual([
+      { id: 'config-task', fromNodeId: 'config', toNodeId: 'task' },
+    ])
+    expect(addConnectionToProject(source, { id: 'config-image', fromNodeId: 'config', toNodeId: 'plain-image' }).connections).toHaveLength(0)
+  })
 })

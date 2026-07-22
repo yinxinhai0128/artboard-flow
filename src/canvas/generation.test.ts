@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload, shouldRenderGenerationTaskBody } from './generation'
 import type { CanvasConnection, CanvasGenerationJob, CanvasNode, CanvasProject } from './types'
 
 const configNode: CanvasNode = {
@@ -557,5 +557,62 @@ describe('canvas generation context', () => {
     expect(retriedTask?.metadata.generationJobId).toBeUndefined()
     expect(retriedTask?.metadata.generationJobStatus).toBeUndefined()
     expect(updated.connections).toEqual(project.connections)
+  })
+
+  it('renders generation task bodies only for task nodes, not source config or text nodes', () => {
+    const payload = buildCanvasGenerationPayload(buildCanvasGenerationContext('config', [configNode], []))
+    const sourceConfig = {
+      ...configNode,
+      metadata: {
+        ...configNode.metadata,
+        generationPayload: payload,
+        outputNodeId: 'task',
+      },
+    }
+    const sourceText = {
+      ...textNode,
+      metadata: {
+        ...textNode.metadata,
+        generationPayload: payload,
+        outputNodeId: 'task',
+      },
+    }
+    const taskNode = {
+      ...imageNode,
+      id: 'task',
+      metadata: {
+        ...imageNode.metadata,
+        generationPayload: payload,
+      },
+    }
+
+    expect(shouldRenderGenerationTaskBody(sourceConfig)).toBe(false)
+    expect(shouldRenderGenerationTaskBody(sourceText)).toBe(false)
+    expect(shouldRenderGenerationTaskBody(taskNode)).toBe(true)
+  })
+
+  it('offsets repeated generation tasks from the same source node', () => {
+    const payload = buildCanvasGenerationPayload(buildCanvasGenerationContext('config', [configNode], []))
+    const existingTask: CanvasNode = {
+      ...imageNode,
+      id: 'existing-task',
+      position: {
+        x: configNode.position.x + configNode.width + 120,
+        y: configNode.position.y + 24,
+      },
+      metadata: {
+        ...imageNode.metadata,
+        generationPayload: payload,
+      },
+    }
+
+    expect(generationTaskPositionForSource(configNode, [configNode], [])).toEqual({
+      x: configNode.position.x + configNode.width + 120,
+      y: configNode.position.y + 24,
+    })
+    expect(generationTaskPositionForSource(configNode, [configNode, existingTask], [{ id: 'config-task', fromNodeId: 'config', toNodeId: 'existing-task' }])).toEqual({
+      x: existingTask.position.x + existingTask.width + 48,
+      y: configNode.position.y + 64,
+    })
   })
 })

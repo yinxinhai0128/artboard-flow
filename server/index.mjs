@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assetExtensionFromMimeType, assetRecordFromKey, createAssetKey, decodeDataUrlAsset, mimeTypeFromAssetKey } from './asset-store.mjs'
 import { normalizeGenerationJobPayload, normalizeGenerationJobResult, normalizeGenerationJobStatus, parseGenerationJob } from './generation-adapter.mjs'
+import { canPersistConnection } from './project-rules.mjs'
 
 const app = Fastify({ logger: true })
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -147,8 +148,7 @@ function normalizeConnections(value, nodes) {
     if (!nodeIds.has(fromNodeId) || !nodeIds.has(toNodeId) || fromNodeId === toNodeId) return []
     const from = nodesById.get(fromNodeId)
     const to = nodesById.get(toNodeId)
-    if (!from || !to || from.type === 'group' || to.type === 'group') return []
-    if (from.type === 'config') return []
+    if (!canPersistConnection(from, to)) return []
     const key = `${fromNodeId}->${toNodeId}`
     if (seen.has(key)) return []
     seen.add(key)

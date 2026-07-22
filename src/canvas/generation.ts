@@ -172,6 +172,25 @@ export function resetGenerationTaskNodeForRetry(project: CanvasProject, taskNode
   }
 }
 
+export function shouldRenderGenerationTaskBody(node: CanvasNode) {
+  return Boolean(node.metadata.generationPayload && !node.metadata.outputNodeId)
+}
+
+export function generationTaskPositionForSource(sourceNode: CanvasNode, nodes: CanvasNode[], connections: CanvasConnection[]) {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
+  const existingTasks = connections.flatMap((connection) => {
+    const node = nodesById.get(connection.toNodeId)
+    return connection.fromNodeId === sourceNode.id && node?.metadata.generationPayload ? [node] : []
+  })
+  const baseX = sourceNode.position.x + sourceNode.width + 120
+  const baseY = sourceNode.position.y + 24
+  const maxTaskRight = existingTasks.reduce((right, node) => Math.max(right, node.position.x + node.width), baseX - 48)
+  return {
+    x: existingTasks.length ? maxTaskRight + 48 : baseX,
+    y: baseY + existingTasks.length * 40,
+  }
+}
+
 export function metadataFromGenerationJob(job: CanvasGenerationJob, current: CanvasNode['metadata'] = {}): Partial<CanvasNode['metadata']> {
   const outputs = job.result?.outputs?.filter((output) => output.content) ?? []
   const activeOutputIndex = outputs.length > 1 ? Math.min(Math.max(current.activeOutputIndex ?? 0, 0), outputs.length - 1) : undefined

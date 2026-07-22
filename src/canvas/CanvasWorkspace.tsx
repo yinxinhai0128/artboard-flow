@@ -3,7 +3,7 @@ import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Group, HelpCircle, 
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload, shouldRenderGenerationTaskBody, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
@@ -1458,7 +1458,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         outputType,
         configNodeId,
         'source',
-        { x: configNode.position.x + configNode.width + 120, y: configNode.position.y + 24 },
+        generationTaskPositionForSource(configNode, controller.project.nodes, controller.project.connections),
         {
           title: outputTitle,
           width: outputType === 'text' ? 320 : outputType === 'video' ? 360 : 320,
@@ -1508,7 +1508,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         'image',
         textNodeId,
         'source',
-        { x: textNode.position.x + textNode.width + 120, y: textNode.position.y + 24 },
+        generationTaskPositionForSource(textNode, controller.project.nodes, controller.project.connections),
         {
           title: '图片生成任务',
           width: 320,
@@ -2986,7 +2986,7 @@ function NodeBody({
     setComposerMention(query === null || mentionReferences.length === 0 ? null : { query, caret })
   }
 
-  const shouldRenderGenerationTask = Boolean(node.metadata.generationPayload)
+  const shouldRenderGenerationTask = shouldRenderGenerationTaskBody(node)
     && (!node.metadata.content || node.metadata.status === 'loading' || node.metadata.status === 'error')
 
   if (shouldRenderGenerationTask) {
