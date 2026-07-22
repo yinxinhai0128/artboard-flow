@@ -443,6 +443,63 @@ describe('canvas host bridge', () => {
     expect(currentSelection).toEqual(['node-1'])
   })
 
+  it('adds text content as reusable host assets and canvas asset nodes', async () => {
+    let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    const uploadedDataUrls: string[] = []
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: () => 'node-text-asset',
+      assets: {
+        list: async () => [],
+        add: async (dataUrl) => {
+          uploadedDataUrls.push(dataUrl)
+          return {
+            storageKey: 'agent-note.txt',
+            url: '/api/assets/agent-note.txt',
+            mimeType: 'text/plain',
+            bytes: 15,
+            extension: 'txt',
+          }
+        },
+      },
+    })
+
+    await expect(bridge.addTextAsset({ text: 'Agent note 中文' })).resolves.toMatchObject({
+      storageKey: 'agent-note.txt',
+      mimeType: 'text/plain',
+    })
+    const result = await bridge.addTextAssetNode({
+      text: 'Agent note 中文',
+      title: 'Agent note',
+      x: 120,
+      y: 180,
+    })
+
+    expect(uploadedDataUrls).toEqual([
+      'data:text/plain;charset=utf-8,Agent%20note%20%E4%B8%AD%E6%96%87',
+      'data:text/plain;charset=utf-8,Agent%20note%20%E4%B8%AD%E6%96%87',
+    ])
+    expect(result.project.nodes[0]).toMatchObject({
+      id: 'node-text-asset',
+      type: 'text',
+      title: 'Agent note',
+      position: { x: 120, y: 180 },
+      metadata: {
+        content: '/api/assets/agent-note.txt',
+        storageKey: 'agent-note.txt',
+        mimeType: 'text/plain',
+        status: 'success',
+      },
+    })
+  })
+
   it('exposes a relationship graph snapshot for external hosts', () => {
     const graphProject: CanvasProject = {
       ...project,

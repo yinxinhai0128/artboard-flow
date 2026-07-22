@@ -51,6 +51,15 @@ type CanvasHostAssetNodeInput = {
   x?: number
   y?: number
 }
+type CanvasHostTextAssetInput = {
+  text: string
+}
+type CanvasHostTextAssetNodeInput = CanvasHostTextAssetInput & {
+  title?: string
+  position?: Point
+  x?: number
+  y?: number
+}
 type CanvasHostTextNodeInput = {
   id?: string
   text?: string
@@ -192,6 +201,8 @@ export type CanvasHostBridge = {
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
   addAsset: (input: { dataUrl: string }) => Promise<CanvasAssetUpload>
   addAssetNode: (input: CanvasHostAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
+  addTextAsset: (input: CanvasHostTextAssetInput) => Promise<CanvasAssetUpload>
+  addTextAssetNode: (input: CanvasHostTextAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
   undo: () => CanvasAgentSnapshot | null
   canUndo: () => boolean
 }
@@ -290,6 +301,10 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
       return options.assets.add(input.dataUrl)
     },
+    addTextAsset: async (input) => {
+      if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
+      return options.assets.add(textDataUrl(input.text))
+    },
     addAssetNode: async (input) => {
       if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
       const asset = await options.assets.add(input.dataUrl)
@@ -298,6 +313,27 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
           type: 'add_node',
           id: createId('node'),
           nodeType: nodeTypeFromMime(asset.mimeType),
+          title: input.title,
+          position: input.position ?? { x: input.x ?? 0, y: input.y ?? 0 },
+          metadata: {
+            content: asset.url,
+            storageKey: asset.storageKey,
+            mimeType: asset.mimeType,
+            bytes: asset.bytes,
+            status: 'success',
+          },
+        },
+      ])
+      return { ...result, asset }
+    },
+    addTextAssetNode: async (input) => {
+      if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
+      const asset = await options.assets.add(textDataUrl(input.text))
+      const result = applyOps([
+        {
+          type: 'add_node',
+          id: createId('node'),
+          nodeType: 'text',
           title: input.title,
           position: input.position ?? { x: input.x ?? 0, y: input.y ?? 0 },
           metadata: {
@@ -325,6 +361,10 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
   function applyGenerationShortcut(input: CanvasHostGenerateInput, mode: CanvasGenerationMode) {
     return applyOps(createCanvasGenerationFlowOps({ ...input, mode, autoRun: true }, { createId: (prefix) => createId(prefix) }))
   }
+}
+
+function textDataUrl(text: string) {
+  return `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`
 }
 
 function createGenerationStatus(
