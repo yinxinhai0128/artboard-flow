@@ -1697,7 +1697,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 <>
                   <select value={sidePanelType} onChange={(event) => setSidePanelType(event.target.value as NodeKind | 'all')}>
                     <option value="all">全部类型</option>
-                    {(['text', 'image', 'video', 'audio', 'config'] as const).map((type) => (
+                    {(['text', 'image', 'video', 'audio', 'config', 'group'] as const).map((type) => (
                       <option key={type} value={type}>{nodeKindLabels[type]}</option>
                     ))}
                   </select>
