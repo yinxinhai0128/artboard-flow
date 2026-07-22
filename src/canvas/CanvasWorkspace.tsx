@@ -38,6 +38,7 @@ type PendingConnectionCreate = {
 } | null
 
 type SidePanelTab = 'nodes' | 'assets'
+type SidePanelAssetKindFilter = CanvasAssetRecord['kind'] | 'all'
 type SidePanelResizeState = { pointerId: number; startX: number; startWidth: number; maxWidth: number } | null
 
 const nodeIcons = {
@@ -448,6 +449,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('nodes')
   const [sidePanelQuery, setSidePanelQuery] = useState('')
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
+  const [sidePanelAssetKind, setSidePanelAssetKind] = useState<SidePanelAssetKindFilter>('all')
   const [sidePanelSelectMode, setSidePanelSelectMode] = useState(false)
   const [sidePanelCheckedNodeIds, setSidePanelCheckedNodeIds] = useState<string[]>([])
   const [assets, setAssets] = useState<CanvasAssetRecord[]>([])
@@ -1259,12 +1261,15 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   }, [controller.project.nodes, sidePanelQuery, sidePanelType])
   const filteredAssets = useMemo(() => {
     const query = sidePanelQuery.trim().toLowerCase()
-    if (!query) return assets
-    return assets.filter((asset) => [asset.storageKey, asset.kind, asset.mimeType]
-      .join(' ')
-      .toLowerCase()
-      .includes(query))
-  }, [assets, sidePanelQuery])
+    return assets.filter((asset) => {
+      if (sidePanelAssetKind !== 'all' && asset.kind !== sidePanelAssetKind) return false
+      if (!query) return true
+      return [asset.storageKey, asset.kind, asset.mimeType]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    })
+  }, [assets, sidePanelAssetKind, sidePanelQuery])
   const sidePanelCheckedNodeSet = useMemo(() => new Set(sidePanelCheckedNodeIds), [sidePanelCheckedNodeIds])
   const sidePanelAllFilteredChecked = filteredPanelNodes.length > 0 && filteredPanelNodes.every((node) => sidePanelCheckedNodeSet.has(node.id))
 
@@ -1707,6 +1712,14 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 </>
               ) : (
                 <>
+                  <select data-side-panel-asset-kind-filter value={sidePanelAssetKind} onChange={(event) => setSidePanelAssetKind(event.target.value as SidePanelAssetKindFilter)}>
+                    <option value="all">全部资产</option>
+                    <option value="image">图片</option>
+                    <option value="video">视频</option>
+                    <option value="audio">音频</option>
+                    <option value="text">文本</option>
+                    <option value="file">文件</option>
+                  </select>
                   <button className="node-side-panel-refresh" data-side-panel-action="upload-assets" aria-label="上传资产" title="上传资产" onClick={() => canvasFileInputRef.current?.click()}>
                     <Upload size={15} /> 上传资产
                   </button>
