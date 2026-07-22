@@ -62,6 +62,24 @@ const resizeCorners: ResizeCorner[] = ['top-left', 'top-right', 'bottom-left', '
 const SIDE_PANEL_DEFAULT_WIDTH = 300
 const SIDE_PANEL_MIN_WIDTH = 260
 const SIDE_PANEL_MAX_WIDTH = 520
+const SIDE_PANEL_WIDTH_STORAGE_KEY = 'artboard-flow:side-panel-width'
+
+function clampSidePanelWidth(width: number) {
+  return Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, width))
+}
+
+function readStoredSidePanelWidth() {
+  if (typeof window === 'undefined') return SIDE_PANEL_DEFAULT_WIDTH
+  const stored = window.localStorage.getItem(SIDE_PANEL_WIDTH_STORAGE_KEY)
+  if (!stored) return SIDE_PANEL_DEFAULT_WIDTH
+  const value = Number(stored)
+  return Number.isFinite(value) ? clampSidePanelWidth(value) : SIDE_PANEL_DEFAULT_WIDTH
+}
+
+function storeSidePanelWidth(width: number) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(SIDE_PANEL_WIDTH_STORAGE_KEY, String(Math.round(clampSidePanelWidth(width))))
+}
 
 async function canvasNodeFromFile(file: File, position: Point): Promise<Partial<CanvasNode> & { type: NodeKind; position: Point }> {
   if (file.type.startsWith('image/')) {
@@ -426,7 +444,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(project.title)
   const [sidePanelOpen, setSidePanelOpen] = useState(false)
-  const [sidePanelWidth, setSidePanelWidth] = useState(SIDE_PANEL_DEFAULT_WIDTH)
+  const [sidePanelWidth, setSidePanelWidth] = useState(readStoredSidePanelWidth)
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('nodes')
   const [sidePanelQuery, setSidePanelQuery] = useState('')
   const [sidePanelType, setSidePanelType] = useState<NodeKind | 'all'>('all')
@@ -544,8 +562,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     const resize = sidePanelResizeRef.current
     if (!resize || resize.pointerId !== event.pointerId) return
     event.preventDefault()
-    const width = Math.min(resize.maxWidth, Math.max(SIDE_PANEL_MIN_WIDTH, resize.startWidth + event.clientX - resize.startX))
+    const width = Math.min(resize.maxWidth, clampSidePanelWidth(resize.startWidth + event.clientX - resize.startX))
     setSidePanelWidth(width)
+    storeSidePanelWidth(width)
   }, [])
 
   const stopSidePanelResize = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
