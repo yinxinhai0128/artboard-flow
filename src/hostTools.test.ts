@@ -57,13 +57,17 @@ describe('artboard flow host tools', () => {
 
   it('lists supported agent-style tool names with scopes', () => {
     expect(listArtboardFlowHostTools()).toEqual(expect.arrayContaining([
-      { name: 'canvas_list_projects', scope: 'app' },
-      { name: 'canvas_get_state', scope: 'canvas' },
-      { name: 'canvas_get_graph', scope: 'canvas' },
-      { name: 'canvas_generate_video', scope: 'canvas' },
-      { name: 'generation_get_status', scope: 'canvas' },
-      { name: 'assets_add', scope: 'canvas' },
+      expect.objectContaining({ name: 'canvas_list_projects', scope: 'app' }),
+      expect.objectContaining({ name: 'canvas_get_state', scope: 'canvas' }),
+      expect.objectContaining({ name: 'canvas_get_graph', scope: 'canvas' }),
+      expect.objectContaining({ name: 'canvas_generate_video', scope: 'canvas' }),
+      expect.objectContaining({ name: 'generation_get_status', scope: 'canvas' }),
+      expect.objectContaining({ name: 'assets_add', scope: 'canvas' }),
     ]))
+    expect(listArtboardFlowHostTools()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'canvas_connect_nodes', description: expect.stringContaining('连接节点') }),
+    ]))
+    expect(listArtboardFlowHostTools().every((tool) => tool.description.trim().length > 0)).toBe(true)
   })
 
   it('reports missing bridges and unknown tools clearly', async () => {
