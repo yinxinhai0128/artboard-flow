@@ -405,6 +405,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const controller = useCanvasController(project, onProjectChange)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const titleInputRef = useRef<HTMLInputElement | null>(null)
+  const canvasFileInputRef = useRef<HTMLInputElement | null>(null)
   const mediaUploadInputRef = useRef<HTMLInputElement | null>(null)
   const mediaUploadTargetNodeIdRef = useRef<string | null>(null)
   const dragRef = useRef<DragState>(null)
@@ -703,6 +704,23 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }
     },
     [canvasCenterWorld, controller],
+  )
+
+  const handleCanvasFileUploadChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || [])
+      event.target.value = ''
+      if (!files.length) return
+      const center = canvasCenterWorld()
+      for (const [index, file] of files.entries()) {
+        const position = { x: center.x + index * 36, y: center.y + index * 36 }
+        if (await pasteCanvasClipboardFile(file, position)) continue
+        const node = await canvasNodeFromFile(file, position)
+        controller.addNode(node.type, node.position, node)
+      }
+      if (sidePanelOpen && sidePanelTab === 'assets') void loadAssets()
+    },
+    [canvasCenterWorld, controller, loadAssets, pasteCanvasClipboardFile, sidePanelOpen, sidePanelTab],
   )
 
   const writeCanvasClipboardText = useCallback((clipboard: CanvasClipboard | null) => {
@@ -1544,6 +1562,15 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           accept={mediaUploadInputAccept}
           onChange={(event) => void handleMediaUploadChange(event)}
         />
+        <input
+          ref={canvasFileInputRef}
+          className="visually-hidden"
+          type="file"
+          multiple
+          accept="image/*,video/*,audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.txt,.md,.json,.zip"
+          data-upload-role="canvas-files"
+          onChange={(event) => void handleCanvasFileUploadChange(event)}
+        />
         {sidePanelOpen ? (
           <aside className="node-side-panel" data-toolbar>
             <div className="node-side-panel-header">
@@ -1653,6 +1680,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
           </button>
           <button title="分组节点" data-toolbar-action="add-group" onClick={() => addNodeNearCenter('group')}>
             <Group size={18} />
+          </button>
+          <button title="上传资产" data-toolbar-action="upload-files" onClick={() => canvasFileInputRef.current?.click()}>
+            <Upload size={18} />
           </button>
           <span />
           <button title="删除选中" onClick={controller.deleteSelection}>
