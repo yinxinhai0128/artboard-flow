@@ -1185,13 +1185,27 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       dragRef.current = null
       setSelectionBox(null)
     }
+    const cancel = () => {
+      const drag = dragRef.current
+      if (drag?.type === 'node') {
+        controller.syncDraggedNodeGroups(drag.nodeIds)
+      }
+      setActiveConnectionDraft(null)
+      setDropTargetGroupId(null)
+      dragRef.current = null
+      setSelectionBox(null)
+    }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('blur', cancel)
     window.addEventListener('mousemove', move)
     window.addEventListener('mouseup', up)
     return () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('blur', cancel)
       window.removeEventListener('mousemove', move)
       window.removeEventListener('mouseup', up)
     }
