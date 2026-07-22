@@ -85,6 +85,35 @@ export function buildCanvasGenerationContext(configNodeId: string, nodes: Canvas
   }
 }
 
+export function buildTextNodeImageGenerationContext(nodeId: string, nodes: CanvasNode[], connections: CanvasConnection[]): CanvasGenerationContext {
+  const textNode = nodes.find((node) => node.id === nodeId)
+  const inputs = buildCanvasGenerationInputs(nodeId, nodes, connections)
+  const prompt = buildDefaultPrompt(inputs, textNode?.metadata.content || textNode?.metadata.prompt || '')
+  const referenceImages = inputs.filter((input) => input.type === 'image' && input.media)
+  const referenceVideos = inputs.filter((input) => input.type === 'video' && input.media)
+  const referenceAudios = inputs.filter((input) => input.type === 'audio' && input.media)
+  const summary = summarizeInputs(inputs)
+  const hasAnyReference = Boolean(summary.text || summary.image || summary.video || summary.audio)
+  const ready = textNode?.type === 'text' && Boolean(prompt.trim() || hasAnyReference)
+
+  return {
+    configNodeId: nodeId,
+    mode: 'image',
+    model: textNode?.metadata.model || '默认模型',
+    size: textNode?.metadata.size || '1024x1024',
+    count: Math.max(1, Math.floor(Math.abs(Number(textNode?.metadata.count)) || 1)),
+    prompt,
+    inputs,
+    selectedInputs: inputs,
+    referenceImages,
+    referenceVideos,
+    referenceAudios,
+    summary,
+    ready,
+    warnings: ready ? [] : ['请先在文本节点输入提示词，或连接有内容的上游输入。'],
+  }
+}
+
 export function summarizeInputs(inputs: CanvasGenerationInput[]) {
   const summary = defaultSummary()
   inputs.forEach((input) => {

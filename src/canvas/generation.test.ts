@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationInputs, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, serializeCanvasGenerationPayload } from './generation'
 import type { CanvasConnection, CanvasGenerationJob, CanvasNode, CanvasProject } from './types'
 
 const configNode: CanvasNode = {
@@ -110,6 +110,35 @@ describe('canvas generation context', () => {
     expect(context.referenceImages).toHaveLength(1)
     expect(context.referenceVideos).toHaveLength(1)
     expect(context.referenceAudios).toHaveLength(1)
+  })
+
+  it('builds an image generation context directly from a text node and its upstream resources', () => {
+    const promptNode: CanvasNode = {
+      ...textNode,
+      id: 'prompt-text',
+      title: 'Prompt',
+      metadata: { content: 'Make a cinematic poster.' },
+    }
+    const upstreamText: CanvasNode = {
+      ...textNode,
+      id: 'upstream-text',
+      title: 'Style notes',
+      metadata: { content: 'Use neon rim light.' },
+    }
+    const context = buildTextNodeImageGenerationContext(
+      'prompt-text',
+      [promptNode, upstreamText, imageNode],
+      [
+        { id: 'u1', fromNodeId: 'upstream-text', toNodeId: 'prompt-text' },
+        { id: 'u2', fromNodeId: 'image', toNodeId: 'prompt-text' },
+      ],
+    )
+
+    expect(context.ready).toBe(true)
+    expect(context.mode).toBe('image')
+    expect(context.prompt).toBe('Make a cinematic poster.\n\nUse neon rim light.')
+    expect(context.summary).toEqual({ text: 1, image: 1, video: 0, audio: 0 })
+    expect(context.referenceImages.map((input) => input.nodeId)).toEqual(['image'])
   })
 
   it('does not treat config node help copy as generation prompt', () => {

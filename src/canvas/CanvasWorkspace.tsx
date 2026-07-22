@@ -3,7 +3,7 @@ import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Group, HelpCircle, 
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
-import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
+import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, metadataFromGenerationJob, serializeCanvasGenerationPayload, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
@@ -1487,6 +1487,56 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller, nodesById],
   )
 
+  const createImageGenerationTaskFromTextNode = useCallback(
+    (textNodeId: string) => {
+      const textNode = nodesById.get(textNodeId)
+      if (!textNode || textNode.type !== 'text') return
+      const context = buildTextNodeImageGenerationContext(textNodeId, controller.project.nodes, controller.project.connections)
+      if (!context.ready) {
+        controller.updateNode(textNodeId, {
+          metadata: {
+            status: 'error',
+            errorDetails: context.warnings[0],
+          },
+        })
+        return
+      }
+
+      const generatedAt = new Date().toISOString()
+      const generationPayload = buildCanvasGenerationPayload(context, generatedAt)
+      const outputNode = controller.addConnectedNode(
+        'image',
+        textNodeId,
+        'source',
+        { x: textNode.position.x + textNode.width + 120, y: textNode.position.y + 24 },
+        {
+          title: '图片生成任务',
+          width: 320,
+          height: 240,
+          metadata: {
+            status: 'idle',
+            prompt: context.prompt,
+            content: '',
+            generationPayload,
+            model: context.model,
+            size: context.size,
+            count: context.count,
+          },
+        },
+      )
+      controller.updateNode(textNodeId, {
+        metadata: {
+          status: 'success',
+          errorDetails: '',
+          generatedAt,
+          generationPayload,
+          outputNodeId: outputNode.id,
+        },
+      }, false)
+    },
+    [controller, nodesById],
+  )
+
   const retryGenerationTaskNode = useCallback(
     (taskNodeId: string) => {
       const sourceConfigId = controller.project.connections.find((connection) => connection.toNodeId === taskNodeId && nodesById.get(connection.fromNodeId)?.type === 'config')?.fromNodeId
@@ -2047,6 +2097,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onInfo={(node) => setInfoNodeId(node.id)}
             onPreview={(node) => setPreviewNodeId(node.id)}
             onCreateGenerationTask={(node) => createGenerationTaskNode(node.id)}
+            onCreateImageGenerationTaskFromText={(node) => createImageGenerationTaskFromTextNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
             onPromoteSplitOutput={promoteSplitOutput}
@@ -2521,6 +2572,7 @@ function NodeHoverToolbar({
   onInfo,
   onPreview,
   onCreateGenerationTask,
+  onCreateImageGenerationTaskFromText,
   onRetryGenerationTask,
   onStartConnection,
   onPromoteSplitOutput,
@@ -2538,6 +2590,7 @@ function NodeHoverToolbar({
   onInfo: (node: CanvasNode) => void
   onPreview: (node: CanvasNode) => void
   onCreateGenerationTask: (node: CanvasNode) => void
+  onCreateImageGenerationTaskFromText: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
@@ -2554,6 +2607,7 @@ function NodeHoverToolbar({
   const left = viewport.x + (node.position.x + node.width / 2) * viewport.k
   const top = Math.max(12, viewport.y + node.position.y * viewport.k - 12)
   const canCreateGenerationTask = node.type === 'config'
+  const canCreateImageGenerationTaskFromText = node.type === 'text'
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
@@ -2583,6 +2637,12 @@ function NodeHoverToolbar({
         <button title="从配置创建生成任务" onClick={() => onCreateGenerationTask(node)}>
           <Play size={15} />
           生成
+        </button>
+      ) : null}
+      {canCreateImageGenerationTaskFromText ? (
+        <button title="用文本创建图片生成任务" data-node-action="generate-image-from-text" onClick={() => onCreateImageGenerationTaskFromText(node)}>
+          <Image size={15} />
+          生图
         </button>
       ) : null}
       {canRetryGenerationTask ? (
