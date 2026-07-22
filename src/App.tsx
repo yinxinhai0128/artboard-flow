@@ -7,10 +7,12 @@ import { downloadCanvasProjects, readCanvasProjectsFile } from './canvas/export'
 import { materializeProjectMediaAssets } from './canvas/mediaAssets'
 import { createProjectSaveQueue } from './canvas/saveQueue'
 import type { CanvasProject } from './canvas/types'
+import { createArtboardFlowHostTools, type ArtboardFlowHostToolsRuntime } from './hostTools'
 
 declare global {
   interface Window {
     artboardFlowApp?: ArtboardFlowAppHostBridge
+    artboardFlowTools?: ArtboardFlowHostToolsRuntime
   }
 }
 
@@ -118,6 +120,17 @@ function App() {
       if (window.artboardFlowApp === bridge) delete window.artboardFlowApp
     }
   }, [activeId, createProject, openProject, projects])
+
+  useEffect(() => {
+    const tools = createArtboardFlowHostTools({
+      getApp: () => window.artboardFlowApp,
+      getCanvas: () => window.artboardFlowCanvas,
+    })
+    window.artboardFlowTools = tools
+    return () => {
+      if (window.artboardFlowTools === tools) delete window.artboardFlowTools
+    }
+  }, [])
 
   const updateProject = (project: CanvasProject) => {
     setProjects((current) => current.map((item) => (item.id === project.id ? project : item)))
