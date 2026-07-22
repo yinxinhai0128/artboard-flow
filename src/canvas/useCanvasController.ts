@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BackgroundMode, CanvasNode, CanvasProject, NodeKind, Point, SelectionBox, Snapshot, Viewport } from './types'
-import { rectsIntersect } from './geometry'
-import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject, pasteClipboardIntoProject, syncNodeGroupMembership, type CanvasClipboard } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, nextNodeSelection, normalizeConnectionForProject, pasteClipboardIntoProject, selectionBoxNodeIds, syncNodeGroupMembership, type CanvasClipboard } from './document'
 import { createCanvasNode } from './nodeFactory'
 
 const createId = () => crypto.randomUUID()
@@ -286,9 +285,7 @@ export function useCanvasController(project: CanvasProject, onChange: (project: 
       const y = Math.min(box.start.y, box.current.y)
       const width = Math.abs(box.current.x - box.start.x)
       const height = Math.abs(box.current.y - box.start.y)
-      const hits = localProject.nodes
-        .filter((node) => rectsIntersect({ x, y, width, height }, { x: node.position.x, y: node.position.y, width: node.width, height: node.height }))
-        .map((node) => node.id)
+      const hits = selectionBoxNodeIds(localProject.nodes, { x, y, width, height })
       setSelectedNodeIds(box.additive ? Array.from(new Set([...box.initialIds, ...hits])) : hits)
       setSelectedConnectionId(null)
     },

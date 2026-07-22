@@ -1,4 +1,4 @@
-import { sourcePort, targetPort } from './geometry'
+import { rectsIntersect, sourcePort, targetPort } from './geometry'
 import { CONFIG_REFERENCE_PATTERN } from './resourceReferences'
 import type { CanvasConnection, CanvasNode, CanvasProject, Point } from './types'
 
@@ -186,6 +186,13 @@ export function nodeBounds(nodes: CanvasNode[]) {
     }),
     { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
   )
+}
+
+export function selectionBoxNodeIds(nodes: CanvasNode[], box: { x: number; y: number; width: number; height: number }) {
+  return nodes
+    .filter((node) => !isHiddenSplitChild(node, nodes))
+    .filter((node) => rectsIntersect(box, { x: node.position.x, y: node.position.y, width: node.width, height: node.height }))
+    .map((node) => node.id)
 }
 
 export function findGroupDropTarget(nodes: CanvasNode[], nodeIds: string[]) {

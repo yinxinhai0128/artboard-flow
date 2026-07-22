@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, parseCanvasClipboardText, pasteClipboardIntoProject, resolveConnectionToNode, serializeCanvasClipboard, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, parseCanvasClipboardText, pasteClipboardIntoProject, resolveConnectionToNode, selectionBoxNodeIds, serializeCanvasClipboard, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -78,6 +78,20 @@ describe('canvas document operations', () => {
     expect(isHiddenSplitChild(source.nodes[1], source.nodes)).toBe(true)
     expect(isSplitConnectionHidden(source.connections[0], source.nodes)).toBe(true)
     expect(isSplitConnectionHidden(source.connections[1], source.nodes)).toBe(true)
+  })
+
+  it('ignores hidden split children while selecting with a box', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...imageNode('root'), position: { x: 100, y: 100 }, width: 180, height: 120, metadata: { splitChildrenCollapsed: true } },
+        { ...imageNode('child'), position: { x: 180, y: 120 }, width: 180, height: 120, metadata: { splitSourceNodeId: 'root', splitOutputIndex: 0 } },
+        { ...baseNode('note'), position: { x: 420, y: 120 }, width: 160, height: 110 },
+      ],
+      connections: [],
+    }
+
+    expect(selectionBoxNodeIds(source.nodes, { x: 80, y: 80, width: 560, height: 240 })).toEqual(['root', 'note'])
   })
 
   it('deletes split output children with their source node', () => {
