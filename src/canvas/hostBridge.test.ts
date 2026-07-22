@@ -570,6 +570,63 @@ describe('canvas host bridge', () => {
     })
   })
 
+  it('adds image URLs as reusable host assets and canvas asset nodes', async () => {
+    let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
+    const uploadedDataUrls: string[] = []
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: () => 'node-image-asset',
+      assets: {
+        list: async () => [],
+        add: async (dataUrl) => {
+          uploadedDataUrls.push(dataUrl)
+          return {
+            storageKey: 'agent-image.png',
+            url: '/api/assets/agent-image.png',
+            mimeType: 'image/png',
+            bytes: 32,
+            extension: 'png',
+          }
+        },
+      },
+    })
+
+    await expect(bridge.addImageAsset({ imageUrl: 'data:image/png;base64,aGVybw==' })).resolves.toMatchObject({
+      storageKey: 'agent-image.png',
+      mimeType: 'image/png',
+    })
+    const result = await bridge.addImageAssetNode({
+      imageUrl: 'data:image/png;base64,aGVybw==',
+      title: 'Agent image',
+      x: 220,
+      y: 260,
+    })
+
+    expect(uploadedDataUrls).toEqual([
+      'data:image/png;base64,aGVybw==',
+      'data:image/png;base64,aGVybw==',
+    ])
+    expect(result.project.nodes[0]).toMatchObject({
+      id: 'node-image-asset',
+      type: 'image',
+      title: 'Agent image',
+      position: { x: 220, y: 260 },
+      metadata: {
+        content: '/api/assets/agent-image.png',
+        storageKey: 'agent-image.png',
+        mimeType: 'image/png',
+        status: 'success',
+      },
+    })
+  })
+
   it('exposes a relationship graph snapshot for external hosts', () => {
     const graphProject: CanvasProject = {
       ...project,

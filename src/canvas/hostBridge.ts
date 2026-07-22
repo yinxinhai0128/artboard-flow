@@ -77,6 +77,15 @@ type CanvasHostTextAssetNodeInput = CanvasHostTextAssetInput & {
   x?: number
   y?: number
 }
+type CanvasHostImageAssetInput = {
+  imageUrl: string
+}
+type CanvasHostImageAssetNodeInput = CanvasHostImageAssetInput & {
+  title?: string
+  position?: Point
+  x?: number
+  y?: number
+}
 type CanvasHostTextNodeInput = {
   id?: string
   text?: string
@@ -222,6 +231,8 @@ export type CanvasHostBridge = {
   addAssetNode: (input: CanvasHostAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
   addTextAsset: (input: CanvasHostTextAssetInput) => Promise<CanvasAssetUpload>
   addTextAssetNode: (input: CanvasHostTextAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
+  addImageAsset: (input: CanvasHostImageAssetInput) => Promise<CanvasAssetUpload>
+  addImageAssetNode: (input: CanvasHostImageAssetNodeInput) => Promise<CanvasHostBridgeAssetNodeResult>
   undo: () => CanvasAgentSnapshot | null
   canUndo: () => boolean
 }
@@ -259,6 +270,8 @@ const canvasHostCapabilities: CanvasHostCapability[] = [
   { name: 'addAssetNode', scope: 'assets', description: '上传素材并插入为画布节点。' },
   { name: 'addTextAsset', scope: 'assets', description: '上传文本内容为 text/plain 素材。' },
   { name: 'addTextAssetNode', scope: 'assets', description: '上传文本素材并插入为画布文本节点。' },
+  { name: 'addImageAsset', scope: 'assets', description: '从图片 data URL 或可访问 URL 上传图片素材。' },
+  { name: 'addImageAssetNode', scope: 'assets', description: '上传图片素材并插入为画布图片节点。' },
   { name: 'undo', scope: 'history', description: '撤销最近一次 Host Bridge 操作。' },
   { name: 'canUndo', scope: 'history', description: '检查是否存在可撤销的 Host Bridge 操作。' },
 ]
@@ -366,9 +379,34 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
       return options.assets.add(textDataUrl(input.text))
     },
+    addImageAsset: async (input) => {
+      if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
+      return options.assets.add(await imageUrlToDataUrl(input.imageUrl))
+    },
     addAssetNode: async (input) => {
       if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
       const asset = await options.assets.add(input.dataUrl)
+      const result = applyOps([
+        {
+          type: 'add_node',
+          id: createId('node'),
+          nodeType: nodeTypeFromMime(asset.mimeType),
+          title: input.title,
+          position: input.position ?? { x: input.x ?? 0, y: input.y ?? 0 },
+          metadata: {
+            content: asset.url,
+            storageKey: asset.storageKey,
+            mimeType: asset.mimeType,
+            bytes: asset.bytes,
+            status: 'success',
+          },
+        },
+      ])
+      return { ...result, asset }
+    },
+    addImageAssetNode: async (input) => {
+      if (!options.assets) throw new Error('HOST_ASSETS_UNAVAILABLE')
+      const asset = await options.assets.add(await imageUrlToDataUrl(input.imageUrl))
       const result = applyOps([
         {
           type: 'add_node',
@@ -426,6 +464,25 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
 
 function textDataUrl(text: string) {
   return `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`
+}
+
+async function imageUrlToDataUrl(imageUrl: string) {
+  if (imageUrl.startsWith('data:')) return imageUrl
+  const response = await fetch(imageUrl)
+  if (!response.ok) throw new Error('HOST_IMAGE_ASSET_FETCH_FAILED')
+  const mimeType = response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream'
+  const buffer = await response.arrayBuffer()
+  return `data:${mimeType};base64,${arrayBufferToBase64(buffer)}`
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  const chunkSize = 0x8000
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
+  }
+  return btoa(binary)
 }
 
 function searchAssets(assets: CanvasAssetRecord[], filter: CanvasHostAssetSearchFilter): CanvasHostAssetSearchResult {

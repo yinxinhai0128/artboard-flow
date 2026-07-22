@@ -61,7 +61,7 @@ npm run build
 - 节点：`createNode()`、`createTextNode()`、`createTextNodes()`、`createConfigNode()`、`updateNode()`、`updateNodeText()`、`moveNodes()`、`resizeNode()`、`deleteNodes()`。
 - 连线与视口：`connectNodes()`、`deleteConnections()`、`selectNodes()`、`setViewport()`。
 - 生成流程：`createGenerationFlow()`、`createImagePromptFlow()`、`generateImage()`、`generateVideo()`、`generateText()`、`runGeneration()` 会创建配置/任务节点与关系；`submitGenerationTask()` 会把任务节点提交给宿主生成适配器；`getGenerationStatus()` 可按 `taskId`、`nodeIds`、`scope`、`limit` 查询真实任务状态。
-- 素材：`listAssets()`、`searchAssets()`、`addAsset()`、`addAssetNode()`、`addTextAsset()`、`addTextAssetNode()` 可对接宿主素材库；`searchAssets()` 支持 kind、keyword、page、pageSize，文本素材会以 `text/plain` data URL 上传，画布节点保存 `/api/assets/...` 引用。
+- 素材：`listAssets()`、`searchAssets()`、`addAsset()`、`addAssetNode()`、`addTextAsset()`、`addTextAssetNode()`、`addImageAsset()`、`addImageAssetNode()` 可对接宿主素材库；`searchAssets()` 支持 kind、keyword、page、pageSize，文本素材会以 `text/plain` data URL 上传，图片素材支持 data URL 或可访问图片 URL，画布节点保存 `/api/assets/...` 引用。
 - 历史：`undo()`、`canUndo()` 支持宿主侧撤销入口。
 
 示例应用已经把 `window.artboardFlowCanvas` 绑定到当前打开的画布页，便于本地调试和外部自动化验证。真正接入生产网站时，建议宿主显式保存 bridge 实例，并把素材上传、生成任务提交、生成状态查询等能力接到自己的后端适配器。
