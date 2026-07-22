@@ -269,6 +269,52 @@ describe('canvas host bridge', () => {
     })
   })
 
+  it('provides generation shortcuts that create autorun flows for AI hosts', () => {
+    let currentProject = project
+    let counter = 1
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: [],
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+      },
+      createId: (prefix = 'id') => `${prefix}-${counter++}`,
+      now: () => '2026-07-20T07:00:00.000Z',
+    })
+
+    const imageResult = bridge.generateImage({
+      prompt: 'shortcut image prompt',
+      referenceNodeIds: ['image-1'],
+      model: 'image-model',
+      size: '1024x1024',
+      count: 1,
+    })
+    const imageTask = imageResult.project.nodes.find((node) => node.type === 'image' && node.metadata.generationPayload?.mode === 'image' && !node.metadata.outputNodeId)
+
+    expect(imageTask?.metadata.generationPayload?.prompt).toContain('shortcut image prompt')
+    expect(imageResult.generationRequests).toHaveLength(1)
+
+    const videoResult = bridge.generateVideo({
+      prompt: 'shortcut video prompt',
+      model: 'video-model',
+      size: '1280x720',
+      count: 1,
+    })
+    const videoTask = videoResult.project.nodes.find((node) => node.type === 'video' && node.metadata.generationPayload?.mode === 'video' && !node.metadata.outputNodeId)
+
+    expect(videoTask?.type).toBe('video')
+    expect(videoTask?.metadata.generationPayload?.prompt).toContain('shortcut video prompt')
+    expect(videoResult.generationRequests).toHaveLength(1)
+    expect(videoResult.generationRequests[0]).toMatchObject({
+      nodeId: videoResult.project.nodes.find((node) => node.type === 'config' && node.metadata.generationMode === 'video')?.id,
+      mode: 'video',
+    })
+    expect(videoResult.generationRequests[0]?.prompt).toContain('@[node:text-')
+  })
+
   it('uploads an external asset and inserts it as a selected canvas node', async () => {
     let currentProject: CanvasProject = { ...project, nodes: [], connections: [] }
     let currentSelection: string[] = []

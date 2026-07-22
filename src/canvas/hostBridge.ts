@@ -15,6 +15,7 @@ type CanvasHostBridgeOptions = {
 }
 
 type CanvasGenerationFlowInput = Parameters<typeof createCanvasGenerationFlowOps>[0]
+type CanvasHostGenerateInput = Omit<CanvasGenerationFlowInput, 'mode' | 'autoRun'>
 type CanvasHostAssetAdapter = {
   list: () => Promise<CanvasAssetRecord[]> | CanvasAssetRecord[]
   add: (dataUrl: string) => Promise<CanvasAssetUpload> | CanvasAssetUpload
@@ -175,6 +176,9 @@ export type CanvasHostBridge = {
   setViewport: (input: CanvasHostSetViewportInput) => CanvasHostBridgeApplyResult
   runGeneration: (input: CanvasHostRunGenerationInput) => CanvasHostBridgeApplyResult
   createGenerationFlow: (input: CanvasGenerationFlowInput) => CanvasHostBridgeApplyResult
+  generateText: (input: CanvasHostGenerateInput) => CanvasHostBridgeApplyResult
+  generateImage: (input: CanvasHostGenerateInput) => CanvasHostBridgeApplyResult
+  generateVideo: (input: CanvasHostGenerateInput) => CanvasHostBridgeApplyResult
   getGenerationStatus: (filter?: CanvasHostGenerationStatusFilter) => Promise<CanvasHostGenerationStatus>
   submitGenerationTask: (input: CanvasHostGenerationTaskInput) => Promise<CanvasHostGenerationTaskResult>
   listAssets: (filter?: CanvasHostAssetFilter) => Promise<CanvasAssetRecord[]>
@@ -240,6 +244,9 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     setViewport: (input) => applyOps([{ type: 'set_viewport', viewport: input.viewport }]),
     runGeneration: (input) => applyOps([{ type: 'run_generation', nodeId: input.nodeId, mode: input.mode, prompt: input.prompt }]),
     createGenerationFlow: (input) => applyOps(createCanvasGenerationFlowOps(input, { createId: (prefix) => createId(prefix) })),
+    generateText: (input) => applyGenerationShortcut(input, 'text'),
+    generateImage: (input) => applyGenerationShortcut(input, 'image'),
+    generateVideo: (input) => applyGenerationShortcut(input, 'video'),
     getGenerationStatus: async (filter = {}) => {
       if (!options.generation) throw new Error('HOST_GENERATION_UNAVAILABLE')
       const jobs = await options.generation.list({ projectId: latestSnapshot.project.id })
@@ -303,6 +310,10 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
       return restored
     },
     canUndo: () => Boolean(undoSnapshot),
+  }
+
+  function applyGenerationShortcut(input: CanvasHostGenerateInput, mode: CanvasGenerationMode) {
+    return applyOps(createCanvasGenerationFlowOps({ ...input, mode, autoRun: true }, { createId: (prefix) => createId(prefix) }))
   }
 }
 
