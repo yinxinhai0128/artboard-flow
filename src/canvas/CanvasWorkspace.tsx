@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { Compass, Copy, Crop, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, Sparkles, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { Compass, Copy, Crop, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, Sparkles, SquarePen, Trash2, Type, Undo2, Upload, Video, ZoomIn } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -12,6 +12,7 @@ import { relationCountsForNodes } from './graph'
 import { DEFAULT_IMAGE_ANGLE_PARAMS, buildAngleLabel, createImageAngleTaskInProject, type ImageAngleParams } from './imageAngle'
 import { createCroppedImageNodeInProject, cropImageDataUrl, type ImageCropRect } from './imageCrop'
 import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
+import { DEFAULT_IMAGE_UPSCALE_PARAMS, createUpscaledImageNodeInProject, resolveUpscaleSize, upscaleImageDataUrl, type ImageUpscaleAlgorithm, type ImageUpscaleParams } from './imageUpscale'
 import {
   GRID_SPLIT_MAX,
   GRID_SPLIT_MIN,
@@ -484,6 +485,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [gridSplitNodeId, setGridSplitNodeId] = useState<string | null>(null)
   const [cropNodeId, setCropNodeId] = useState<string | null>(null)
   const [angleNodeId, setAngleNodeId] = useState<string | null>(null)
+  const [upscaleNodeId, setUpscaleNodeId] = useState<string | null>(null)
 
   const setActiveConnectionDraft = useCallback((draft: ConnectionDraft | null) => {
     connectionDraftRef.current = draft
@@ -594,6 +596,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const gridSplitNode = gridSplitNodeId ? nodesById.get(gridSplitNodeId) ?? null : null
   const cropNode = cropNodeId ? nodesById.get(cropNodeId) ?? null : null
   const angleNode = angleNodeId ? nodesById.get(angleNodeId) ?? null : null
+  const upscaleNode = upscaleNodeId ? nodesById.get(upscaleNodeId) ?? null : null
   const selectionToolbarPosition = useMemo(() => {
     if (!hasMultiSelection || selectionBox || controller.selectedNodes.length === 0) return null
     const left = Math.min(...controller.selectedNodes.map((node) => node.position.x))
@@ -1516,6 +1519,22 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const upscaleImageNode = useCallback(
+    async (node: CanvasNode, params: ImageUpscaleParams) => {
+      if (node.type !== 'image' || !node.metadata.content) return
+      const upscaled = await upscaleImageDataUrl(node.metadata.content, params)
+      const asset = await canvasApi.uploadAsset(upscaled.dataUrl)
+      const result = createUpscaledImageNodeInProject(controller.project, node.id, { params, asset, width: upscaled.width, height: upscaled.height }, () => crypto.randomUUID())
+      if (!result) return
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      controller.selectNode(result.nodeId, false)
+      setToolbarNodeId(node.id)
+      setUpscaleNodeId(null)
+    },
+    [controller],
+  )
+
   const createImageAngleTaskNode = useCallback(
     (node: CanvasNode, params: ImageAngleParams) => {
       const result = createImageAngleTaskInProject(controller.project, node.id, params, { createId: () => crypto.randomUUID() })
@@ -2243,6 +2262,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onStartConnection={startConnectionFromToolbar}
             onAngleImage={(node) => setAngleNodeId(node.id)}
             onCropImage={(node) => setCropNodeId(node.id)}
+            onUpscaleImage={(node) => setUpscaleNodeId(node.id)}
             onSplitImageGrid={(node) => setGridSplitNodeId(node.id)}
             onPromoteSplitOutput={promoteSplitOutput}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
@@ -2277,6 +2297,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         node={cropNode?.type === 'image' ? cropNode : null}
         onClose={() => setCropNodeId(null)}
         onConfirm={(node, crop) => void cropImageNode(node, crop)}
+      />
+      <ImageUpscaleDialog
+        node={upscaleNode?.type === 'image' ? upscaleNode : null}
+        onClose={() => setUpscaleNodeId(null)}
+        onConfirm={(node, params) => void upscaleImageNode(node, params)}
       />
       <ImageAngleDialog
         node={angleNode?.type === 'image' ? angleNode : null}
@@ -2758,6 +2783,7 @@ function NodeHoverToolbar({
   onStartConnection,
   onAngleImage,
   onCropImage,
+  onUpscaleImage,
   onSplitImageGrid,
   onPromoteSplitOutput,
   onDuplicate,
@@ -2779,6 +2805,7 @@ function NodeHoverToolbar({
   onStartConnection: (node: CanvasNode) => void
   onAngleImage: (node: CanvasNode) => void
   onCropImage: (node: CanvasNode) => void
+  onUpscaleImage: (node: CanvasNode) => void
   onSplitImageGrid: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
@@ -2800,6 +2827,7 @@ function NodeHoverToolbar({
   const canSplitImageGrid = node.type === 'image' && Boolean(node.metadata.content)
   const canCropImage = node.type === 'image' && Boolean(node.metadata.content)
   const canAngleImage = node.type === 'image' && Boolean(node.metadata.content)
+  const canUpscaleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
   const canSaveAsset = canSaveAssetNode(node)
   const canUpload = isUploadableMediaNode(node)
@@ -2851,6 +2879,12 @@ function NodeHoverToolbar({
         <button title="裁剪图片并生成结果节点" data-node-action="crop-image" onClick={() => onCropImage(node)}>
           <Crop size={15} />
           裁剪
+        </button>
+      ) : null}
+      {canUpscaleImage ? (
+        <button title="放大图片并生成结果节点" data-node-action="upscale-image" onClick={() => onUpscaleImage(node)}>
+          <ZoomIn size={15} />
+          放大
         </button>
       ) : null}
       {canAngleImage ? (
@@ -2915,6 +2949,114 @@ function NodeHoverToolbar({
       </button>
     </div>
   )
+}
+
+const IMAGE_UPSCALE_TARGETS = [1024, 2048, 4096]
+
+function ImageUpscaleDialog({
+  node,
+  onClose,
+  onConfirm,
+}: {
+  node: CanvasNode | null
+  onClose: () => void
+  onConfirm: (node: CanvasNode, params: ImageUpscaleParams) => void
+}) {
+  const [params, setParams] = useState(DEFAULT_IMAGE_UPSCALE_PARAMS)
+  const open = Boolean(node?.metadata.content)
+
+  useEffect(() => {
+    if (!open || !node) return
+    const sourceSize = imageNodeSourceSize(node)
+    const sourceLongEdge = Math.max(sourceSize.width, sourceSize.height)
+    const targetLongEdge = IMAGE_UPSCALE_TARGETS.find((target) => target > sourceLongEdge) ?? DEFAULT_IMAGE_UPSCALE_PARAMS.targetLongEdge
+    setParams({ ...DEFAULT_IMAGE_UPSCALE_PARAMS, targetLongEdge })
+  }, [node, open])
+
+  if (!node?.metadata.content) return null
+
+  const sourceSize = imageNodeSourceSize(node)
+  const sourceLongEdge = Math.max(sourceSize.width, sourceSize.height)
+  const outputSize = resolveUpscaleSize(sourceSize.width, sourceSize.height, params.targetLongEdge)
+  const canConfirm = Math.max(outputSize.width, outputSize.height) > sourceLongEdge
+
+  return (
+    <div className="image-upscale-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="image-upscale-modal" data-image-upscale-dialog="true" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>图片放大</span>
+            <h2>{node.title || '图片节点'}</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="image-upscale-body">
+          <div className="image-upscale-preview">
+            <img src={node.metadata.content} alt={node.title} draggable={false} />
+            <div>
+              <span>源尺寸</span>
+              <strong>{sourceSize.width} × {sourceSize.height}</strong>
+            </div>
+          </div>
+          <div className="image-upscale-controls">
+            <label>
+              <span>目标长边</span>
+              <div className="image-upscale-options">
+                {IMAGE_UPSCALE_TARGETS.map((target) => (
+                  <button
+                    key={target}
+                    type="button"
+                    data-image-upscale-target={target}
+                    className={params.targetLongEdge === target ? 'active' : ''}
+                    disabled={target <= sourceLongEdge}
+                    onClick={() => setParams((current) => ({ ...current, targetLongEdge: target }))}
+                  >
+                    {target}px
+                  </button>
+                ))}
+              </div>
+            </label>
+            <label>
+              <span>放大算法</span>
+              <div className="image-upscale-options">
+                {([
+                  ['high', '高质量'],
+                  ['bilinear', '双线性'],
+                  ['nearest', '最近邻'],
+                ] as Array<[ImageUpscaleAlgorithm, string]>).map(([algorithm, label]) => (
+                  <button
+                    key={algorithm}
+                    type="button"
+                    data-image-upscale-algorithm={algorithm}
+                    className={params.algorithm === algorithm ? 'active' : ''}
+                    onClick={() => setParams((current) => ({ ...current, algorithm }))}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <div className="image-upscale-summary">
+              <span>输出尺寸</span>
+              <strong>{outputSize.width} × {outputSize.height}</strong>
+              <small>{canConfirm ? '将生成一个新的图片结果节点，并自动连接到原图。' : '原图已经达到当前目标尺寸，请选择更大的目标。'}</small>
+            </div>
+            <button className="primary" data-image-upscale-confirm disabled={!canConfirm} onClick={() => onConfirm(node, params)}>
+              <ZoomIn size={16} />
+              生成放大节点
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function imageNodeSourceSize(node: CanvasNode) {
+  return {
+    width: Math.max(1, Math.round(node.metadata.naturalWidth ?? node.width)),
+    height: Math.max(1, Math.round(node.metadata.naturalHeight ?? node.height)),
+  }
 }
 
 function ImageAngleDialog({

@@ -1546,6 +1546,149 @@ button:disabled {
   border: 0;
 }
 
+.image-upscale-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(12px);
+}
+
+.image-upscale-modal {
+  width: min(820px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: rgba(18, 18, 20, 0.96);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.image-upscale-modal header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 26px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.image-upscale-modal header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.image-upscale-modal h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+
+.image-upscale-modal header button,
+.image-upscale-options button,
+.image-upscale-controls .primary {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.image-upscale-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 340px;
+  gap: 24px;
+  padding: 24px 26px 28px;
+}
+
+.image-upscale-preview {
+  display: grid;
+  gap: 16px;
+  align-content: center;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.image-upscale-preview img {
+  width: 100%;
+  max-height: 360px;
+  border-radius: 20px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.image-upscale-preview div,
+.image-upscale-summary {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(125, 211, 252, 0.08);
+}
+
+.image-upscale-preview span,
+.image-upscale-controls label > span,
+.image-upscale-summary span,
+.image-upscale-summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.image-upscale-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.image-upscale-controls label {
+  display: grid;
+  gap: 10px;
+}
+
+.image-upscale-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.image-upscale-options button {
+  padding: 9px 13px;
+  font-weight: 800;
+}
+
+.image-upscale-options button.active {
+  border-color: rgba(125, 211, 252, 0.5);
+  color: #e0f2fe;
+  background: rgba(125, 211, 252, 0.16);
+}
+
+.image-upscale-options button:disabled {
+  cursor: not-allowed;
+  opacity: 0.36;
+}
+
+.image-upscale-controls .primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: #052e16;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--green), #bbf7d0);
+}
+
+.image-upscale-controls .primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .image-angle-backdrop {
   position: fixed;
   inset: 0;
