@@ -8,7 +8,7 @@ import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
-import { relationCountsForProject } from './graph'
+import { relationCountsForNodes } from './graph'
 import { materializeClipboardMediaAssets } from './mediaAssets'
 import { promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
@@ -489,7 +489,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     () => visibleNodesInViewport(renderableNodes, controller.project.viewport, canvasSize),
     [canvasSize, controller.project.viewport, renderableNodes],
   )
-  const relationCounts = useMemo(() => relationCountsForProject(controller.project), [controller.project])
+  const relationCounts = useMemo(() => relationCountsForNodes(renderableNodes, renderableConnections), [renderableConnections, renderableNodes])
   const splitOutputCounts = useMemo(() => {
     const counts = new Map<string, number>()
     controller.project.nodes.forEach((node) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createCanvasGraphSnapshot, relationCountsForProject } from './graph'
+import { createCanvasGraphSnapshot, relationCountsForNodes, relationCountsForProject } from './graph'
 import type { CanvasProject } from './types'
 
 const project: CanvasProject = {
@@ -87,5 +87,16 @@ describe('canvas graph snapshots', () => {
     expect(counts.get('image-1')).toEqual({ incoming: 1, outgoing: 1 })
     expect(counts.get('config-1')).toEqual({ incoming: 1, outgoing: 0 })
     expect(counts.get('group-1')).toEqual({ incoming: 0, outgoing: 0 })
+  })
+
+  it('computes relation counts within a supplied visible node set', () => {
+    const counts = relationCountsForNodes(
+      project.nodes.filter((node) => node.id !== 'image-1'),
+      project.connections,
+    )
+
+    expect(counts.get('text-1')).toEqual({ incoming: 0, outgoing: 0 })
+    expect(counts.get('config-1')).toEqual({ incoming: 0, outgoing: 0 })
+    expect(counts.has('image-1')).toBe(false)
   })
 })

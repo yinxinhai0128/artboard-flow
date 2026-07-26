@@ -1,4 +1,4 @@
-import type { CanvasProject, NodeKind } from './types'
+import type { CanvasConnection, CanvasNode, CanvasProject, NodeKind } from './types'
 
 export type CanvasGraphNode = {
   id: string
@@ -22,10 +22,14 @@ export type CanvasGraphSnapshot = {
 }
 
 export function relationCountsForProject(project: CanvasProject) {
-  const nodeIds = new Set(project.nodes.map((node) => node.id))
+  return relationCountsForNodes(project.nodes, project.connections)
+}
+
+export function relationCountsForNodes(nodes: CanvasNode[], connections: CanvasConnection[]) {
+  const nodeIds = new Set(nodes.map((node) => node.id))
   const counts = new Map<string, { incoming: number; outgoing: number }>()
-  project.nodes.forEach((node) => counts.set(node.id, { incoming: 0, outgoing: 0 }))
-  project.connections.forEach((connection) => {
+  nodes.forEach((node) => counts.set(node.id, { incoming: 0, outgoing: 0 }))
+  connections.forEach((connection) => {
     if (!nodeIds.has(connection.fromNodeId) || !nodeIds.has(connection.toNodeId)) return
     counts.get(connection.fromNodeId)!.outgoing += 1
     counts.get(connection.toNodeId)!.incoming += 1
