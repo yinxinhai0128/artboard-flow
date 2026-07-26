@@ -33,6 +33,7 @@ import { materializeClipboardMediaAssets } from './mediaAssets'
 import { promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
 import { createCanvasHostBridge, type CanvasHostBridge } from './hostBridge'
+import { ConfigVideoSettings } from './ConfigVideoSettings'
 
 declare global {
   interface Window {
@@ -4254,6 +4255,11 @@ function NodeBody({
             onChange={(event) => onUpdate(node.id, { metadata: { count: Number(event.target.value) } }, false)}
           />
         </label>
+        <ConfigVideoSettings
+          node={node}
+          onCaptureHistory={onCaptureHistory}
+          onChange={(metadata) => onUpdate(node.id, { metadata }, false)}
+        />
         <label className="config-prompt-label">
           提示词
           <textarea

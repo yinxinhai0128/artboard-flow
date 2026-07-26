@@ -2675,6 +2675,26 @@ button:disabled {
   color-scheme: dark;
 }
 
+.config-video-settings {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.config-video-settings label {
+  grid-template-columns: 64px 1fr;
+}
+
+.config-video-settings input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  justify-self: start;
+  accent-color: var(--accent);
+}
+
 .config-prompt-label {
   position: relative;
   align-items: start;
