@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { Compass, Copy, Crop, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { Compass, Copy, Crop, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, Sparkles, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -9,6 +9,7 @@ import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, ins
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, filterVisibleSelection, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelationsForNodes, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForNodes } from './graph'
+import { DEFAULT_IMAGE_ANGLE_PARAMS, buildAngleLabel, createImageAngleTaskInProject, type ImageAngleParams } from './imageAngle'
 import { createCroppedImageNodeInProject, cropImageDataUrl, type ImageCropRect } from './imageCrop'
 import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
 import {
@@ -482,6 +483,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null)
   const [gridSplitNodeId, setGridSplitNodeId] = useState<string | null>(null)
   const [cropNodeId, setCropNodeId] = useState<string | null>(null)
+  const [angleNodeId, setAngleNodeId] = useState<string | null>(null)
 
   const setActiveConnectionDraft = useCallback((draft: ConnectionDraft | null) => {
     connectionDraftRef.current = draft
@@ -591,6 +593,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const previewNode = previewNodeId ? nodesById.get(previewNodeId) ?? null : null
   const gridSplitNode = gridSplitNodeId ? nodesById.get(gridSplitNodeId) ?? null : null
   const cropNode = cropNodeId ? nodesById.get(cropNodeId) ?? null : null
+  const angleNode = angleNodeId ? nodesById.get(angleNodeId) ?? null : null
   const selectionToolbarPosition = useMemo(() => {
     if (!hasMultiSelection || selectionBox || controller.selectedNodes.length === 0) return null
     const left = Math.min(...controller.selectedNodes.map((node) => node.position.x))
@@ -1513,6 +1516,19 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const createImageAngleTaskNode = useCallback(
+    (node: CanvasNode, params: ImageAngleParams) => {
+      const result = createImageAngleTaskInProject(controller.project, node.id, params, { createId: () => crypto.randomUUID() })
+      if (!result) return
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      controller.selectNode(result.nodeId, false)
+      setToolbarNodeId(node.id)
+      setAngleNodeId(null)
+    },
+    [controller],
+  )
+
   const toggleSplitOutputs = useCallback(
     (node: CanvasNode) => {
       if (!splitOutputCounts.get(node.id)) return
@@ -2225,6 +2241,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onCreateImageGenerationTaskFromText={(node) => createImageGenerationTaskFromTextNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
+            onAngleImage={(node) => setAngleNodeId(node.id)}
             onCropImage={(node) => setCropNodeId(node.id)}
             onSplitImageGrid={(node) => setGridSplitNodeId(node.id)}
             onPromoteSplitOutput={promoteSplitOutput}
@@ -2260,6 +2277,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         node={cropNode?.type === 'image' ? cropNode : null}
         onClose={() => setCropNodeId(null)}
         onConfirm={(node, crop) => void cropImageNode(node, crop)}
+      />
+      <ImageAngleDialog
+        node={angleNode?.type === 'image' ? angleNode : null}
+        onClose={() => setAngleNodeId(null)}
+        onConfirm={(node, params) => createImageAngleTaskNode(node, params)}
       />
       <ImageGridSplitDialog
         node={gridSplitNode?.type === 'image' ? gridSplitNode : null}
@@ -2734,6 +2756,7 @@ function NodeHoverToolbar({
   onCreateImageGenerationTaskFromText,
   onRetryGenerationTask,
   onStartConnection,
+  onAngleImage,
   onCropImage,
   onSplitImageGrid,
   onPromoteSplitOutput,
@@ -2754,6 +2777,7 @@ function NodeHoverToolbar({
   onCreateImageGenerationTaskFromText: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
+  onAngleImage: (node: CanvasNode) => void
   onCropImage: (node: CanvasNode) => void
   onSplitImageGrid: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
@@ -2775,6 +2799,7 @@ function NodeHoverToolbar({
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canSplitImageGrid = node.type === 'image' && Boolean(node.metadata.content)
   const canCropImage = node.type === 'image' && Boolean(node.metadata.content)
+  const canAngleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
   const canSaveAsset = canSaveAssetNode(node)
   const canUpload = isUploadableMediaNode(node)
@@ -2826,6 +2851,12 @@ function NodeHoverToolbar({
         <button title="裁剪图片并生成结果节点" data-node-action="crop-image" onClick={() => onCropImage(node)}>
           <Crop size={15} />
           裁剪
+        </button>
+      ) : null}
+      {canAngleImage ? (
+        <button title="创建图片多角度生成任务" data-node-action="angle-image" onClick={() => onAngleImage(node)}>
+          <Sparkles size={15} />
+          多角度
         </button>
       ) : null}
       {canSplitImageGrid ? (
@@ -2884,6 +2915,113 @@ function NodeHoverToolbar({
       </button>
     </div>
   )
+}
+
+function ImageAngleDialog({
+  node,
+  onClose,
+  onConfirm,
+}: {
+  node: CanvasNode | null
+  onClose: () => void
+  onConfirm: (node: CanvasNode, params: ImageAngleParams) => void
+}) {
+  const [params, setParams] = useState(DEFAULT_IMAGE_ANGLE_PARAMS)
+  const open = Boolean(node?.metadata.content)
+
+  useEffect(() => {
+    if (!open) return
+    setParams(DEFAULT_IMAGE_ANGLE_PARAMS)
+  }, [node?.id, open])
+
+  if (!node?.metadata.content) return null
+
+  const updateParams = <Key extends keyof ImageAngleParams>(key: Key, value: ImageAngleParams[Key]) => {
+    setParams((current) => ({ ...current, [key]: value }))
+  }
+
+  return (
+    <div className="image-angle-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="image-angle-modal" data-image-angle-dialog="true" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>AI 多角度</span>
+            <h2>{node.title || '图片节点'}</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="image-angle-body">
+          <div className="image-angle-preview">
+            <div className="image-angle-stage">
+              <img src={node.metadata.content} alt={node.title} draggable={false} style={{ transform: imageAnglePreviewTransform(params) }} />
+              <span />
+            </div>
+            <button type="button" data-image-angle-reset onClick={() => setParams(DEFAULT_IMAGE_ANGLE_PARAMS)}>
+              <RotateCcw size={15} />
+              重置
+            </button>
+          </div>
+          <div className="image-angle-controls">
+            <AngleRangeField label="左右角度" value={params.horizontalAngle} min={-60} max={60} step={1} suffix="°" onChange={(value) => updateParams('horizontalAngle', value)} />
+            <AngleRangeField label="俯仰角度" value={params.pitchAngle} min={-45} max={45} step={1} suffix="°" onChange={(value) => updateParams('pitchAngle', value)} />
+            <AngleRangeField label="镜头距离" value={params.cameraDistance} min={1} max={10} step={0.1} onChange={(value) => updateParams('cameraDistance', value)} />
+            <label className="image-angle-toggle">
+              <span>镜头类型</span>
+              <button type="button" className={!params.wideAngle ? 'active' : ''} onClick={() => updateParams('wideAngle', false)}>标准</button>
+              <button type="button" className={params.wideAngle ? 'active' : ''} onClick={() => updateParams('wideAngle', true)}>广角</button>
+            </label>
+            <div className="image-angle-summary">
+              <span>将创建生成任务</span>
+              <strong>{buildAngleLabel(params)}</strong>
+              <small>结果会作为新图片任务节点连接到原图，后续可提交 Adapter 生成。</small>
+            </div>
+            <button className="primary" data-image-angle-confirm onClick={() => onConfirm(node, params)}>
+              <Sparkles size={16} />
+              创建多角度任务
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function AngleRangeField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix = '',
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  suffix?: string
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="image-angle-range">
+      <span>{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <strong>{Number.isInteger(value) ? value : value.toFixed(1)}{suffix}</strong>
+    </label>
+  )
+}
+
+function imageAnglePreviewTransform(params: ImageAngleParams) {
+  const scale = 1.08 - params.cameraDistance * 0.035 + (params.wideAngle ? -0.08 : 0)
+  return `perspective(520px) rotateY(${params.horizontalAngle * -0.45}deg) rotateX(${params.pitchAngle * 0.35}deg) scale(${Math.max(0.72, Math.min(1.08, scale))})`
 }
 
 const DEFAULT_IMAGE_CROP: ImageCropRect = { x: 0.12, y: 0.12, width: 0.76, height: 0.76 }
