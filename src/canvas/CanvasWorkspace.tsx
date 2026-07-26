@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { Brush, Compass, Copy, Crop, Download, Eraser, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, Sparkles, SquarePen, Trash2, Type, Undo2, Upload, Video, WandSparkles, ZoomIn } from 'lucide-react'
+import { Brush, Compass, Copy, Crop, Download, Eraser, Eye, FileJson, FileText, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, Sparkles, SquarePen, Trash2, Type, Undo2, Upload, Video, WandSparkles, ZoomIn } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -12,6 +12,7 @@ import { relationCountsForNodes } from './graph'
 import { DEFAULT_IMAGE_ANGLE_PARAMS, buildAngleLabel, createImageAngleTaskInProject, type ImageAngleParams } from './imageAngle'
 import { createCroppedImageNodeInProject, cropImageDataUrl, type ImageCropRect } from './imageCrop'
 import { createImageMaskEditTaskInProject } from './imageMaskEdit'
+import { createImageReversePromptFlowInProject } from './imageReversePrompt'
 import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
 import { DEFAULT_IMAGE_UPSCALE_PARAMS, createUpscaledImageNodeInProject, resolveUpscaleSize, upscaleImageDataUrl, type ImageUpscaleAlgorithm, type ImageUpscaleParams } from './imageUpscale'
 import {
@@ -1573,6 +1574,18 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const createImageReversePromptFlow = useCallback(
+    (node: CanvasNode) => {
+      const result = createImageReversePromptFlowInProject(controller.project, node.id, { createId: () => crypto.randomUUID() })
+      if (!result) return
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      controller.selectNode(result.nodeIds.configNodeId, false)
+      setToolbarNodeId(node.id)
+    },
+    [controller],
+  )
+
   const toggleSplitOutputs = useCallback(
     (node: CanvasNode) => {
       if (!splitOutputCounts.get(node.id)) return
@@ -2288,6 +2301,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onAngleImage={(node) => setAngleNodeId(node.id)}
             onCropImage={(node) => setCropNodeId(node.id)}
             onMaskEditImage={(node) => setMaskEditNodeId(node.id)}
+            onReversePromptImage={createImageReversePromptFlow}
             onUpscaleImage={(node) => setUpscaleNodeId(node.id)}
             onSplitImageGrid={(node) => setGridSplitNodeId(node.id)}
             onPromoteSplitOutput={promoteSplitOutput}
@@ -2815,6 +2829,7 @@ function NodeHoverToolbar({
   onAngleImage,
   onCropImage,
   onMaskEditImage,
+  onReversePromptImage,
   onUpscaleImage,
   onSplitImageGrid,
   onPromoteSplitOutput,
@@ -2838,6 +2853,7 @@ function NodeHoverToolbar({
   onAngleImage: (node: CanvasNode) => void
   onCropImage: (node: CanvasNode) => void
   onMaskEditImage: (node: CanvasNode) => void
+  onReversePromptImage: (node: CanvasNode) => void
   onUpscaleImage: (node: CanvasNode) => void
   onSplitImageGrid: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
@@ -2860,6 +2876,7 @@ function NodeHoverToolbar({
   const canSplitImageGrid = node.type === 'image' && Boolean(node.metadata.content)
   const canCropImage = node.type === 'image' && Boolean(node.metadata.content)
   const canMaskEditImage = node.type === 'image' && Boolean(node.metadata.content)
+  const canReversePromptImage = node.type === 'image' && Boolean(node.metadata.content)
   const canAngleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canUpscaleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
@@ -2919,6 +2936,12 @@ function NodeHoverToolbar({
         <button title="涂抹遮罩并创建局部编辑任务" data-node-action="mask-edit-image" onClick={() => onMaskEditImage(node)}>
           <Brush size={15} />
           局部编辑
+        </button>
+      ) : null}
+      {canReversePromptImage ? (
+        <button title="创建反推提示词文本生成流程" data-node-action="reverse-prompt-image" onClick={() => onReversePromptImage(node)}>
+          <FileText size={15} />
+          反推提示词
         </button>
       ) : null}
       {canUpscaleImage ? (
