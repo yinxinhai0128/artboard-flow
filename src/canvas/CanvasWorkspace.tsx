@@ -647,9 +647,9 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   }, [editingTitle])
 
   useEffect(() => {
-    const nodeIds = new Set(controller.project.nodes.map((node) => node.id))
+    const nodeIds = new Set(renderableNodes.map((node) => node.id))
     setSidePanelCheckedNodeIds((current) => current.filter((id) => nodeIds.has(id)))
-  }, [controller.project.nodes])
+  }, [renderableNodes])
 
   useEffect(() => {
     const element = canvasRef.current
@@ -1312,7 +1312,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   } as React.CSSProperties
   const filteredPanelNodes = useMemo(() => {
     const query = sidePanelQuery.trim().toLowerCase()
-    return controller.project.nodes.filter((node) => {
+    return renderableNodes.filter((node) => {
       if (sidePanelType !== 'all' && node.type !== sidePanelType) return false
       if (!query) return true
       return [node.title, node.type, node.metadata.content, node.metadata.model, node.metadata.mimeType]
@@ -1321,7 +1321,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         .toLowerCase()
         .includes(query)
     })
-  }, [controller.project.nodes, sidePanelQuery, sidePanelType])
+  }, [renderableNodes, sidePanelQuery, sidePanelType])
   const filteredAssets = useMemo(() => {
     const query = sidePanelQuery.trim().toLowerCase()
     return assets.filter((asset) => {
@@ -1799,7 +1799,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
                 <strong>{sidePanelTab === 'nodes' ? '画布节点' : '资产库'}</strong>
                 <span>
                   {sidePanelTab === 'nodes'
-                    ? `${filteredPanelNodes.length} / ${controller.project.nodes.length}`
+                    ? `${filteredPanelNodes.length} / ${renderableNodes.length}`
                     : `${filteredAssets.length} / ${assets.length}`}
                 </span>
               </div>
