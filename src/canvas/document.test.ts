@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, getNodeRelationsForNodes, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, parseCanvasClipboardText, pasteClipboardIntoProject, resolveConnectionToNode, selectableNodeIds, selectionBoxNodeIds, serializeCanvasClipboard, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, filterVisibleSelection, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, getNodeRelationsForNodes, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, parseCanvasClipboardText, pasteClipboardIntoProject, resolveConnectionToNode, selectableNodeIds, selectionBoxNodeIds, serializeCanvasClipboard, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -106,6 +106,30 @@ describe('canvas document operations', () => {
     }
 
     expect(selectableNodeIds(source.nodes)).toEqual(['root', 'note'])
+  })
+
+  it('removes collapsed split children and hidden edges from UI selection', () => {
+    const source = {
+      ...project,
+      nodes: [
+        { ...imageNode('root'), metadata: { splitChildrenCollapsed: true } },
+        { ...imageNode('child'), metadata: { splitSourceNodeId: 'root', splitOutputIndex: 0 } },
+        baseNode('note'),
+      ],
+      connections: [
+        { id: 'hidden', fromNodeId: 'root', toNodeId: 'child' },
+        { id: 'visible', fromNodeId: 'root', toNodeId: 'note' },
+      ],
+    }
+
+    expect(filterVisibleSelection(source, ['child', 'note'], 'hidden')).toEqual({
+      selectedNodeIds: ['note'],
+      selectedConnectionId: null,
+    })
+    expect(filterVisibleSelection(source, ['root'], 'visible')).toEqual({
+      selectedNodeIds: ['root'],
+      selectedConnectionId: 'visible',
+    })
   })
 
   it('deletes split output children with their source node', () => {

@@ -99,6 +99,46 @@ describe('canvas host bridge', () => {
     expect(currentConnection).toBeNull()
   })
 
+  it('does not expose hidden split children as selected through host operations', () => {
+    let currentProject = {
+      ...project,
+      nodes: project.nodes.map((node) => (
+        node.id === 'image-1'
+          ? { ...node, metadata: { ...node.metadata, splitChildrenCollapsed: true } }
+          : node
+      )),
+    }
+    let currentSelection: string[] = []
+    const bridge = createCanvasHostBridge({
+      getSnapshot: () => ({
+        project: currentProject,
+        selectedNodeIds: currentSelection,
+        selectedConnectionId: null,
+      }),
+      commit: (next) => {
+        currentProject = next.project
+        currentSelection = next.selectedNodeIds
+      },
+      createId: () => 'generated-id',
+      now: () => '2026-07-20T01:00:00.000Z',
+    })
+
+    const result = bridge.applyOps([
+      {
+        type: 'add_node',
+        id: 'split-child',
+        nodeType: 'image',
+        title: 'Hidden child',
+        position: { x: 360, y: 0 },
+        metadata: { content: 'data:image/png;base64,child', splitSourceNodeId: 'image-1', splitOutputIndex: 0 },
+      },
+      { type: 'connect_nodes', id: 'hidden-edge', fromNodeId: 'image-1', toNodeId: 'split-child' },
+    ])
+
+    expect(result.selectedNodeIds).toEqual([])
+    expect(currentSelection).toEqual([])
+  })
+
   it('lists and adds assets through the host bridge adapter', async () => {
     const assets = [
       {

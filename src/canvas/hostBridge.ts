@@ -1,5 +1,5 @@
 import { applyCanvasAgentOps, createCanvasGenerationFlowOps, type CanvasAgentOp, type CanvasAgentSnapshot, type CanvasAgentGenerationRequest } from './agentOps'
-import { addConnectionToProject } from './document'
+import { addConnectionToProject, filterVisibleSelection } from './document'
 import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
 import { createCanvasGraphSnapshot, type CanvasGraphSnapshot } from './graph'
 import { createCanvasNode } from './nodeFactory'
@@ -286,10 +286,15 @@ export function createCanvasHostBridge(options: CanvasHostBridgeOptions): Canvas
     const before = cloneSnapshot(latestSnapshot)
     const applied = applyCanvasAgentOps(before, ops, { createId: () => createId(), now })
     const materialized = materializeGenerationRequests(applied.project, applied.generationRequests, createId, now)
+    const nextSelection = filterVisibleSelection(
+      materialized.project,
+      materialized.selectedNodeIds ?? applied.selectedNodeIds,
+      null,
+    )
     const next: CanvasHostBridgeApplyResult = {
       project: materialized.project,
-      selectedNodeIds: materialized.selectedNodeIds ?? applied.selectedNodeIds,
-      selectedConnectionId: null,
+      selectedNodeIds: nextSelection.selectedNodeIds,
+      selectedConnectionId: nextSelection.selectedConnectionId,
       generationRequests: applied.generationRequests,
     }
     undoSnapshot = before

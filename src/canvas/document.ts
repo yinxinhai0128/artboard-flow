@@ -205,6 +205,20 @@ export function selectableNodeIds(nodes: CanvasNode[]) {
     .map((node) => node.id)
 }
 
+export function filterVisibleSelection(project: CanvasProject, selectedNodeIds: string[], selectedConnectionId: string | null) {
+  const visibleNodeIds = new Set(selectableNodeIds(project.nodes))
+  const selectedConnection = selectedConnectionId
+    ? project.connections.find((connection) => connection.id === selectedConnectionId)
+    : null
+
+  return {
+    selectedNodeIds: selectedNodeIds.filter((id) => visibleNodeIds.has(id)),
+    selectedConnectionId: selectedConnection && !isSplitConnectionHidden(selectedConnection, project.nodes)
+      ? selectedConnection.id
+      : null,
+  }
+}
+
 export function findGroupDropTarget(nodes: CanvasNode[], nodeIds: string[]) {
   const movingIds = new Set(nodeIds)
   if (nodes.some((node) => movingIds.has(node.id) && node.type === 'group')) return null

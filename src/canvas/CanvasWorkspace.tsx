@@ -6,7 +6,7 @@ import { useCanvasController } from './useCanvasController'
 import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload, shouldRenderGenerationTaskBody, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
-import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelationsForNodes, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
+import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, filterVisibleSelection, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelationsForNodes, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForNodes } from './graph'
 import { materializeClipboardMediaAssets } from './mediaAssets'
@@ -521,9 +521,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       }),
       commit: (snapshot) => {
         bridgeUpdateProject(() => snapshot.project)
+        const visibleSelection = filterVisibleSelection(snapshot.project, snapshot.selectedNodeIds, snapshot.selectedConnectionId)
         bridgeClearSelection()
-        snapshot.selectedNodeIds.forEach((nodeId, index) => bridgeSelectNode(nodeId, index > 0))
-        if (snapshot.selectedConnectionId) bridgeSelectConnection(snapshot.selectedConnectionId)
+        visibleSelection.selectedNodeIds.forEach((nodeId, index) => bridgeSelectNode(nodeId, index > 0))
+        if (visibleSelection.selectedConnectionId) bridgeSelectConnection(visibleSelection.selectedConnectionId)
       },
       assets: {
         list: canvasApi.listAssets,
