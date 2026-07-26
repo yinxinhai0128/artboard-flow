@@ -72,6 +72,12 @@ const SIDE_PANEL_DEFAULT_WIDTH = 300
 const SIDE_PANEL_MIN_WIDTH = 260
 const SIDE_PANEL_MAX_WIDTH = 520
 const SIDE_PANEL_WIDTH_STORAGE_KEY = 'artboard-flow:side-panel-width'
+const GRID_SPLIT_MIN = 1
+const GRID_SPLIT_MAX = 12
+
+function clampGridSplitCount(value: number) {
+  return Math.min(GRID_SPLIT_MAX, Math.max(GRID_SPLIT_MIN, Math.round(Number.isFinite(value) ? value : 2)))
+}
 
 function clampSidePanelWidth(width: number) {
   return Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, width))
@@ -468,6 +474,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null)
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null)
+  const [gridSplitNodeId, setGridSplitNodeId] = useState<string | null>(null)
 
   const setActiveConnectionDraft = useCallback((draft: ConnectionDraft | null) => {
     connectionDraftRef.current = draft
@@ -575,6 +582,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   }, [activeRelationNodeId, renderableConnections])
   const infoNode = infoNodeId ? nodesById.get(infoNodeId) ?? null : null
   const previewNode = previewNodeId ? nodesById.get(previewNodeId) ?? null : null
+  const gridSplitNode = gridSplitNodeId ? nodesById.get(gridSplitNodeId) ?? null : null
   const selectionToolbarPosition = useMemo(() => {
     if (!hasMultiSelection || selectionBox || controller.selectedNodes.length === 0) return null
     const left = Math.min(...controller.selectedNodes.map((node) => node.position.x))
@@ -1458,10 +1466,10 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   )
 
   const splitImageIntoGrid = useCallback(
-    async (node: CanvasNode) => {
+    async (node: CanvasNode, params: { rows: number; columns: number }) => {
       if (node.type !== 'image' || !node.metadata.content) return
-      const rows = 2
-      const columns = 2
+      const rows = clampGridSplitCount(params.rows)
+      const columns = clampGridSplitCount(params.columns)
       const dataUrlPieces = await splitImageDataUrl(node.metadata.content, { rows, columns })
       const pieces = await Promise.all(dataUrlPieces.map(async (piece) => ({
         row: piece.row,
@@ -1476,6 +1484,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       controller.clearSelection()
       result.nodeIds.forEach((nodeId, index) => controller.selectNode(nodeId, index > 0))
       setToolbarNodeId(node.id)
+      setGridSplitNodeId(null)
     },
     [controller],
   )
@@ -2192,7 +2201,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onCreateImageGenerationTaskFromText={(node) => createImageGenerationTaskFromTextNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
-            onSplitImageGrid={(node) => void splitImageIntoGrid(node)}
+            onSplitImageGrid={(node) => setGridSplitNodeId(node.id)}
             onPromoteSplitOutput={promoteSplitOutput}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
             onCopyContent={(node) => void copyNodePayload(node)}
@@ -2222,6 +2231,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         onClose={() => setInfoNodeId(null)}
       />
       <MediaPreviewModal node={previewNode} onClose={() => setPreviewNodeId(null)} />
+      <ImageGridSplitDialog
+        node={gridSplitNode?.type === 'image' ? gridSplitNode : null}
+        onClose={() => setGridSplitNodeId(null)}
+        onConfirm={(node, params) => void splitImageIntoGrid(node, params)}
+      />
       <ShortcutHelpModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {contextMenu ? (
         <CanvasContextMenuView
@@ -2829,6 +2843,90 @@ function NodeHoverToolbar({
         <Trash2 size={15} />
         删除
       </button>
+    </div>
+  )
+}
+
+function ImageGridSplitDialog({
+  node,
+  onClose,
+  onConfirm,
+}: {
+  node: CanvasNode | null
+  onClose: () => void
+  onConfirm: (node: CanvasNode, params: { rows: number; columns: number }) => void
+}) {
+  const [rows, setRows] = useState(2)
+  const [columns, setColumns] = useState(2)
+  const open = Boolean(node?.metadata.content)
+
+  useEffect(() => {
+    if (!open) return
+    setRows(2)
+    setColumns(2)
+  }, [node?.id, open])
+
+  if (!node || !node.metadata.content) return null
+  const normalizedRows = clampGridSplitCount(rows)
+  const normalizedColumns = clampGridSplitCount(columns)
+  const total = normalizedRows * normalizedColumns
+
+  return (
+    <div className="grid-split-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="grid-split-modal" data-grid-split-dialog="true" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>图片网格拆分</span>
+            <h2>{node.title || '图片节点'}</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="grid-split-body">
+          <div className="grid-split-preview">
+            <img src={node.metadata.content} alt={node.title} draggable={false} />
+            <div
+              className="grid-split-lines"
+              style={{
+                gridTemplateRows: `repeat(${normalizedRows}, 1fr)`,
+                gridTemplateColumns: `repeat(${normalizedColumns}, 1fr)`,
+              }}
+            >
+              {Array.from({ length: total }, (_, index) => <span key={index} />)}
+            </div>
+          </div>
+          <div className="grid-split-controls">
+            <label>
+              <span>行数</span>
+              <input
+                data-grid-split-rows
+                type="number"
+                min={GRID_SPLIT_MIN}
+                max={GRID_SPLIT_MAX}
+                value={rows}
+                onChange={(event) => setRows(clampGridSplitCount(Number(event.target.value)))}
+              />
+            </label>
+            <label>
+              <span>列数</span>
+              <input
+                data-grid-split-columns
+                type="number"
+                min={GRID_SPLIT_MIN}
+                max={GRID_SPLIT_MAX}
+                value={columns}
+                onChange={(event) => setColumns(clampGridSplitCount(Number(event.target.value)))}
+              />
+            </label>
+            <div className="grid-split-summary">
+              <span>将生成</span>
+              <strong>{total} 个子图片节点</strong>
+            </div>
+            <button className="primary" data-grid-split-confirm onClick={() => onConfirm(node, { rows: normalizedRows, columns: normalizedColumns })}>
+              生成子节点
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
