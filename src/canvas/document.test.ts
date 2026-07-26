@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, parseCanvasClipboardText, pasteClipboardIntoProject, resolveConnectionToNode, selectableNodeIds, selectionBoxNodeIds, serializeCanvasClipboard, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
+import { addConnectionToProject, copySelectionToClipboard, deleteSelectionFromProject, expandNodeIdsForMovement, expandNodeIdsWithSplitChildren, findConnectionDropTarget, findContainingGroupId, findGroupDropTarget, getConnectionNodePair, getNodeRelations, getNodeRelationsForNodes, groupChildIdsForNode, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, nodeBounds, normalizeConnectionForProject, parseCanvasClipboardText, pasteClipboardIntoProject, resolveConnectionToNode, selectableNodeIds, selectionBoxNodeIds, serializeCanvasClipboard, snapNodesIntoGroup, splitChildIdsForNode, syncNodeGroupMembership } from './document'
 import type { CanvasNode, CanvasProject } from './types'
 
 const baseNode = (id: string): CanvasNode => ({
@@ -317,6 +317,19 @@ describe('canvas document operations', () => {
 
     expect(relations.incoming.map((item) => [item.connectionId, item.node.id])).toEqual([['ab', 'a']])
     expect(relations.outgoing.map((item) => [item.connectionId, item.node.id])).toEqual([['bc', 'c']])
+  })
+
+  it('lists node relations only within supplied visible nodes and connections', () => {
+    const nodes = [baseNode('root'), baseNode('note')]
+    const connections = [
+      { id: 'hidden', fromNodeId: 'root', toNodeId: 'child' },
+      { id: 'visible', fromNodeId: 'root', toNodeId: 'note' },
+    ]
+
+    const relations = getNodeRelationsForNodes(nodes, connections, 'root')
+
+    expect(relations.incoming).toEqual([])
+    expect(relations.outgoing.map((item) => [item.connectionId, item.node.id])).toEqual([['visible', 'note']])
   })
 
   it('returns both endpoint nodes for a connection', () => {

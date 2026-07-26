@@ -6,7 +6,7 @@ import { useCanvasController } from './useCanvasController'
 import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload, shouldRenderGenerationTaskBody, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
-import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
+import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelationsForNodes, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForNodes } from './graph'
 import { materializeClipboardMediaAssets } from './mediaAssets'
@@ -585,8 +585,8 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     }
   }, [canvasSize.width, controller.project.viewport, controller.selectedNodes, hasMultiSelection, selectionBox])
   const infoNodeRelations = useMemo(
-    () => infoNode ? getNodeRelations(controller.project, infoNode.id) : { incoming: [], outgoing: [] },
-    [controller.project, infoNode],
+    () => infoNode ? getNodeRelationsForNodes(renderableNodes, renderableConnections, infoNode.id) : { incoming: [], outgoing: [] },
+    [infoNode, renderableConnections, renderableNodes],
   )
   const canvasShellStyle = useMemo(() => ({ '--side-panel-width': `${sidePanelWidth}px` }) as CSSProperties, [sidePanelWidth])
   const contextConnectionPair = useMemo(

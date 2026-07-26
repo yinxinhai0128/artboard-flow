@@ -121,11 +121,15 @@ export function findConnectionDropTarget(
 }
 
 export function getNodeRelations(project: CanvasProject, nodeId: string): NodeRelations {
-  const nodesById = new Map(project.nodes.map((node) => [node.id, node]))
+  return getNodeRelationsForNodes(project.nodes, project.connections, nodeId)
+}
+
+export function getNodeRelationsForNodes(nodes: CanvasNode[], connections: CanvasConnection[], nodeId: string): NodeRelations {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]))
   const incoming: NodeRelations['incoming'] = []
   const outgoing: NodeRelations['outgoing'] = []
 
-  project.connections.forEach((connection) => {
+  connections.forEach((connection) => {
     if (connection.toNodeId === nodeId) {
       const node = nodesById.get(connection.fromNodeId)
       if (node) incoming.push({ connectionId: connection.id, node })
