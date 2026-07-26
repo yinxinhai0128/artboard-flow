@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { Compass, Copy, Crop, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -9,6 +9,7 @@ import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, ins
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, filterVisibleSelection, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelationsForNodes, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForNodes } from './graph'
+import { createCroppedImageNodeInProject, cropImageDataUrl, type ImageCropRect } from './imageCrop'
 import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
 import {
   GRID_SPLIT_MAX,
@@ -480,6 +481,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null)
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null)
   const [gridSplitNodeId, setGridSplitNodeId] = useState<string | null>(null)
+  const [cropNodeId, setCropNodeId] = useState<string | null>(null)
 
   const setActiveConnectionDraft = useCallback((draft: ConnectionDraft | null) => {
     connectionDraftRef.current = draft
@@ -588,6 +590,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const infoNode = infoNodeId ? nodesById.get(infoNodeId) ?? null : null
   const previewNode = previewNodeId ? nodesById.get(previewNodeId) ?? null : null
   const gridSplitNode = gridSplitNodeId ? nodesById.get(gridSplitNodeId) ?? null : null
+  const cropNode = cropNodeId ? nodesById.get(cropNodeId) ?? null : null
   const selectionToolbarPosition = useMemo(() => {
     if (!hasMultiSelection || selectionBox || controller.selectedNodes.length === 0) return null
     const left = Math.min(...controller.selectedNodes.map((node) => node.position.x))
@@ -1494,6 +1497,22 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const cropImageNode = useCallback(
+    async (node: CanvasNode, crop: ImageCropRect) => {
+      if (node.type !== 'image' || !node.metadata.content) return
+      const cropped = await cropImageDataUrl(node.metadata.content, crop)
+      const asset = await canvasApi.uploadAsset(cropped.dataUrl)
+      const result = createCroppedImageNodeInProject(controller.project, node.id, { crop, asset, width: cropped.width, height: cropped.height }, () => crypto.randomUUID())
+      if (!result) return
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      controller.selectNode(result.nodeId, false)
+      setToolbarNodeId(node.id)
+      setCropNodeId(null)
+    },
+    [controller],
+  )
+
   const toggleSplitOutputs = useCallback(
     (node: CanvasNode) => {
       if (!splitOutputCounts.get(node.id)) return
@@ -2206,6 +2225,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onCreateImageGenerationTaskFromText={(node) => createImageGenerationTaskFromTextNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
+            onCropImage={(node) => setCropNodeId(node.id)}
             onSplitImageGrid={(node) => setGridSplitNodeId(node.id)}
             onPromoteSplitOutput={promoteSplitOutput}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
@@ -2236,6 +2256,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         onClose={() => setInfoNodeId(null)}
       />
       <MediaPreviewModal node={previewNode} onClose={() => setPreviewNodeId(null)} />
+      <ImageCropDialog
+        node={cropNode?.type === 'image' ? cropNode : null}
+        onClose={() => setCropNodeId(null)}
+        onConfirm={(node, crop) => void cropImageNode(node, crop)}
+      />
       <ImageGridSplitDialog
         node={gridSplitNode?.type === 'image' ? gridSplitNode : null}
         onClose={() => setGridSplitNodeId(null)}
@@ -2709,6 +2734,7 @@ function NodeHoverToolbar({
   onCreateImageGenerationTaskFromText,
   onRetryGenerationTask,
   onStartConnection,
+  onCropImage,
   onSplitImageGrid,
   onPromoteSplitOutput,
   onDuplicate,
@@ -2728,6 +2754,7 @@ function NodeHoverToolbar({
   onCreateImageGenerationTaskFromText: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
+  onCropImage: (node: CanvasNode) => void
   onSplitImageGrid: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
@@ -2747,6 +2774,7 @@ function NodeHoverToolbar({
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canSplitImageGrid = node.type === 'image' && Boolean(node.metadata.content)
+  const canCropImage = node.type === 'image' && Boolean(node.metadata.content)
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
   const canSaveAsset = canSaveAssetNode(node)
   const canUpload = isUploadableMediaNode(node)
@@ -2792,6 +2820,12 @@ function NodeHoverToolbar({
         <button title="从此节点开始连线" onClick={() => onStartConnection(node)}>
           <Link2 size={15} />
           连线
+        </button>
+      ) : null}
+      {canCropImage ? (
+        <button title="裁剪图片并生成结果节点" data-node-action="crop-image" onClick={() => onCropImage(node)}>
+          <Crop size={15} />
+          裁剪
         </button>
       ) : null}
       {canSplitImageGrid ? (
@@ -2850,6 +2884,124 @@ function NodeHoverToolbar({
       </button>
     </div>
   )
+}
+
+const DEFAULT_IMAGE_CROP: ImageCropRect = { x: 0.12, y: 0.12, width: 0.76, height: 0.76 }
+
+function ImageCropDialog({
+  node,
+  onClose,
+  onConfirm,
+}: {
+  node: CanvasNode | null
+  onClose: () => void
+  onConfirm: (node: CanvasNode, crop: ImageCropRect) => void
+}) {
+  const [crop, setCrop] = useState(DEFAULT_IMAGE_CROP)
+  const open = Boolean(node?.metadata.content)
+
+  useEffect(() => {
+    if (!open) return
+    setCrop(DEFAULT_IMAGE_CROP)
+  }, [node?.id, open])
+
+  if (!node || !node.metadata.content) return null
+
+  const updateCrop = (patch: Partial<ImageCropRect>) => {
+    setCrop((current) => normalizeCrop({ ...current, ...patch }))
+  }
+
+  return (
+    <div className="image-crop-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="image-crop-modal" data-image-crop-dialog="true" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>图片裁剪</span>
+            <h2>{node.title || '图片节点'}</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="image-crop-body">
+          <div className="image-crop-preview">
+            <div className="image-crop-frame">
+              <img src={node.metadata.content} alt={node.title} draggable={false} />
+              <CropMask crop={crop} />
+              <div className="image-crop-box" style={cropBoxStyle(crop)}>
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </div>
+          <div className="image-crop-controls">
+            <CropNumberField label="左侧" value={crop.x} onChange={(value) => updateCrop({ x: value })} />
+            <CropNumberField label="顶部" value={crop.y} onChange={(value) => updateCrop({ y: value })} />
+            <CropNumberField label="宽度" value={crop.width} onChange={(value) => updateCrop({ width: value })} />
+            <CropNumberField label="高度" value={crop.height} onChange={(value) => updateCrop({ height: value })} />
+            <div className="image-crop-summary">
+              <span>裁剪区域</span>
+              <strong>{Math.round(crop.width * 100)}% × {Math.round(crop.height * 100)}%</strong>
+            </div>
+            <button className="ghost" data-image-crop-reset onClick={() => setCrop(DEFAULT_IMAGE_CROP)}>重置</button>
+            <button className="primary" data-image-crop-confirm onClick={() => onConfirm(node, crop)}>生成裁剪节点</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function CropNumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label>
+      <span>{label}</span>
+      <input
+        type="number"
+        min={0}
+        max={100}
+        step={1}
+        value={Math.round(value * 100)}
+        onChange={(event) => {
+          const next = Number(event.target.value)
+          if (!Number.isFinite(next)) return
+          onChange(next / 100)
+        }}
+      />
+    </label>
+  )
+}
+
+function CropMask({ crop }: { crop: ImageCropRect }) {
+  return (
+    <>
+      <div className="image-crop-mask" style={{ left: 0, top: 0, width: '100%', height: `${crop.y * 100}%` }} />
+      <div className="image-crop-mask" style={{ left: 0, bottom: 0, width: '100%', height: `${(1 - crop.y - crop.height) * 100}%` }} />
+      <div className="image-crop-mask" style={{ left: 0, top: `${crop.y * 100}%`, width: `${crop.x * 100}%`, height: `${crop.height * 100}%` }} />
+      <div className="image-crop-mask" style={{ right: 0, top: `${crop.y * 100}%`, width: `${(1 - crop.x - crop.width) * 100}%`, height: `${crop.height * 100}%` }} />
+    </>
+  )
+}
+
+function cropBoxStyle(crop: ImageCropRect): CSSProperties {
+  return {
+    left: `${crop.x * 100}%`,
+    top: `${crop.y * 100}%`,
+    width: `${crop.width * 100}%`,
+    height: `${crop.height * 100}%`,
+  }
+}
+
+function normalizeCrop(crop: ImageCropRect): ImageCropRect {
+  const safe = (value: number, fallback: number) => Number.isFinite(value) ? value : fallback
+  const width = Math.min(1, Math.max(0.04, safe(crop.width, DEFAULT_IMAGE_CROP.width)))
+  const height = Math.min(1, Math.max(0.04, safe(crop.height, DEFAULT_IMAGE_CROP.height)))
+  return {
+    width,
+    height,
+    x: Math.min(1 - width, Math.max(0, safe(crop.x, DEFAULT_IMAGE_CROP.x))),
+    y: Math.min(1 - height, Math.max(0, safe(crop.y, DEFAULT_IMAGE_CROP.y))),
+  }
 }
 
 function ImageGridSplitDialog({
