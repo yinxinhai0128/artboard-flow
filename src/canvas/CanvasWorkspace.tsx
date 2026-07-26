@@ -1380,7 +1380,6 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
 
       if (focusAnimationRef.current) cancelAnimationFrame(focusAnimationRef.current)
       controller.selectNode(node.id, false)
-      controller.captureHistory()
       setContextMenu(null)
       const step = (now: number) => {
         if (startTime === null) startTime = now
