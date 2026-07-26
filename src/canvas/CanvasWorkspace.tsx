@@ -6,7 +6,7 @@ import { useCanvasController } from './useCanvasController'
 import { applyGenerationJobToProject, buildCanvasGenerationContext, buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource, metadataFromGenerationJob, resetGenerationTaskNodeForRetry, serializeCanvasGenerationPayload, shouldRenderGenerationTaskBody, type CanvasGenerationContext } from './generation'
 import { canvasApi } from './api'
 import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, insertReferenceAtMention, mentionQueryBeforeCaret, removeReferenceToken } from './composerReferences'
-import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
+import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelations, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForProject } from './graph'
 import { materializeClipboardMediaAssets } from './mediaAssets'
@@ -1225,7 +1225,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
       if (mod && !event.altKey && key === 'a') {
         event.preventDefault()
         controller.clearSelection()
-        controller.project.nodes.forEach((node) => controller.selectNode(node.id, true))
+        selectableNodeIds(controller.project.nodes).forEach((nodeId) => controller.selectNode(nodeId, true))
         return
       }
       if (mod && !event.altKey && key === 'c') {

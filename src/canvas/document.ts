@@ -195,6 +195,12 @@ export function selectionBoxNodeIds(nodes: CanvasNode[], box: { x: number; y: nu
     .map((node) => node.id)
 }
 
+export function selectableNodeIds(nodes: CanvasNode[]) {
+  return nodes
+    .filter((node) => !isHiddenSplitChild(node, nodes))
+    .map((node) => node.id)
+}
+
 export function findGroupDropTarget(nodes: CanvasNode[], nodeIds: string[]) {
   const movingIds = new Set(nodeIds)
   if (nodes.some((node) => movingIds.has(node.id) && node.type === 'group')) return null
