@@ -16,6 +16,7 @@ import { createImageReversePromptFlowInProject } from './imageReversePrompt'
 import { createImageVideoTaskInProject } from './imageVideoTask'
 import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
 import { DEFAULT_IMAGE_UPSCALE_PARAMS, createUpscaledImageNodeInProject, resolveUpscaleSize, upscaleImageDataUrl, type ImageUpscaleAlgorithm, type ImageUpscaleParams } from './imageUpscale'
+import { createTextVideoTaskInProject } from './textVideoTask'
 import {
   GRID_SPLIT_MAX,
   GRID_SPLIT_MIN,
@@ -1743,6 +1744,29 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller, nodesById],
   )
 
+  const createVideoGenerationTaskFromTextNode = useCallback(
+    (textNodeId: string) => {
+      const result = createTextVideoTaskInProject(controller.project, textNodeId, { createId: () => crypto.randomUUID() })
+      const textNode = nodesById.get(textNodeId)
+      if (!result) {
+        if (textNode?.type === 'text') {
+          controller.updateNode(textNodeId, {
+            metadata: {
+              status: 'error',
+              errorDetails: '请先在文本节点输入视频提示词，或连接可用的上游参考节点。',
+            },
+          })
+        }
+        return
+      }
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      controller.selectNode(result.nodeId, false)
+      if (textNode) setToolbarNodeId(textNode.id)
+    },
+    [controller, nodesById],
+  )
+
   const retryGenerationTaskNode = useCallback(
     (taskNodeId: string) => {
       const taskNode = nodesById.get(taskNodeId)
@@ -2309,6 +2333,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onPreview={(node) => setPreviewNodeId(node.id)}
             onCreateGenerationTask={(node) => createGenerationTaskNode(node.id)}
             onCreateImageGenerationTaskFromText={(node) => createImageGenerationTaskFromTextNode(node.id)}
+            onCreateVideoGenerationTaskFromText={(node) => createVideoGenerationTaskFromTextNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
             onAngleImage={(node) => setAngleNodeId(node.id)}
@@ -2838,6 +2863,7 @@ function NodeHoverToolbar({
   onPreview,
   onCreateGenerationTask,
   onCreateImageGenerationTaskFromText,
+  onCreateVideoGenerationTaskFromText,
   onRetryGenerationTask,
   onStartConnection,
   onAngleImage,
@@ -2863,6 +2889,7 @@ function NodeHoverToolbar({
   onPreview: (node: CanvasNode) => void
   onCreateGenerationTask: (node: CanvasNode) => void
   onCreateImageGenerationTaskFromText: (node: CanvasNode) => void
+  onCreateVideoGenerationTaskFromText: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
   onAngleImage: (node: CanvasNode) => void
@@ -2887,6 +2914,7 @@ function NodeHoverToolbar({
   const top = Math.max(12, viewport.y + node.position.y * viewport.k - 12)
   const canCreateGenerationTask = node.type === 'config'
   const canCreateImageGenerationTaskFromText = node.type === 'text'
+  const canCreateVideoGenerationTaskFromText = node.type === 'text'
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canSplitImageGrid = node.type === 'image' && Boolean(node.metadata.content)
@@ -2929,6 +2957,12 @@ function NodeHoverToolbar({
         <button title="用文本创建图片生成任务" data-node-action="generate-image-from-text" onClick={() => onCreateImageGenerationTaskFromText(node)}>
           <Image size={15} />
           生图
+        </button>
+      ) : null}
+      {canCreateVideoGenerationTaskFromText ? (
+        <button title="用文本创建视频生成任务" data-node-action="generate-video-from-text" onClick={() => onCreateVideoGenerationTaskFromText(node)}>
+          <Video size={15} />
+          生视频
         </button>
       ) : null}
       {canRetryGenerationTask ? (
