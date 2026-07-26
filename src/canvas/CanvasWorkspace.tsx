@@ -13,6 +13,7 @@ import { DEFAULT_IMAGE_ANGLE_PARAMS, buildAngleLabel, createImageAngleTaskInProj
 import { createCroppedImageNodeInProject, cropImageDataUrl, type ImageCropRect } from './imageCrop'
 import { createImageMaskEditTaskInProject } from './imageMaskEdit'
 import { createImageReversePromptFlowInProject } from './imageReversePrompt'
+import { createImageVideoTaskInProject } from './imageVideoTask'
 import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
 import { DEFAULT_IMAGE_UPSCALE_PARAMS, createUpscaledImageNodeInProject, resolveUpscaleSize, upscaleImageDataUrl, type ImageUpscaleAlgorithm, type ImageUpscaleParams } from './imageUpscale'
 import {
@@ -1586,6 +1587,18 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const createImageVideoTaskNode = useCallback(
+    (node: CanvasNode) => {
+      const result = createImageVideoTaskInProject(controller.project, node.id, { createId: () => crypto.randomUUID() })
+      if (!result) return
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      controller.selectNode(result.nodeId, false)
+      setToolbarNodeId(node.id)
+    },
+    [controller],
+  )
+
   const toggleSplitOutputs = useCallback(
     (node: CanvasNode) => {
       if (!splitOutputCounts.get(node.id)) return
@@ -2302,6 +2315,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onCropImage={(node) => setCropNodeId(node.id)}
             onMaskEditImage={(node) => setMaskEditNodeId(node.id)}
             onReversePromptImage={createImageReversePromptFlow}
+            onCreateVideoFromImage={createImageVideoTaskNode}
             onUpscaleImage={(node) => setUpscaleNodeId(node.id)}
             onSplitImageGrid={(node) => setGridSplitNodeId(node.id)}
             onPromoteSplitOutput={promoteSplitOutput}
@@ -2830,6 +2844,7 @@ function NodeHoverToolbar({
   onCropImage,
   onMaskEditImage,
   onReversePromptImage,
+  onCreateVideoFromImage,
   onUpscaleImage,
   onSplitImageGrid,
   onPromoteSplitOutput,
@@ -2854,6 +2869,7 @@ function NodeHoverToolbar({
   onCropImage: (node: CanvasNode) => void
   onMaskEditImage: (node: CanvasNode) => void
   onReversePromptImage: (node: CanvasNode) => void
+  onCreateVideoFromImage: (node: CanvasNode) => void
   onUpscaleImage: (node: CanvasNode) => void
   onSplitImageGrid: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
@@ -2877,6 +2893,7 @@ function NodeHoverToolbar({
   const canCropImage = node.type === 'image' && Boolean(node.metadata.content)
   const canMaskEditImage = node.type === 'image' && Boolean(node.metadata.content)
   const canReversePromptImage = node.type === 'image' && Boolean(node.metadata.content)
+  const canCreateVideoFromImage = node.type === 'image' && Boolean(node.metadata.content)
   const canAngleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canUpscaleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
@@ -2942,6 +2959,12 @@ function NodeHoverToolbar({
         <button title="创建反推提示词文本生成流程" data-node-action="reverse-prompt-image" onClick={() => onReversePromptImage(node)}>
           <FileText size={15} />
           反推提示词
+        </button>
+      ) : null}
+      {canCreateVideoFromImage ? (
+        <button title="基于图片创建视频生成任务" data-node-action="create-video-from-image" onClick={() => onCreateVideoFromImage(node)}>
+          <Video size={15} />
+          图生视频
         </button>
       ) : null}
       {canUpscaleImage ? (
