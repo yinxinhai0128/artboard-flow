@@ -6,25 +6,30 @@ export type CanvasGenerationMode = 'image' | 'video' | 'text'
 
 export type CanvasGenerationPayload = {
   mode: CanvasGenerationMode
+  generationType?: 'generation' | 'edit'
   model: string
   size: string
   count: number
   prompt: string
   summary: Record<CanvasResourceNodeKind, number>
+  editMask?: CanvasGenerationMedia
   inputs: Array<{
     nodeId: string
     type: CanvasResourceNodeKind
     title: string
     text?: string
-    media?: {
-      url: string
-      mimeType?: string
-      bytes?: number
-      width?: number
-      height?: number
-    }
+    media?: CanvasGenerationMedia
   }>
   createdAt: string
+}
+
+export type CanvasGenerationMedia = {
+  url: string
+  storageKey?: string
+  mimeType?: string
+  bytes?: number
+  width?: number
+  height?: number
 }
 
 export type CanvasGenerationJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
@@ -79,6 +84,8 @@ export type CanvasNode = {
     composerContent?: string
     generationPayload?: CanvasGenerationPayload
     generationOutputs?: CanvasGenerationJobResult[]
+    generationType?: CanvasGenerationPayload['generationType']
+    editMask?: CanvasGenerationMedia
     activeOutputIndex?: number
     splitSourceNodeId?: string
     splitOutputIndex?: number

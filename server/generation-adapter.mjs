@@ -7,11 +7,13 @@ export function normalizeGenerationJobPayload(input = {}) {
   const inputs = Array.isArray(payload.inputs) ? payload.inputs.flatMap(normalizePayloadInput) : []
   return {
     mode,
+    generationType: payload.generationType === 'edit' ? 'edit' : payload.generationType === 'generation' ? 'generation' : undefined,
     model: typeof payload.model === 'string' && payload.model.trim() ? payload.model.trim() : 'default',
     size: typeof payload.size === 'string' && payload.size.trim() ? payload.size.trim() : '1024x1024',
     count: Math.max(1, Math.min(15, Math.floor(Math.abs(Number(payload.count)) || 1))),
     prompt,
     summary: normalizeSummary(payload.summary, inputs),
+    editMask: normalizeMedia(payload.editMask),
     inputs,
     createdAt: typeof payload.createdAt === 'string' ? payload.createdAt : new Date().toISOString(),
   }
@@ -83,6 +85,7 @@ function normalizeMedia(media) {
   if (!url) return undefined
   return {
     url,
+    storageKey: typeof media.storageKey === 'string' ? media.storageKey : undefined,
     mimeType: typeof media.mimeType === 'string' ? media.mimeType : undefined,
     bytes: Number.isFinite(media.bytes) ? media.bytes : undefined,
     width: Number.isFinite(media.width) ? media.width : undefined,

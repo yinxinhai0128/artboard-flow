@@ -27,6 +27,30 @@ describe('generation adapter normalization', () => {
     expect(payload.inputs).toHaveLength(3)
   })
 
+  it('preserves image edit payload masks when normalizing generation submissions', () => {
+    expect(normalizeGenerationJobPayload({
+      mode: 'image',
+      generationType: 'edit',
+      model: 'image-model',
+      size: '1536x1024',
+      count: 1,
+      prompt: '只修改蒙版透明区域，其他区域保持不变。replace the jacket',
+      summary: { text: 0, image: 1, video: 0, audio: 0 },
+      inputs: [{
+        nodeId: 'source',
+        type: 'image',
+        title: 'Source',
+        media: { url: '/api/assets/source.png', mimeType: 'image/png', bytes: 100, width: 1200, height: 900 },
+      }],
+      editMask: { url: '/api/assets/mask.png', storageKey: 'mask.png', mimeType: 'image/png', bytes: 20, width: 1200, height: 900 },
+      createdAt: '2026-07-26T02:00:00.000Z',
+    })).toMatchObject({
+      mode: 'image',
+      generationType: 'edit',
+      editMask: { url: '/api/assets/mask.png', storageKey: 'mask.png', mimeType: 'image/png', bytes: 20, width: 1200, height: 900 },
+    })
+  })
+
   it('normalizes job statuses and external results', () => {
     expect(normalizeGenerationJobStatus('running')).toBe('running')
     expect(normalizeGenerationJobStatus('cancelled')).toBe('cancelled')

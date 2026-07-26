@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { Compass, Copy, Crop, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, Sparkles, SquarePen, Trash2, Type, Undo2, Upload, Video, ZoomIn } from 'lucide-react'
+import { Brush, Compass, Copy, Crop, Download, Eraser, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, Sparkles, SquarePen, Trash2, Type, Undo2, Upload, Video, WandSparkles, ZoomIn } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -11,6 +11,7 @@ import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForNodes } from './graph'
 import { DEFAULT_IMAGE_ANGLE_PARAMS, buildAngleLabel, createImageAngleTaskInProject, type ImageAngleParams } from './imageAngle'
 import { createCroppedImageNodeInProject, cropImageDataUrl, type ImageCropRect } from './imageCrop'
+import { createImageMaskEditTaskInProject } from './imageMaskEdit'
 import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
 import { DEFAULT_IMAGE_UPSCALE_PARAMS, createUpscaledImageNodeInProject, resolveUpscaleSize, upscaleImageDataUrl, type ImageUpscaleAlgorithm, type ImageUpscaleParams } from './imageUpscale'
 import {
@@ -484,6 +485,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null)
   const [gridSplitNodeId, setGridSplitNodeId] = useState<string | null>(null)
   const [cropNodeId, setCropNodeId] = useState<string | null>(null)
+  const [maskEditNodeId, setMaskEditNodeId] = useState<string | null>(null)
   const [angleNodeId, setAngleNodeId] = useState<string | null>(null)
   const [upscaleNodeId, setUpscaleNodeId] = useState<string | null>(null)
 
@@ -595,6 +597,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   const previewNode = previewNodeId ? nodesById.get(previewNodeId) ?? null : null
   const gridSplitNode = gridSplitNodeId ? nodesById.get(gridSplitNodeId) ?? null : null
   const cropNode = cropNodeId ? nodesById.get(cropNodeId) ?? null : null
+  const maskEditNode = maskEditNodeId ? nodesById.get(maskEditNodeId) ?? null : null
   const angleNode = angleNodeId ? nodesById.get(angleNodeId) ?? null : null
   const upscaleNode = upscaleNodeId ? nodesById.get(upscaleNodeId) ?? null : null
   const selectionToolbarPosition = useMemo(() => {
@@ -1519,6 +1522,28 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const createMaskEditTaskNode = useCallback(
+    async (node: CanvasNode, payload: ImageMaskEditDialogPayload) => {
+      if (node.type !== 'image' || !node.metadata.content) return
+      const maskAsset = await canvasApi.uploadAsset(payload.maskDataUrl)
+      const result = createImageMaskEditTaskInProject(controller.project, node.id, {
+        prompt: payload.prompt,
+        maskAsset,
+        maskWidth: payload.width,
+        maskHeight: payload.height,
+      }, {
+        createId: () => crypto.randomUUID(),
+      })
+      if (!result) return
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      controller.selectNode(result.nodeId, false)
+      setToolbarNodeId(node.id)
+      setMaskEditNodeId(null)
+    },
+    [controller],
+  )
+
   const upscaleImageNode = useCallback(
     async (node: CanvasNode, params: ImageUpscaleParams) => {
       if (node.type !== 'image' || !node.metadata.content) return
@@ -2262,6 +2287,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onStartConnection={startConnectionFromToolbar}
             onAngleImage={(node) => setAngleNodeId(node.id)}
             onCropImage={(node) => setCropNodeId(node.id)}
+            onMaskEditImage={(node) => setMaskEditNodeId(node.id)}
             onUpscaleImage={(node) => setUpscaleNodeId(node.id)}
             onSplitImageGrid={(node) => setGridSplitNodeId(node.id)}
             onPromoteSplitOutput={promoteSplitOutput}
@@ -2297,6 +2323,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
         node={cropNode?.type === 'image' ? cropNode : null}
         onClose={() => setCropNodeId(null)}
         onConfirm={(node, crop) => void cropImageNode(node, crop)}
+      />
+      <ImageMaskEditDialog
+        node={maskEditNode?.type === 'image' ? maskEditNode : null}
+        onClose={() => setMaskEditNodeId(null)}
+        onConfirm={(node, payload) => void createMaskEditTaskNode(node, payload)}
       />
       <ImageUpscaleDialog
         node={upscaleNode?.type === 'image' ? upscaleNode : null}
@@ -2783,6 +2814,7 @@ function NodeHoverToolbar({
   onStartConnection,
   onAngleImage,
   onCropImage,
+  onMaskEditImage,
   onUpscaleImage,
   onSplitImageGrid,
   onPromoteSplitOutput,
@@ -2805,6 +2837,7 @@ function NodeHoverToolbar({
   onStartConnection: (node: CanvasNode) => void
   onAngleImage: (node: CanvasNode) => void
   onCropImage: (node: CanvasNode) => void
+  onMaskEditImage: (node: CanvasNode) => void
   onUpscaleImage: (node: CanvasNode) => void
   onSplitImageGrid: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
@@ -2826,6 +2859,7 @@ function NodeHoverToolbar({
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
   const canSplitImageGrid = node.type === 'image' && Boolean(node.metadata.content)
   const canCropImage = node.type === 'image' && Boolean(node.metadata.content)
+  const canMaskEditImage = node.type === 'image' && Boolean(node.metadata.content)
   const canAngleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canUpscaleImage = node.type === 'image' && Boolean(node.metadata.content)
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
@@ -2879,6 +2913,12 @@ function NodeHoverToolbar({
         <button title="裁剪图片并生成结果节点" data-node-action="crop-image" onClick={() => onCropImage(node)}>
           <Crop size={15} />
           裁剪
+        </button>
+      ) : null}
+      {canMaskEditImage ? (
+        <button title="涂抹遮罩并创建局部编辑任务" data-node-action="mask-edit-image" onClick={() => onMaskEditImage(node)}>
+          <Brush size={15} />
+          局部编辑
         </button>
       ) : null}
       {canUpscaleImage ? (
@@ -2951,7 +2991,281 @@ function NodeHoverToolbar({
   )
 }
 
+type ImageMaskEditDialogPayload = {
+  prompt: string
+  maskDataUrl: string
+  width: number
+  height: number
+}
+
+type MaskDrawMode = 'paint' | 'erase'
+
+const DEFAULT_MASK_BRUSH_SIZE = 80
 const IMAGE_UPSCALE_TARGETS = [1024, 2048, 4096]
+
+function ImageMaskEditDialog({
+  node,
+  onClose,
+  onConfirm,
+}: {
+  node: CanvasNode | null
+  onClose: () => void
+  onConfirm: (node: CanvasNode, payload: ImageMaskEditDialogPayload) => void
+}) {
+  const maskCanvasRef = useRef<HTMLCanvasElement>(null)
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null)
+  const drawingRef = useRef<{ active: boolean; last: Point | null }>({ active: false, last: null })
+  const [prompt, setPrompt] = useState('')
+  const [brushSize, setBrushSize] = useState(DEFAULT_MASK_BRUSH_SIZE)
+  const [mode, setMode] = useState<MaskDrawMode>('paint')
+  const [error, setError] = useState('')
+  const open = Boolean(node?.metadata.content)
+
+  useEffect(() => {
+    if (!open) return
+    setPrompt('')
+    setBrushSize(DEFAULT_MASK_BRUSH_SIZE)
+    setMode('paint')
+    setError('')
+    clearCanvas(maskCanvasRef.current)
+    clearCanvas(previewCanvasRef.current)
+    drawingRef.current = { active: false, last: null }
+  }, [node?.id, open])
+
+  if (!node?.metadata.content) return null
+
+  const sourceSize = imageNodeSourceSize(node)
+
+  const draw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const maskCanvas = maskCanvasRef.current
+    const context = maskCanvas?.getContext('2d')
+    if (!maskCanvas || !context) return
+    const point = readCanvasPoint(event.currentTarget, event.clientX, event.clientY)
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    context.lineWidth = brushSize
+    context.globalCompositeOperation = mode === 'paint' ? 'source-over' : 'destination-out'
+    context.strokeStyle = '#000'
+    context.fillStyle = '#000'
+    drawMaskStroke(context, drawingRef.current.last ?? point, point, brushSize)
+    renderMaskPreview(maskCanvas, previewCanvasRef.current)
+    drawingRef.current.last = point
+    if (mode === 'paint') setError('')
+  }
+
+  const startDraw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drawingRef.current = { active: true, last: null }
+    draw(event)
+  }
+
+  const moveDraw = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!drawingRef.current.active) return
+    event.preventDefault()
+    draw(event)
+  }
+
+  const stopDraw = () => {
+    drawingRef.current = { active: false, last: null }
+    const maskCanvas = maskCanvasRef.current
+    if (maskCanvas) renderMaskPreview(maskCanvas, previewCanvasRef.current, canvasHasPaint(maskCanvas))
+  }
+
+  const resetMask = () => {
+    clearCanvas(maskCanvasRef.current)
+    clearCanvas(previewCanvasRef.current)
+    setError('')
+  }
+
+  const submit = () => {
+    const maskCanvas = maskCanvasRef.current
+    const nextPrompt = prompt.trim()
+    if (!nextPrompt) return setError('请输入局部修改要求')
+    if (!maskCanvas || !canvasHasPaint(maskCanvas)) return setError('请先涂抹要局部编辑的区域')
+    onConfirm(node, {
+      prompt: nextPrompt,
+      maskDataUrl: buildEditMaskDataUrl(maskCanvas),
+      width: maskCanvas.width,
+      height: maskCanvas.height,
+    })
+  }
+
+  return (
+    <div className="image-mask-backdrop" data-toolbar onPointerDown={onClose}>
+      <section className="image-mask-modal" data-image-mask-dialog="true" onPointerDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span>局部遮罩编辑</span>
+            <h2>{node.title || '图片节点'}</h2>
+          </div>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="image-mask-body">
+          <div className="image-mask-stage">
+            <div className="image-mask-frame">
+              <img src={node.metadata.content} alt={node.title} draggable={false} />
+              <canvas ref={maskCanvasRef} width={sourceSize.width} height={sourceSize.height} hidden />
+              <canvas
+                ref={previewCanvasRef}
+                width={sourceSize.width}
+                height={sourceSize.height}
+                className="image-mask-canvas"
+                onPointerDown={startDraw}
+                onPointerMove={moveDraw}
+                onPointerUp={stopDraw}
+                onPointerCancel={stopDraw}
+              />
+            </div>
+          </div>
+          <div className="image-mask-controls">
+            <div className="image-mask-summary">
+              <span>原图尺寸</span>
+              <strong>{sourceSize.width} × {sourceSize.height}</strong>
+              <small>涂抹区域会作为透明蒙版提交，未涂抹区域要求保持不变。</small>
+            </div>
+            <label>
+              <span>画笔模式</span>
+              <div className="image-mask-options">
+                <button type="button" className={mode === 'paint' ? 'active' : ''} onClick={() => setMode('paint')}>
+                  <Brush size={15} />
+                  涂抹
+                </button>
+                <button type="button" className={mode === 'erase' ? 'active' : ''} onClick={() => setMode('erase')}>
+                  <Eraser size={15} />
+                  擦除
+                </button>
+              </div>
+            </label>
+            <label className="image-mask-range">
+              <span>画笔大小</span>
+              <input type="range" min={8} max={160} step={2} value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
+              <strong>{brushSize}px</strong>
+            </label>
+            <label>
+              <span>修改要求</span>
+              <textarea
+                data-image-mask-prompt
+                rows={6}
+                value={prompt}
+                placeholder="例如：把涂抹区域改成金属材质，保持原图光影"
+                onChange={(event) => {
+                  setPrompt(event.target.value)
+                  setError('')
+                }}
+              />
+            </label>
+            {error ? <div className="image-mask-error">{error}</div> : null}
+            <div className="image-mask-actions">
+              <button className="ghost" type="button" data-image-mask-reset onClick={resetMask}>
+                <RotateCcw size={15} />
+                重置
+              </button>
+              <button className="primary" type="button" data-image-mask-confirm onClick={submit}>
+                <WandSparkles size={16} />
+                创建局部编辑任务
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function readCanvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number): Point {
+  const rect = canvas.getBoundingClientRect()
+  return {
+    x: ((clientX - rect.left) / Math.max(1, rect.width)) * canvas.width,
+    y: ((clientY - rect.top) / Math.max(1, rect.height)) * canvas.height,
+  }
+}
+
+function clearCanvas(canvas: HTMLCanvasElement | null) {
+  const context = canvas?.getContext('2d')
+  if (!canvas || !context) return
+  context.clearRect(0, 0, canvas.width, canvas.height)
+}
+
+function drawMaskStroke(context: CanvasRenderingContext2D, from: Point, to: Point, size: number) {
+  if (from.x === to.x && from.y === to.y) {
+    context.beginPath()
+    context.arc(to.x, to.y, size / 2, 0, Math.PI * 2)
+    context.fill()
+    return
+  }
+  context.beginPath()
+  context.moveTo(from.x, from.y)
+  context.lineTo(to.x, to.y)
+  context.stroke()
+}
+
+function canvasHasPaint(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext('2d')
+  if (!context) return false
+  const data = context.getImageData(0, 0, canvas.width, canvas.height).data
+  for (let index = 3; index < data.length; index += 4) {
+    if (data[index] > 0) return true
+  }
+  return false
+}
+
+function renderMaskPreview(maskCanvas: HTMLCanvasElement, previewCanvas: HTMLCanvasElement | null, withBorder = false) {
+  const context = previewCanvas?.getContext('2d')
+  if (!previewCanvas || !context) return
+  context.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
+  context.fillStyle = 'rgba(37, 99, 235, .38)'
+  context.fillRect(0, 0, previewCanvas.width, previewCanvas.height)
+  context.globalCompositeOperation = 'destination-in'
+  context.drawImage(maskCanvas, 0, 0)
+  context.globalCompositeOperation = 'source-over'
+  if (withBorder) drawMaskBorder(context, maskCanvas)
+}
+
+function drawMaskBorder(context: CanvasRenderingContext2D, maskCanvas: HTMLCanvasElement) {
+  const maskContext = maskCanvas.getContext('2d')
+  if (!maskContext) return
+  const { width, height } = maskCanvas
+  const data = maskContext.getImageData(0, 0, width, height).data
+  const step = Math.max(1, Math.round(Math.max(width, height) / 900))
+  context.save()
+  context.fillStyle = 'rgba(255, 255, 255, .78)'
+  for (let y = step; y < height - step; y += step) {
+    for (let x = step; x < width - step; x += step) {
+      const offset = (y * width + x) * 4 + 3
+      if (data[offset] === 0 || !isMaskEdge(data, width, x, y, step)) continue
+      if ((x + y) % (step * 10) > step * 6) continue
+      context.fillRect(x - step / 2, y - step / 2, Math.max(1.5, step), Math.max(1.5, step))
+    }
+  }
+  context.restore()
+}
+
+function isMaskEdge(data: Uint8ClampedArray, width: number, x: number, y: number, step: number) {
+  return data[((y - step) * width + x) * 4 + 3] === 0 ||
+    data[((y + step) * width + x) * 4 + 3] === 0 ||
+    data[(y * width + x - step) * 4 + 3] === 0 ||
+    data[(y * width + x + step) * 4 + 3] === 0
+}
+
+function buildEditMaskDataUrl(selectionCanvas: HTMLCanvasElement) {
+  const canvas = document.createElement('canvas')
+  canvas.width = selectionCanvas.width
+  canvas.height = selectionCanvas.height
+  const context = canvas.getContext('2d')
+  const selectionContext = selectionCanvas.getContext('2d')
+  if (!context || !selectionContext) return selectionCanvas.toDataURL('image/png')
+  context.fillStyle = '#fff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  const selection = selectionContext.getImageData(0, 0, canvas.width, canvas.height)
+  const mask = context.getImageData(0, 0, canvas.width, canvas.height)
+  for (let index = 3; index < mask.data.length; index += 4) {
+    if (selection.data[index] > 0) mask.data[index] = 0
+  }
+  context.putImageData(mask, 0, 0)
+  return canvas.toDataURL('image/png')
+}
 
 function ImageUpscaleDialog({
   node,
