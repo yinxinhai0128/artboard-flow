@@ -213,6 +213,35 @@ describe('canvas generation context', () => {
     })
   })
 
+  it('carries video settings from config nodes into video generation payloads', () => {
+    const videoConfig: CanvasNode = {
+      ...configNode,
+      metadata: {
+        ...configNode.metadata,
+        generationMode: 'video',
+        size: '16:9',
+        seconds: '10',
+        vquality: '1080p',
+        generateAudio: true,
+        watermark: false,
+      },
+    }
+
+    const context = buildCanvasGenerationContext('config', [videoConfig, imageNode], [{ id: 'c1', fromNodeId: 'image', toNodeId: 'config' }])
+    const payload = buildCanvasGenerationPayload(context, '2026-07-26T06:00:00.000Z')
+
+    expect(payload).toMatchObject({
+      mode: 'video',
+      size: '16:9',
+      video: {
+        seconds: '10',
+        resolution: '1080p',
+        generateAudio: true,
+        watermark: false,
+      },
+    })
+  })
+
   it('reports an unready context when config has no prompt and no usable upstream input', () => {
     const emptyConfig: CanvasNode = {
       ...configNode,

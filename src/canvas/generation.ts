@@ -1,6 +1,7 @@
 import { CONFIG_REFERENCE_PATTERN, getGenerationResourceNodes } from './resourceReferences'
 import { splitGenerationOutputsInProject } from './outputSplit'
-import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasProject, CanvasResourceNodeKind } from './types'
+import { videoOptionsFromNodeMetadata } from './videoOptions'
+import type { CanvasConnection, CanvasGenerationJob, CanvasGenerationMode, CanvasGenerationPayload, CanvasNode, CanvasProject, CanvasResourceNodeKind, CanvasVideoGenerationOptions } from './types'
 
 export type CanvasGenerationInput = {
   nodeId: string
@@ -27,6 +28,7 @@ export type CanvasGenerationContext = {
   size: string
   count: number
   prompt: string
+  video?: CanvasVideoGenerationOptions
   inputs: CanvasGenerationInput[]
   selectedInputs: CanvasGenerationInput[]
   referenceImages: CanvasGenerationInput[]
@@ -65,6 +67,7 @@ export function buildCanvasGenerationContext(configNodeId: string, nodes: Canvas
   const summary = summarizeInputs(selectedInputs)
   const hasAnyReference = Boolean(summary.text || summary.image || summary.video || summary.audio)
   const ready = Boolean(prompt.trim() || hasAnyReference)
+  const video = mode === 'video' ? videoOptionsFromNodeMetadata(configNode?.metadata) : undefined
   const warnings = ready ? [] : ['请先输入提示词，或连接有内容的文本、图片、视频节点。']
 
   return {
@@ -74,6 +77,7 @@ export function buildCanvasGenerationContext(configNodeId: string, nodes: Canvas
     size,
     count,
     prompt,
+    video,
     inputs,
     selectedInputs,
     referenceImages,
@@ -130,6 +134,7 @@ export function buildCanvasGenerationPayload(context: CanvasGenerationContext, c
     count: context.count,
     prompt: context.prompt,
     summary: context.summary,
+    video: context.video,
     inputs: context.selectedInputs.map((input) => ({
       nodeId: input.nodeId,
       type: input.type,

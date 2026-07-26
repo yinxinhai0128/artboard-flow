@@ -14,6 +14,7 @@ export function normalizeGenerationJobPayload(input = {}) {
     prompt,
     summary: normalizeSummary(payload.summary, inputs),
     editMask: normalizeMedia(payload.editMask),
+    video: normalizeVideoOptions(payload.video),
     inputs,
     createdAt: typeof payload.createdAt === 'string' ? payload.createdAt : new Date().toISOString(),
   }
@@ -91,6 +92,35 @@ function normalizeMedia(media) {
     width: Number.isFinite(media.width) ? media.width : undefined,
     height: Number.isFinite(media.height) ? media.height : undefined,
   }
+}
+
+function normalizeVideoOptions(video) {
+  if (!video || typeof video !== 'object' || Array.isArray(video)) return undefined
+  const options = {
+    seconds: normalizeTextOption(video.seconds),
+    resolution: normalizeTextOption(video.resolution),
+    generateAudio: normalizeBooleanOption(video.generateAudio),
+    watermark: normalizeBooleanOption(video.watermark),
+  }
+  return hasVideoOptions(options) ? options : undefined
+}
+
+function normalizeTextOption(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value !== 'string') return undefined
+  const text = value.trim()
+  return text || undefined
+}
+
+function normalizeBooleanOption(value) {
+  if (typeof value === 'boolean') return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return undefined
+}
+
+function hasVideoOptions(options) {
+  return Boolean(options.seconds || options.resolution || options.generateAudio !== undefined || options.watermark !== undefined)
 }
 
 function normalizeSummary(summary, inputs) {

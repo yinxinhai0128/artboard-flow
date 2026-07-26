@@ -1,11 +1,16 @@
 import { addConnectionToProject } from './document'
 import { buildCanvasGenerationPayload, buildTextNodeImageGenerationContext, generationTaskPositionForSource } from './generation'
 import { createCanvasNode } from './nodeFactory'
+import { metadataFromVideoOptions, normalizeCanvasVideoOptions } from './videoOptions'
 import type { CanvasProject } from './types'
 
 type CreateTextVideoTaskOptions = {
   videoModel?: string
   size?: string
+  seconds?: string | number
+  quality?: string
+  generateAudio?: boolean | string
+  watermark?: boolean | string
   createId?: () => string
   now?: () => string
 }
@@ -37,6 +42,12 @@ export function createTextVideoTaskInProject(
     model: options.videoModel || source.metadata.model || baseContext.model,
     size: options.size || source.metadata.size || '720p',
     count: 1,
+    video: normalizeCanvasVideoOptions({
+      seconds: options.seconds ?? source.metadata.seconds,
+      resolution: options.quality ?? source.metadata.vquality,
+      generateAudio: options.generateAudio ?? source.metadata.generateAudio,
+      watermark: options.watermark ?? source.metadata.watermark,
+    }),
   }
   const generationPayload = buildCanvasGenerationPayload(context, createdAt)
   const taskNode = createCanvasNode('video', generationTaskPositionForSource(source, project.nodes, project.connections), {
@@ -53,6 +64,7 @@ export function createTextVideoTaskInProject(
         model: context.model,
         size: context.size,
         count: context.count,
+        ...metadataFromVideoOptions(context.video),
       },
     },
   })

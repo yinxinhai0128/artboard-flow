@@ -100,6 +100,39 @@ describe('text video task', () => {
     expect(result?.project.updatedAt).toBe('2026-07-26T05:00:00.000Z')
   })
 
+  it('keeps video-specific options on text-origin video tasks', () => {
+    const result = createTextVideoTaskInProject(project, 'text', {
+      videoModel: 'video-model',
+      size: '9:16',
+      seconds: '6',
+      quality: '720p',
+      generateAudio: false,
+      watermark: true,
+      createId: (() => {
+        const ids = ['video-task', 'video-edge']
+        return () => ids.shift()!
+      })(),
+      now: () => '2026-07-26T05:30:00.000Z',
+    })
+
+    expect(result?.project.nodes[2].metadata).toMatchObject({
+      seconds: '6',
+      vquality: '720p',
+      generateAudio: false,
+      watermark: true,
+    })
+    expect(result?.project.nodes[2].metadata.generationPayload).toMatchObject({
+      mode: 'video',
+      size: '9:16',
+      video: {
+        seconds: '6',
+        resolution: '720p',
+        generateAudio: false,
+        watermark: true,
+      },
+    })
+  })
+
   it('refuses missing, non-text, and empty text nodes', () => {
     const emptyTextProject = { ...project, nodes: [{ ...textNode('empty'), metadata: {} }] }
     const imageOnlyProject = { ...project, nodes: [imageNode('image')] }

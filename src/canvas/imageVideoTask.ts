@@ -1,12 +1,17 @@
 import { addConnectionToProject } from './document'
 import { generationTaskPositionForSource } from './generation'
 import { createCanvasNode } from './nodeFactory'
+import { metadataFromVideoOptions, normalizeCanvasVideoOptions } from './videoOptions'
 import type { CanvasGenerationPayload, CanvasNode, CanvasProject } from './types'
 
 type CreateImageVideoTaskOptions = {
   prompt?: string
   videoModel?: string
   size?: string
+  seconds?: string | number
+  quality?: string
+  generateAudio?: boolean | string
+  watermark?: boolean | string
   createId?: () => string
   now?: () => string
 }
@@ -55,6 +60,7 @@ export function createImageVideoTaskInProject(
         model: payload.model,
         size: payload.size,
         count: payload.count,
+        ...metadataFromVideoOptions(payload.video),
       },
     },
   })
@@ -67,6 +73,13 @@ export function createImageVideoTaskInProject(
 }
 
 function buildImageVideoPayload(source: CanvasNode, prompt: string, options: CreateImageVideoTaskOptions, createdAt: string): CanvasGenerationPayload {
+  const video = normalizeCanvasVideoOptions({
+    seconds: options.seconds ?? source.metadata.seconds,
+    resolution: options.quality ?? source.metadata.vquality,
+    generateAudio: options.generateAudio ?? source.metadata.generateAudio,
+    watermark: options.watermark ?? source.metadata.watermark,
+  })
+
   return {
     mode: 'video',
     model: options.videoModel || source.metadata.model || '默认模型',
@@ -74,6 +87,7 @@ function buildImageVideoPayload(source: CanvasNode, prompt: string, options: Cre
     count: 1,
     prompt,
     summary: { text: 0, image: 1, video: 0, audio: 0 },
+    video,
     inputs: [{
       nodeId: source.id,
       type: 'image',

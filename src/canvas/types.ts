@@ -13,6 +13,7 @@ export type CanvasGenerationPayload = {
   prompt: string
   summary: Record<CanvasResourceNodeKind, number>
   editMask?: CanvasGenerationMedia
+  video?: CanvasVideoGenerationOptions
   inputs: Array<{
     nodeId: string
     type: CanvasResourceNodeKind
@@ -21,6 +22,13 @@ export type CanvasGenerationPayload = {
     media?: CanvasGenerationMedia
   }>
   createdAt: string
+}
+
+export type CanvasVideoGenerationOptions = {
+  seconds?: string
+  resolution?: string
+  generateAudio?: boolean
+  watermark?: boolean
 }
 
 export type CanvasGenerationMedia = {
@@ -99,6 +107,10 @@ export type CanvasNode = {
     model?: string
     size?: string
     count?: number
+    seconds?: string
+    vquality?: string
+    generateAudio?: boolean
+    watermark?: boolean
     naturalWidth?: number
     naturalHeight?: number
     freeResize?: boolean

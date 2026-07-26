@@ -51,6 +51,37 @@ describe('generation adapter normalization', () => {
     })
   })
 
+  it('preserves video options when normalizing generation submissions', () => {
+    expect(normalizeGenerationJobPayload({
+      mode: 'video',
+      model: 'video-model',
+      size: '16:9',
+      count: 1,
+      prompt: 'make this image move',
+      video: {
+        seconds: '8',
+        resolution: '1080p',
+        generateAudio: true,
+        watermark: false,
+      },
+      inputs: [{
+        nodeId: 'source',
+        type: 'image',
+        title: 'Source',
+        media: { url: '/api/assets/source.png', mimeType: 'image/png' },
+      }],
+      createdAt: '2026-07-26T06:10:00.000Z',
+    })).toMatchObject({
+      mode: 'video',
+      video: {
+        seconds: '8',
+        resolution: '1080p',
+        generateAudio: true,
+        watermark: false,
+      },
+    })
+  })
+
   it('normalizes job statuses and external results', () => {
     expect(normalizeGenerationJobStatus('running')).toBe('running')
     expect(normalizeGenerationJobStatus('cancelled')).toBe('cancelled')

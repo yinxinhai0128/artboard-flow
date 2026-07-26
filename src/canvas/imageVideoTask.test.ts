@@ -90,6 +90,39 @@ describe('image video task', () => {
     })
   })
 
+  it('keeps video-specific options on the task node and generation payload', () => {
+    const result = createImageVideoTaskInProject(project, 'source', {
+      videoModel: 'video-model',
+      size: '16:9',
+      seconds: '8',
+      quality: '1080p',
+      generateAudio: true,
+      watermark: false,
+      createId: (() => {
+        const ids = ['video-task', 'video-edge']
+        return () => ids.shift()!
+      })(),
+      now: () => '2026-07-26T04:30:00.000Z',
+    })
+
+    expect(result?.project.nodes[1].metadata).toMatchObject({
+      seconds: '8',
+      vquality: '1080p',
+      generateAudio: true,
+      watermark: false,
+    })
+    expect(result?.project.nodes[1].metadata.generationPayload).toMatchObject({
+      mode: 'video',
+      size: '16:9',
+      video: {
+        seconds: '8',
+        resolution: '1080p',
+        generateAudio: true,
+        watermark: false,
+      },
+    })
+  })
+
   it('refuses missing, non-image, and contentless sources', () => {
     const textProject = { ...project, nodes: [{ ...imageNode('text'), type: 'text' as const }] }
     const emptyImageProject = { ...project, nodes: [{ ...imageNode('empty'), metadata: {} }] }
