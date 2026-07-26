@@ -2584,6 +2584,7 @@ button:disabled {
 }
 
 .port:hover::before,
+.canvas-node.selected .port::before,
 .canvas-node.connection-active .port::before,
 .canvas-node.connection-target-valid .port::before,
 .canvas-node.connection-target-blocked .port::before {
