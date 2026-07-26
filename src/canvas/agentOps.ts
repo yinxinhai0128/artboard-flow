@@ -50,6 +50,10 @@ type CanvasGenerationFlowInput = {
   model?: string
   size?: string
   count?: number
+  seconds?: string | number
+  resolution?: string
+  generateAudio?: boolean | string
+  watermark?: boolean | string
   autoRun?: boolean
 }
 
@@ -95,6 +99,10 @@ export function createCanvasGenerationFlowOps(input: CanvasGenerationFlowInput, 
         model: input.model,
         size: input.size,
         count: input.count,
+        seconds: normalizeAgentTextOption(input.seconds),
+        vquality: normalizeAgentTextOption(input.resolution),
+        generateAudio: normalizeAgentBooleanOption(input.generateAudio),
+        watermark: normalizeAgentBooleanOption(input.watermark),
       }),
     },
     { type: 'connect_nodes', fromNodeId: textId, toNodeId: configId },
@@ -231,6 +239,18 @@ function generationFlowTitle(mode: CanvasGenerationMode) {
 
 function cleanMetadata(metadata: Partial<CanvasNode['metadata']>) {
   return Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== undefined && value !== '')) as Partial<CanvasNode['metadata']>
+}
+
+function normalizeAgentTextOption(value: string | number | undefined): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return typeof value === 'string' ? value : undefined
+}
+
+function normalizeAgentBooleanOption(value: boolean | string | undefined): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return undefined
 }
 
 function operationLabel(type: string) {

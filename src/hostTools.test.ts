@@ -23,6 +23,10 @@ describe('artboard flow host tools', () => {
         calls.push('generateImage')
         return { input }
       },
+      generateVideo: (input: unknown) => {
+        calls.push('generateVideo')
+        return { input }
+      },
       getGenerationStatus: async (input: unknown) => ({ total: 0, input }),
       addTextAsset: async (input: unknown) => ({ kind: 'text', input }),
       addImageAsset: async (input: unknown) => ({ kind: 'image', input }),
@@ -36,6 +40,21 @@ describe('artboard flow host tools', () => {
     })
     await expect(runArtboardFlowHostTool({ app, canvas }, 'canvas_generate_image', { prompt: 'robot' })).resolves.toEqual({
       input: { prompt: 'robot' },
+    })
+    await expect(runArtboardFlowHostTool({ app, canvas }, 'canvas_generate_video', {
+      prompt: 'robot',
+      seconds: '8',
+      resolution: '1080p',
+      generateAudio: true,
+      watermark: false,
+    })).resolves.toEqual({
+      input: {
+        prompt: 'robot',
+        seconds: '8',
+        resolution: '1080p',
+        generateAudio: true,
+        watermark: false,
+      },
     })
     await expect(runArtboardFlowHostTool({ app, canvas }, 'canvas_get_graph', {})).resolves.toMatchObject({
       projectId: 'project-1',
@@ -52,7 +71,7 @@ describe('artboard flow host tools', () => {
       kind: 'image',
       input: { imageUrl: 'data:image/png;base64,abc' },
     })
-    expect(calls).toEqual(['createTextNode', 'generateImage'])
+    expect(calls).toEqual(['createTextNode', 'generateImage', 'generateVideo'])
   })
 
   it('lists supported agent-style tool names with scopes', () => {
@@ -72,6 +91,19 @@ describe('artboard flow host tools', () => {
           required: ['connections'],
           properties: expect.objectContaining({
             connections: expect.objectContaining({ type: 'array' }),
+          }),
+        }),
+      }),
+    ]))
+    expect(listArtboardFlowHostTools()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: 'canvas_generate_video',
+        inputSchema: expect.objectContaining({
+          properties: expect.objectContaining({
+            seconds: expect.objectContaining({ type: 'string' }),
+            resolution: expect.objectContaining({ type: 'string' }),
+            generateAudio: expect.objectContaining({ type: 'boolean' }),
+            watermark: expect.objectContaining({ type: 'boolean' }),
           }),
         }),
       }),

@@ -135,6 +135,12 @@ const generationProperties = {
   size: { type: 'string' as const },
   count: { type: 'number' as const },
 }
+const videoGenerationProperties = {
+  seconds: { type: 'string' as const },
+  resolution: { type: 'string' as const },
+  generateAudio: { type: 'boolean' as const },
+  watermark: { type: 'boolean' as const },
+}
 
 const hostToolInputSchemas: Record<ArtboardFlowHostToolName, HostToolInputSchema> = {
   canvas_list_projects: objectSchema({
@@ -184,6 +190,7 @@ const hostToolInputSchemas: Record<ArtboardFlowHostToolName, HostToolInputSchema
   }, ['items']),
   canvas_create_config_node: objectSchema({
     ...generationProperties,
+    ...videoGenerationProperties,
     mode: { type: 'string' },
     width: { type: 'number' },
     height: { type: 'number' },
@@ -195,13 +202,14 @@ const hostToolInputSchemas: Record<ArtboardFlowHostToolName, HostToolInputSchema
   }, ['prompt']),
   canvas_create_generation_flow: objectSchema({
     ...generationProperties,
+    ...videoGenerationProperties,
     mode: { type: 'string' },
     referenceNodeIds: { type: 'array', items: { type: 'string' } },
     autoRun: { type: 'boolean' },
   }, ['prompt']),
   canvas_generate_text: objectSchema(generationProperties, ['prompt']),
   canvas_generate_image: objectSchema(generationProperties, ['prompt']),
-  canvas_generate_video: objectSchema(generationProperties, ['prompt']),
+  canvas_generate_video: objectSchema({ ...generationProperties, ...videoGenerationProperties }, ['prompt']),
   canvas_update_node: objectSchema({
     id: { type: 'string' },
     patch: { type: 'object' },

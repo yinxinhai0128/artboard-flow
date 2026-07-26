@@ -87,6 +87,45 @@ it('creates a reusable generation flow operation batch with references and optio
   ])
 })
 
+it('creates video generation flows with video-specific settings', () => {
+  const ops = createCanvasGenerationFlowOps({
+    prompt: 'cinematic robot bird',
+    mode: 'video',
+    x: 120,
+    y: 80,
+    model: 'video-model',
+    size: '16:9',
+    seconds: '8',
+    resolution: '1080p',
+    generateAudio: true,
+    watermark: false,
+    autoRun: true,
+  }, {
+    createId: (prefix) => `${prefix}-video`,
+  })
+
+  const result = applyCanvasAgentOps(snapshot(), ops, {
+    createId: (() => {
+      const ids = ['edge-video']
+      return () => ids.shift()!
+    })(),
+    now: () => '2026-07-26T07:00:00.000Z',
+  })
+
+  expect(result.project.nodes.find((node) => node.id === 'config-video')?.metadata).toMatchObject({
+    generationMode: 'video',
+    model: 'video-model',
+    size: '16:9',
+    seconds: '8',
+    vquality: '1080p',
+    generateAudio: true,
+    watermark: false,
+  })
+  expect(result.generationRequests).toEqual([
+    { nodeId: 'config-video', mode: 'video', prompt: '@[node:text-video]' },
+  ])
+})
+
 describe('canvas agent operations', () => {
   it('adds and updates nodes with deterministic ids and merged metadata', () => {
     const result = applyCanvasAgentOps(

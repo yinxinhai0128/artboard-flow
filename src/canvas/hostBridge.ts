@@ -125,6 +125,10 @@ type CanvasHostConfigNodeInput = {
   model?: string
   size?: string
   count?: number
+  seconds?: string | number
+  resolution?: string
+  generateAudio?: boolean | string
+  watermark?: boolean | string
   autoRun?: boolean
 }
 type CanvasHostUpdateNodeTextInput = {
@@ -657,6 +661,10 @@ function createConfigNodeOps(input: CanvasHostConfigNodeInput): CanvasAgentOp[] 
         model: input.model,
         size: input.size,
         count: input.count,
+        seconds: normalizeHostTextOption(input.seconds),
+        vquality: normalizeHostTextOption(input.resolution),
+        generateAudio: normalizeHostBooleanOption(input.generateAudio),
+        watermark: normalizeHostBooleanOption(input.watermark),
       }),
     },
   ]
@@ -680,6 +688,18 @@ function configNodeTitle(mode: CanvasGenerationMode) {
 
 function cleanHostMetadata(metadata: Partial<CanvasNode['metadata']>) {
   return Object.fromEntries(Object.entries(metadata).filter(([, value]) => value !== undefined && value !== '')) as Partial<CanvasNode['metadata']>
+}
+
+function normalizeHostTextOption(value: string | number | undefined): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return typeof value === 'string' ? value : undefined
+}
+
+function normalizeHostBooleanOption(value: boolean | string | undefined): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return undefined
 }
 
 function nodeTypeFromMime(mimeType: string): NodeKind {
