@@ -1230,22 +1230,70 @@ button:disabled {
   background: rgba(0, 0, 0, 0.34);
 }
 
+.grid-split-image-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38);
+}
+
 .grid-split-preview img {
+  display: block;
   max-width: 100%;
   max-height: 420px;
   object-fit: contain;
 }
 
-.grid-split-lines {
+.grid-split-line-hitarea {
   position: absolute;
-  inset: 0;
-  display: grid;
-  pointer-events: none;
+  pointer-events: auto;
+  touch-action: none;
 }
 
-.grid-split-lines span {
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.34);
+.grid-split-line-hitarea.vertical {
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  margin-left: -8px;
+  cursor: ew-resize;
+}
+
+.grid-split-line-hitarea.horizontal {
+  left: 0;
+  right: 0;
+  height: 16px;
+  margin-top: -8px;
+  cursor: ns-resize;
+}
+
+.grid-split-line-hitarea span {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 14px rgba(255, 255, 255, 0.35);
+}
+
+.grid-split-line-hitarea span.active {
+  background: #f8d66d;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 18px rgba(248, 214, 109, 0.65);
+}
+
+.grid-split-line-hitarea.vertical span {
+  left: 50%;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  transform: translateX(-50%);
+}
+
+.grid-split-line-hitarea.horizontal span {
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 2px;
+  transform: translateY(-50%);
 }
 
 .grid-split-controls {
@@ -1272,6 +1320,27 @@ button:disabled {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+
+.grid-split-line-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.grid-split-line-actions button {
+  min-height: 34px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.grid-split-line-actions button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .grid-split-summary {

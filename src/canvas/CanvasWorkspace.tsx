@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
@@ -9,7 +9,19 @@ import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, ins
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, filterVisibleSelection, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelationsForNodes, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForNodes } from './graph'
-import { splitImageDataUrl, splitImageNodeIntoGrid } from './imageGridSplit'
+import { splitImageDataUrl, splitImageNodeIntoGrid, type ImageGridSplitParams } from './imageGridSplit'
+import {
+  GRID_SPLIT_MAX,
+  GRID_SPLIT_MIN,
+  addGridSplitLine,
+  createDefaultGridSplitState,
+  getGridSplitCounts,
+  moveGridSplitLine,
+  removeGridSplitLine,
+  resetGridSplitLines,
+  setGridSplitCount,
+  type GridSplitAxis,
+} from './imageGridSplitControls'
 import { materializeClipboardMediaAssets } from './mediaAssets'
 import { promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
@@ -72,13 +84,6 @@ const SIDE_PANEL_DEFAULT_WIDTH = 300
 const SIDE_PANEL_MIN_WIDTH = 260
 const SIDE_PANEL_MAX_WIDTH = 520
 const SIDE_PANEL_WIDTH_STORAGE_KEY = 'artboard-flow:side-panel-width'
-const GRID_SPLIT_MIN = 1
-const GRID_SPLIT_MAX = 12
-
-function clampGridSplitCount(value: number) {
-  return Math.min(GRID_SPLIT_MAX, Math.max(GRID_SPLIT_MIN, Math.round(Number.isFinite(value) ? value : 2)))
-}
-
 function clampSidePanelWidth(width: number) {
   return Math.min(SIDE_PANEL_MAX_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, width))
 }
@@ -1466,11 +1471,11 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
   )
 
   const splitImageIntoGrid = useCallback(
-    async (node: CanvasNode, params: { rows: number; columns: number }) => {
+    async (node: CanvasNode, params: ImageGridSplitParams) => {
       if (node.type !== 'image' || !node.metadata.content) return
-      const rows = clampGridSplitCount(params.rows)
-      const columns = clampGridSplitCount(params.columns)
-      const dataUrlPieces = await splitImageDataUrl(node.metadata.content, { rows, columns })
+      const rows = params.rows
+      const columns = params.columns
+      const dataUrlPieces = await splitImageDataUrl(node.metadata.content, params)
       const pieces = await Promise.all(dataUrlPieces.map(async (piece) => ({
         row: piece.row,
         column: piece.column,
@@ -2854,22 +2859,48 @@ function ImageGridSplitDialog({
 }: {
   node: CanvasNode | null
   onClose: () => void
-  onConfirm: (node: CanvasNode, params: { rows: number; columns: number }) => void
+  onConfirm: (node: CanvasNode, params: ImageGridSplitParams) => void
 }) {
-  const [rows, setRows] = useState(2)
-  const [columns, setColumns] = useState(2)
+  const [splitState, setSplitState] = useState(createDefaultGridSplitState)
+  const [activeLine, setActiveLine] = useState<{ axis: GridSplitAxis; index: number } | null>(null)
+  const previewRef = useRef<HTMLDivElement>(null)
   const open = Boolean(node?.metadata.content)
+  const { rows, columns, total } = getGridSplitCounts(splitState)
 
   useEffect(() => {
     if (!open) return
-    setRows(2)
-    setColumns(2)
+    setSplitState(createDefaultGridSplitState())
+    setActiveLine(null)
   }, [node?.id, open])
 
   if (!node || !node.metadata.content) return null
-  const normalizedRows = clampGridSplitCount(rows)
-  const normalizedColumns = clampGridSplitCount(columns)
-  const total = normalizedRows * normalizedColumns
+  const startLineDrag = (axis: GridSplitAxis, index: number, event: ReactPointerEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setActiveLine({ axis, index })
+    const box = previewRef.current?.getBoundingClientRect()
+    if (!box) return
+    const move = (moveEvent: PointerEvent) => {
+      const value = axis === 'horizontal' ? (moveEvent.clientY - box.top) / box.height : (moveEvent.clientX - box.left) / box.width
+      setSplitState((current) => moveGridSplitLine(current, axis, index, value))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  const addLine = (axis: GridSplitAxis) => {
+    setSplitState((current) => addGridSplitLine(current, axis))
+    setActiveLine(null)
+  }
+  const deleteLine = () => {
+    if (!activeLine) return
+    setSplitState((current) => removeGridSplitLine(current, activeLine.axis, activeLine.index))
+    setActiveLine(null)
+  }
+  const confirmParams = { rows, columns, horizontalLines: splitState.horizontalLines, verticalLines: splitState.verticalLines }
 
   return (
     <div className="grid-split-backdrop" data-toolbar onPointerDown={onClose}>
@@ -2883,15 +2914,9 @@ function ImageGridSplitDialog({
         </header>
         <div className="grid-split-body">
           <div className="grid-split-preview">
-            <img src={node.metadata.content} alt={node.title} draggable={false} />
-            <div
-              className="grid-split-lines"
-              style={{
-                gridTemplateRows: `repeat(${normalizedRows}, 1fr)`,
-                gridTemplateColumns: `repeat(${normalizedColumns}, 1fr)`,
-              }}
-            >
-              {Array.from({ length: total }, (_, index) => <span key={index} />)}
+            <div ref={previewRef} className="grid-split-image-frame">
+              <img src={node.metadata.content} alt={node.title} draggable={false} />
+              <SplitLineOverlay splitState={splitState} activeLine={activeLine} onLinePointerDown={startLineDrag} />
             </div>
           </div>
           <div className="grid-split-controls">
@@ -2903,7 +2928,10 @@ function ImageGridSplitDialog({
                 min={GRID_SPLIT_MIN}
                 max={GRID_SPLIT_MAX}
                 value={rows}
-                onChange={(event) => setRows(clampGridSplitCount(Number(event.target.value)))}
+                onChange={(event) => {
+                  setSplitState((current) => setGridSplitCount(current, 'rows', Number(event.target.value)))
+                  setActiveLine(null)
+                }}
               />
             </label>
             <label>
@@ -2914,20 +2942,75 @@ function ImageGridSplitDialog({
                 min={GRID_SPLIT_MIN}
                 max={GRID_SPLIT_MAX}
                 value={columns}
-                onChange={(event) => setColumns(clampGridSplitCount(Number(event.target.value)))}
+                onChange={(event) => {
+                  setSplitState((current) => setGridSplitCount(current, 'columns', Number(event.target.value)))
+                  setActiveLine(null)
+                }}
               />
             </label>
+            <div className="grid-split-line-actions">
+              <button type="button" data-grid-split-add-row-line onClick={() => addLine('horizontal')}>添加横线</button>
+              <button type="button" data-grid-split-add-column-line onClick={() => addLine('vertical')}>添加竖线</button>
+              <button type="button" data-grid-split-delete-line disabled={!activeLine} onClick={deleteLine}>删除选中线</button>
+              <button
+                type="button"
+                data-grid-split-reset-lines
+                onClick={() => {
+                  setSplitState((current) => resetGridSplitLines(current))
+                  setActiveLine(null)
+                }}
+              >
+                重置线
+              </button>
+            </div>
             <div className="grid-split-summary">
               <span>将生成</span>
               <strong>{total} 个子图片节点</strong>
             </div>
-            <button className="primary" data-grid-split-confirm onClick={() => onConfirm(node, { rows: normalizedRows, columns: normalizedColumns })}>
+            <button className="primary" data-grid-split-confirm onClick={() => onConfirm(node, confirmParams)}>
               生成子节点
             </button>
           </div>
         </div>
       </section>
     </div>
+  )
+}
+
+function SplitLineOverlay({
+  splitState,
+  activeLine,
+  onLinePointerDown,
+}: {
+  splitState: ReturnType<typeof createDefaultGridSplitState>
+  activeLine: { axis: GridSplitAxis; index: number } | null
+  onLinePointerDown: (axis: GridSplitAxis, index: number, event: ReactPointerEvent) => void
+}) {
+  return (
+    <>
+      {splitState.verticalLines.map((line, index) => (
+        <div
+          key={`vertical-${index}`}
+          className="grid-split-line-hitarea vertical"
+          data-grid-split-vertical-line={index}
+          style={{ left: `${line * 100}%` }}
+          onPointerDown={(event) => onLinePointerDown('vertical', index, event)}
+        >
+          <span className={activeLine?.axis === 'vertical' && activeLine.index === index ? 'active' : undefined} />
+        </div>
+      ))}
+      {splitState.horizontalLines.map((line, index) => (
+        <div
+          key={`horizontal-${index}`}
+          className="grid-split-line-hitarea horizontal"
+          data-grid-split-horizontal-line={index}
+          style={{ top: `${line * 100}%` }}
+          onPointerDown={(event) => onLinePointerDown('horizontal', index, event)}
+        >
+          <span className={activeLine?.axis === 'horizontal' && activeLine.index === index ? 'active' : undefined} />
+        </div>
+      ))}
+    </>
   )
 }
 
