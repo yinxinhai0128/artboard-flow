@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
+import { Compass, Copy, Download, Eye, FileJson, FolderPlus, Grid2x2, Group, HelpCircle, Image, Info, Link2, Lock, LockOpen, Minus, MousePointer2, Music2, Play, Plus, Redo2, RotateCcw, Settings2, SquarePen, Trash2, Type, Undo2, Upload, Video } from 'lucide-react'
 import { CANVAS_MAX_SCALE, CANVAS_MIN_SCALE, clampViewportScale, connectionEndpoints, connectionPath, resizeNodeFrame, screenToWorld, sourcePort, targetPort, visibleNodesInViewport, worldToScreen, type ResizeCorner } from './geometry'
 import type { CanvasAssetRecord, CanvasGenerationJobResult, CanvasNode, CanvasProject, ConnectionDraft, NodeKind, Point, SelectionBox } from './types'
 import { useCanvasController } from './useCanvasController'
@@ -9,6 +9,7 @@ import { appendReferenceToken, filterReferenceCandidates, hasReferenceToken, ins
 import { copySelectionToClipboard as copyProjectSelectionToClipboard, expandNodeIdsForMovement, filterVisibleSelection, findConnectionDropTarget, findGroupDropTarget, getConnectionNodePair, getNodeRelationsForNodes, isHiddenSplitChild, isSplitConnectionHidden, nextNodeSelection, parseCanvasClipboardText, resolveConnectionToNode, selectableNodeIds, serializeCanvasClipboard, type CanvasClipboard, type ConnectionNodePair, type NodeRelations } from './document'
 import { downloadCanvasClipboard, readCanvasClipboardFile } from './export'
 import { relationCountsForNodes } from './graph'
+import { splitImageDataUrl, splitImageNodeIntoGrid } from './imageGridSplit'
 import { materializeClipboardMediaAssets } from './mediaAssets'
 import { promoteSplitOutputInProject, splitGenerationOutputsInProject } from './outputSplit'
 import { buildNodeMentionReferences, type CanvasResourceReference } from './resourceReferences'
@@ -1456,6 +1457,29 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
     [controller],
   )
 
+  const splitImageIntoGrid = useCallback(
+    async (node: CanvasNode) => {
+      if (node.type !== 'image' || !node.metadata.content) return
+      const rows = 2
+      const columns = 2
+      const dataUrlPieces = await splitImageDataUrl(node.metadata.content, { rows, columns })
+      const pieces = await Promise.all(dataUrlPieces.map(async (piece) => ({
+        row: piece.row,
+        column: piece.column,
+        width: piece.width,
+        height: piece.height,
+        asset: await canvasApi.uploadAsset(piece.dataUrl),
+      })))
+      const result = splitImageNodeIntoGrid(controller.project, node.id, { rows, columns, pieces }, () => crypto.randomUUID())
+      if (!result) return
+      controller.replaceProject(result.project)
+      controller.clearSelection()
+      result.nodeIds.forEach((nodeId, index) => controller.selectNode(nodeId, index > 0))
+      setToolbarNodeId(node.id)
+    },
+    [controller],
+  )
+
   const toggleSplitOutputs = useCallback(
     (node: CanvasNode) => {
       if (!splitOutputCounts.get(node.id)) return
@@ -2168,6 +2192,7 @@ export function CanvasWorkspace({ project, onProjectChange, onBack, onExport }: 
             onCreateImageGenerationTaskFromText={(node) => createImageGenerationTaskFromTextNode(node.id)}
             onRetryGenerationTask={(node) => retryGenerationTaskNode(node.id)}
             onStartConnection={startConnectionFromToolbar}
+            onSplitImageGrid={(node) => void splitImageIntoGrid(node)}
             onPromoteSplitOutput={promoteSplitOutput}
             onDuplicate={(node) => controller.duplicateNode(node.id)}
             onCopyContent={(node) => void copyNodePayload(node)}
@@ -2665,6 +2690,7 @@ function NodeHoverToolbar({
   onCreateImageGenerationTaskFromText,
   onRetryGenerationTask,
   onStartConnection,
+  onSplitImageGrid,
   onPromoteSplitOutput,
   onDuplicate,
   onCopyContent,
@@ -2683,6 +2709,7 @@ function NodeHoverToolbar({
   onCreateImageGenerationTaskFromText: (node: CanvasNode) => void
   onRetryGenerationTask: (node: CanvasNode) => void
   onStartConnection: (node: CanvasNode) => void
+  onSplitImageGrid: (node: CanvasNode) => void
   onPromoteSplitOutput: (node: CanvasNode) => void
   onDuplicate: (node: CanvasNode) => void
   onCopyContent: (node: CanvasNode) => void
@@ -2700,6 +2727,7 @@ function NodeHoverToolbar({
   const canCreateImageGenerationTaskFromText = node.type === 'text'
   const canRetryGenerationTask = node.metadata.status === 'error' && Boolean(node.metadata.generationPayload)
   const canStartConnection = node.type !== 'config' && node.type !== 'group'
+  const canSplitImageGrid = node.type === 'image' && Boolean(node.metadata.content)
   const canPromoteSplitOutput = Boolean(node.metadata.splitSourceNodeId && node.metadata.content)
   const canSaveAsset = canSaveAssetNode(node)
   const canUpload = isUploadableMediaNode(node)
@@ -2745,6 +2773,12 @@ function NodeHoverToolbar({
         <button title="从此节点开始连线" onClick={() => onStartConnection(node)}>
           <Link2 size={15} />
           连线
+        </button>
+      ) : null}
+      {canSplitImageGrid ? (
+        <button title="按 2×2 网格拆分图片" data-node-action="split-image-grid" onClick={() => onSplitImageGrid(node)}>
+          <Grid2x2 size={15} />
+          网格拆分
         </button>
       ) : null}
       {canPromoteSplitOutput ? (
