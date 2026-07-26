@@ -50,10 +50,13 @@ export function normalizeConnectionForProject(
   const second = project.nodes.find((node) => node.id === secondNodeId)
   if (!first || !second || first.id === second.id) return null
   if (first.type === 'group' || second.type === 'group') return null
-  const source = firstHandleType === 'source' ? first : second
-  const target = firstHandleType === 'source' ? second : first
-  if (source.type === 'config' && !isGenerationTaskNode(target)) return null
-  return { fromNodeId: source.id, toNodeId: target.id }
+  if (first.type === 'config' && second.type === 'config') return null
+  if (second.type === 'config') return { fromNodeId: first.id, toNodeId: second.id }
+  if (first.type === 'config' && firstHandleType === 'target') return { fromNodeId: second.id, toNodeId: first.id }
+  if (first.type === 'config') return { fromNodeId: first.id, toNodeId: second.id }
+  return firstHandleType === 'source'
+    ? { fromNodeId: first.id, toNodeId: second.id }
+    : { fromNodeId: second.id, toNodeId: first.id }
 }
 
 function hasConnection(project: CanvasProject, connection: Omit<CanvasConnection, 'id'>): boolean {
@@ -497,14 +500,10 @@ export function addConnectionToProject(project: CanvasProject, connection: Canva
   const target = project.nodes.find((node) => node.id === connection.toNodeId)
   if (!source || !target) return project
   if (source.type === 'group' || target.type === 'group') return project
-  if (source.type === 'config' && !isGenerationTaskNode(target)) return project
+  if (source.type === 'config' && target.type === 'config') return project
   if (hasConnection(project, connection)) return project
   return {
     ...project,
     connections: [...project.connections, connection],
   }
-}
-
-function isGenerationTaskNode(node: CanvasNode) {
-  return Boolean(node.metadata.generationPayload)
 }

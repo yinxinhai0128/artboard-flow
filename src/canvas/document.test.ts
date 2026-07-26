@@ -433,9 +433,9 @@ describe('canvas document operations', () => {
     }
 
     expect(normalizeConnectionForProject(source, 'prompt', 'config', 'source')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
-    expect(normalizeConnectionForProject(source, 'prompt', 'config', 'target')).toBeNull()
+    expect(normalizeConnectionForProject(source, 'prompt', 'config', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
     expect(normalizeConnectionForProject(source, 'config', 'prompt', 'target')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
-    expect(normalizeConnectionForProject(source, 'config', 'prompt', 'source')).toBeNull()
+    expect(normalizeConnectionForProject(source, 'config', 'prompt', 'source')).toEqual({ fromNodeId: 'config', toNodeId: 'prompt' })
     expect(normalizeConnectionForProject(source, 'prompt', 'image', 'target')).toEqual({ fromNodeId: 'image', toNodeId: 'prompt' })
     expect(normalizeConnectionForProject(source, 'config', 'config-2', 'source')).toBeNull()
   })
@@ -475,8 +475,8 @@ describe('canvas document operations', () => {
     }
 
     expect(resolveConnectionToNode(source, { nodeId: 'image', handleType: 'target' }, 'prompt')).toEqual({ fromNodeId: 'prompt', toNodeId: 'image' })
-    expect(resolveConnectionToNode(source, { nodeId: 'prompt', handleType: 'target' }, 'config')).toBeNull()
-    expect(resolveConnectionToNode(source, { nodeId: 'task', handleType: 'target' }, 'config')).toEqual({ fromNodeId: 'config', toNodeId: 'task' })
+    expect(resolveConnectionToNode(source, { nodeId: 'prompt', handleType: 'target' }, 'config')).toEqual({ fromNodeId: 'prompt', toNodeId: 'config' })
+    expect(resolveConnectionToNode(source, { nodeId: 'task', handleType: 'target' }, 'config')).toEqual({ fromNodeId: 'task', toNodeId: 'config' })
   })
 
   it('finds connection drop targets by node body, handle radius, and invalid nearby nodes', () => {
@@ -493,6 +493,7 @@ describe('canvas document operations', () => {
 
     expect(findConnectionDropTarget(source, { x: 250, y: 30 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: 'image', isNearNode: true, blockedNodeId: null })
     expect(findConnectionDropTarget(source, { x: 419, y: 40 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: 'config', isNearNode: true, blockedNodeId: null })
+    expect(findConnectionDropTarget(source, { x: 250, y: 30 }, { nodeId: 'config', handleType: 'source' }, 1)).toEqual({ nodeId: 'image', isNearNode: true, blockedNodeId: null })
     expect(findConnectionDropTarget(source, { x: 620, y: 40 }, { nodeId: 'config', handleType: 'source' }, 1)).toEqual({ nodeId: null, isNearNode: true, blockedNodeId: 'config-2' })
     expect(findConnectionDropTarget(source, { x: 900, y: 300 }, { nodeId: 'prompt', handleType: 'source' }, 1)).toEqual({ nodeId: null, isNearNode: false, blockedNodeId: null })
   })
@@ -515,7 +516,7 @@ describe('canvas document operations', () => {
     expect(resolveConnectionToNode(source, { nodeId: 'prompt', handleType: 'source' }, 'image')).toBeNull()
   })
 
-  it('prevents config nodes from acting as connection sources in the document layer', () => {
+  it('prevents config-config connections while allowing config result outputs', () => {
     const source = {
       ...project,
       nodes: [configNode('config-a'), configNode('config-b'), imageNode('image')],
@@ -523,10 +524,12 @@ describe('canvas document operations', () => {
     }
 
     expect(addConnectionToProject(source, { id: 'config-edge', fromNodeId: 'config-a', toNodeId: 'config-b' }).connections).toHaveLength(0)
-    expect(addConnectionToProject(source, { id: 'config-image', fromNodeId: 'config-a', toNodeId: 'image' }).connections).toHaveLength(0)
+    expect(addConnectionToProject(source, { id: 'config-image', fromNodeId: 'config-a', toNodeId: 'image' }).connections).toEqual([
+      { id: 'config-image', fromNodeId: 'config-a', toNodeId: 'image' },
+    ])
   })
 
-  it('allows config nodes to connect to generation task nodes only', () => {
+  it('allows config nodes to connect to generation task and ordinary result nodes', () => {
     const taskNode: CanvasNode = {
       ...imageNode('task'),
       metadata: {
@@ -552,6 +555,8 @@ describe('canvas document operations', () => {
     expect(addConnectionToProject(source, { id: 'config-task', fromNodeId: 'config', toNodeId: 'task' }).connections).toEqual([
       { id: 'config-task', fromNodeId: 'config', toNodeId: 'task' },
     ])
-    expect(addConnectionToProject(source, { id: 'config-image', fromNodeId: 'config', toNodeId: 'plain-image' }).connections).toHaveLength(0)
+    expect(addConnectionToProject(source, { id: 'config-image', fromNodeId: 'config', toNodeId: 'plain-image' }).connections).toEqual([
+      { id: 'config-image', fromNodeId: 'config', toNodeId: 'plain-image' },
+    ])
   })
 })

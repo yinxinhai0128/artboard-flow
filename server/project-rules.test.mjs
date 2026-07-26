@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { canPersistConnection } from './project-rules.mjs'
 
 describe('server project persistence rules', () => {
-  it('allows config nodes to persist connections only to generation task nodes', () => {
+  it('allows config nodes to persist ordinary output connections while blocking config-config and groups', () => {
     const config = { id: 'config', type: 'config', metadata: {} }
+    const configTarget = { id: 'config-target', type: 'config', metadata: {} }
+    const group = { id: 'group', type: 'group', metadata: {} }
     const image = { id: 'image', type: 'image', metadata: {} }
     const task = {
       id: 'task',
@@ -22,8 +24,11 @@ describe('server project persistence rules', () => {
       },
     }
 
-    expect(canPersistConnection(config, image)).toBe(false)
+    expect(canPersistConnection(config, image)).toBe(true)
     expect(canPersistConnection(config, task)).toBe(true)
+    expect(canPersistConnection(config, configTarget)).toBe(false)
+    expect(canPersistConnection(group, image)).toBe(false)
+    expect(canPersistConnection(image, group)).toBe(false)
     expect(canPersistConnection(image, config)).toBe(true)
   })
 })

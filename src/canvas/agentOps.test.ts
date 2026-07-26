@@ -126,14 +126,16 @@ describe('canvas agent operations', () => {
     expect(result.project.updatedAt).toBe('2026-07-20T01:00:00.000Z')
   })
 
-  it('connects only valid nodes and prevents duplicate or config-sourced relations', () => {
+  it('connects only valid nodes and prevents duplicate or config-config relations', () => {
     const result = applyCanvasAgentOps(
       snapshot(),
       [
         { type: 'add_node', id: 'image-1', nodeType: 'image', x: 700, y: 0 },
+        { type: 'add_node', id: 'config-2', nodeType: 'config', x: 1040, y: 0 },
         { type: 'connect_nodes', id: 'edge-2', fromNodeId: 'text-1', toNodeId: 'image-1' },
         { type: 'connect_nodes', id: 'duplicate', fromNodeId: 'text-1', toNodeId: 'image-1' },
-        { type: 'connect_nodes', id: 'invalid-source', fromNodeId: 'config-1', toNodeId: 'image-1' },
+        { type: 'connect_nodes', id: 'config-output', fromNodeId: 'config-1', toNodeId: 'image-1' },
+        { type: 'connect_nodes', id: 'invalid-config', fromNodeId: 'config-1', toNodeId: 'config-2' },
         { type: 'connect_nodes', id: 'missing', fromNodeId: 'missing', toNodeId: 'image-1' },
       ],
       { createId: () => 'unused' },
@@ -142,6 +144,7 @@ describe('canvas agent operations', () => {
     expect(result.project.connections).toEqual([
       { id: 'edge-1', fromNodeId: 'text-1', toNodeId: 'config-1' },
       { id: 'edge-2', fromNodeId: 'text-1', toNodeId: 'image-1' },
+      { id: 'config-output', fromNodeId: 'config-1', toNodeId: 'image-1' },
     ])
   })
 
