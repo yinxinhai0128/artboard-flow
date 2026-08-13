@@ -79,7 +79,7 @@ export function PromptSourceEditorDrawer({ open, source, onSave, onClose }: { op
                                     className="group block w-full rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors hover:border-stone-200 hover:bg-white dark:hover:border-stone-700 dark:hover:bg-stone-800/60"
                                 >
                                     <div className="flex flex-wrap items-baseline gap-1.5">
-                                        <code className="rounded bg-stone-200/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-stone-800 group-hover:bg-blue-100 group-hover:text-blue-700 dark:bg-stone-800 dark:text-stone-100 dark:group-hover:bg-blue-950 dark:group-hover:text-blue-300">
+                                        <code className="rounded bg-stone-200/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-stone-800 group-hover:bg-stone-100 group-hover:text-stone-800 dark:bg-stone-800 dark:text-stone-100 dark:group-hover:bg-stone-700 dark:group-hover:text-white">
                                             {variable.name}
                                         </code>
                                         <span className="font-mono text-[10px] text-stone-400">{variable.type}</span>

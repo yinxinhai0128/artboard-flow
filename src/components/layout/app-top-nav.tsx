@@ -36,12 +36,12 @@ export function AppTopNav() {
     return (
         <>
             {!hideHeader ? (
-                <header className="sticky top-0 z-20 h-14 shrink-0 border-b border-white/8 bg-[#0a0e18]/90 backdrop-blur-xl">
+                <header className="sticky top-0 z-20 h-14 shrink-0 border-b border-white/8 bg-[#0d0d0d]/90 backdrop-blur-xl">
                     <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
                         <div className="flex min-w-0 items-center">
-                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-white transition hover:text-blue-300">
+                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-white transition hover:text-stone-300">
                                 <span
-                                    className="size-5 shrink-0 bg-blue-400"
+                                    className="size-5 shrink-0 bg-current"
                                     style={{
                                         mask: "url(/logo.svg) center / contain no-repeat",
                                         WebkitMask: "url(/logo.svg) center / contain no-repeat",
@@ -72,7 +72,7 @@ export function AppTopNav() {
                                             className={cn(
                                                 "relative flex h-14 shrink-0 items-center gap-2 text-sm leading-6 transition after:absolute after:inset-x-0 after:bottom-0 after:h-px",
                                                 active
-                                                    ? "font-medium text-white after:bg-blue-400"
+                                                    ? "font-medium text-white after:bg-white"
                                                     : "text-stone-400 after:bg-transparent hover:text-white",
                                             )}
                                         >

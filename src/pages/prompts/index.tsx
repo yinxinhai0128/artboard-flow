@@ -44,18 +44,18 @@ export default function PromptsPage() {
     };
 
     return (
-        <div className="flex h-full flex-col overflow-hidden bg-[#0a0e18] text-stone-100">
+        <div className="flex h-full flex-col overflow-hidden bg-[#0d0d0d] text-stone-100">
             <main
-                className="min-h-0 flex-1 overflow-y-auto bg-[#0a0e18] px-6 py-8"
+                className="min-h-0 flex-1 overflow-y-auto bg-[#0d0d0d] px-6 py-8"
                 onScroll={handleListScroll}
             >
                 <div className="pb-8">
                     {/* 头部：Skills 市场 */}
-                    <div className="relative overflow-hidden rounded-2xl border border-white/8 bg-gradient-to-br from-[#101a33] via-[#0d1220] to-[#1a1030] px-8 py-10 text-center">
-                        <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-blue-500/15 blur-3xl" />
-                        <div className="pointer-events-none absolute -bottom-20 -left-10 size-56 rounded-full bg-red-500/10 blur-3xl" />
+                    <div className="relative overflow-hidden rounded-2xl border border-white/8 bg-gradient-to-br from-[#1a1a1a] via-[#141414] to-[#0d0d0d] px-8 py-10 text-center">
+                        <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-white/[0.04] blur-3xl" />
+                        <div className="pointer-events-none absolute -bottom-20 -left-10 size-56 rounded-full bg-white/[0.03] blur-3xl" />
                         <div className="relative">
-                            <Tag className="mb-4 !border-blue-400/40 !bg-blue-500/10 !text-blue-300">
+                            <Tag className="mb-4 !border-white/15 !bg-white/[0.06] !text-stone-300">
                                 <Sparkles className="mr-1 inline size-3" />
                                 Skills 市场
                             </Tag>
@@ -92,7 +92,7 @@ export default function PromptsPage() {
                                                 className={cn(
                                                     "rounded-full border px-3.5 py-1 text-sm transition",
                                                     selectedCategory === category
-                                                        ? "border-blue-400/50 !bg-blue-500/20 !text-blue-300"
+                                                        ? "border-white/40 !bg-white/15 !text-white"
                                                         : "border-white/10 bg-white/[0.03] !text-stone-400 hover:!text-white",
                                                 )}
                                                 onChange={() => setSelectedCategory(category)}
@@ -112,7 +112,7 @@ export default function PromptsPage() {
                                                 className={cn(
                                                     "rounded-full border px-3.5 py-1 text-sm transition",
                                                     (tag === ALL_PROMPTS_OPTION ? selectedTags.length === 0 : selectedTags.includes(tag))
-                                                        ? "border-blue-400/50 !bg-blue-500/20 !text-blue-300"
+                                                        ? "border-white/40 !bg-white/15 !text-white"
                                                         : "border-white/10 bg-white/[0.03] !text-stone-400 hover:!text-white",
                                                 )}
                                                 onChange={() => toggleTag(tag)}

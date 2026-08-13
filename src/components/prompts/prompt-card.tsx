@@ -24,7 +24,7 @@ export function PromptCard({
     return (
         <Card
             hoverable
-            className="overflow-hidden !border-white/10 !bg-white/[0.03] backdrop-blur transition hover:!border-blue-400/40"
+            className="overflow-hidden !border-white/10 !bg-white/[0.03] backdrop-blur transition hover:!border-white/30"
             styles={{ body: { padding: 0 } }}
             cover={
                 <button type="button" className="block w-full text-left" onClick={onOpen}>
