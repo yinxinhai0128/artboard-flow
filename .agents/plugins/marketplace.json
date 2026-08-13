@@ -1,0 +1,20 @@
+{
+  "name": "artboard-flow-local",
+  "interface": {
+    "displayName": "ArtboardFlow"
+  },
+  "plugins": [
+    {
+      "name": "artboard-flow",
+      "source": {
+        "source": "local",
+        "path": "./plugins/artboard-flow"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

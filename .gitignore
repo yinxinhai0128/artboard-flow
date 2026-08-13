@@ -39,3 +39,11 @@ src/assets/hero.png
 *.njsproj
 *.sln
 *.sw?
+
+# 本地备份（勿提交）
+src-original-backup/
+node_modules-old-backup/
+docs-original-notes/
+README.old-utf16.md
+package-lock.json.old
+scripts/debrand.py

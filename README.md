@@ -1,110 +1,60 @@
-# ArtboardFlow
+# ArtboardFlow（无限画布工作台）
 
-ArtboardFlow 是一个独立实现的无限画布底座，面向后续嵌入 AI 生图、AI 生视频等创作工具网站。项目参考了案例项目的功能行为，但不直接套用案例项目源码。
+AI 创作工作台：无限画布编排 + 生图 + 生视频 + 提示词库 + 素材沉淀。前端纯浏览器存储，开箱即用。
 
-## 当前能力
+## 功能
 
-- 画布库：新建、打开、重命名、删除、批量删除、导入 JSON/ZIP、导出 JSON/ZIP。
-- 无限画布：平移、缩放、缩放滑杆、重置视图、点阵/网格/空白背景、小地图。
-- 节点：文本、图片、视频、音频、配置、分组六类节点。
-- 节点交互：选择、多选、框选、拖拽、缩放、复制、粘贴、删除。
-- 节点关系：左右连接点、拖拽连线、点击端口连线、连线持久化、上下游高亮、关系信息弹窗。
-- 素材复用：上传/粘贴媒体入库、画布节点保存为资产、资产库侧栏浏览并插回画布。
-- 生成工作流底座：配置节点可汇总已连接资源，提交轮询示例生成任务，并支持多结果拆分与主结果替换。
-- 历史记录：撤销、重做覆盖节点、连线、视口和背景模式。
-- 后端持久化：Fastify API + SQLite 保存项目、节点、连线、视口、资产和生成任务记录。
-- 外部工具适配层：通过 `window.artboardFlowTools` 暴露案例项目风格的 `canvas_*`、`assets_*`、`generation_*` 命令，方便后续接入 Agent 或宿主网站。
+- **无限画布**：多画布项目、节点拖拽缩放、连线、小地图、撤销重做、导入导出。
+- **AI 创作**：生图工作台、视频创作台、文本/音频生成。
+- **默认渠道：阿里百炼（DashScope）**——开箱即用：
+  - 生图：`qwen-image`（约 ¥0.15/张）
+  - 生视频：`wanx2.1-t2v-turbo`（约 ¥0.4/5秒 720p，万相最便宜档）
+  - API Key 从 `.env.local` 的 `VITE_DASHSCOPE_API_KEY` 读取（已 gitignore）。
+- **自定义脚本**：每个模型可配自定义调用脚本，适配任意非标准 API（百炼生图/生视频即通过脚本适配原生异步接口：创建任务 → 轮询 → 取结果）。
+- **本地 Agent**：`canvas-agent/` 提供本地 CLI，可连接 Codex/Claude Code 通过 MCP 操作画布。
+- **插件系统**：`plugins/` 支持动态安装远程节点插件，附 TypeScript SDK。
+- **文档站**：`docs/` 为 Next.js 文档站。
+
+## 快速开始
+
+```bash
+bun install          # 依赖（已配置 npmmirror 镜像加速）
+bun run dev          # 打开 http://localhost:3000
+```
+
+> 更换 API Key：编辑 `.env.local` 后重启 dev server，或访问「配置 → 渠道 → 阿里百炼」修改。
 
 ## 技术栈
 
-- 前端：Vite、React、TypeScript、lucide-react。
-- 后端：Node.js、Fastify、Node 内置 SQLite。
-- 数据库：`server/data/artboard-flow.sqlite`。
-- 资产目录：`server/data/assets/`。
+- 前端：Vite、React、TypeScript、Ant Design、Zustand（localStorage/IndexedDB 持久化）
+- 无后端依赖；`server/` 为旧版 Fastify + SQLite 后端，已不参与运行，保留作参考
 
-## 本地运行
+## 目录结构
 
-```bash
-npm install
-npm run dev
+```
+src/
+  pages/        # 首页 / 画布 / 生图 / 视频 / 提示词库 / 资产 / 配置
+  components/   # 画布组件、渠道编辑器、模型脚本编辑器、布局
+  stores/       # Zustand stores（use-config-store 内置百炼渠道+脚本）
+  services/api/ # 生图/生视频/文本/音频调用层 + model-plugin 脚本引擎
+  lib/          # 工具库
+canvas-agent/   # 本地 Agent CLI（Codex/Claude Code MCP）
+plugins/        # 画布节点插件（HTML/Markdown/SVG 等）+ SDK
+docs/           # Next.js 文档站
 ```
 
-默认地址：
+## 关键实现说明
 
-- 前端：http://localhost:5174/
-- 后端：http://127.0.0.1:8787/
-- 健康检查：http://127.0.0.1:8787/api/health
+1. `src/stores/use-config-store.ts`：
+   - `defaultConfig` 内置「阿里百炼」渠道（qwen-image 生图 + wanx2.1-t2v-turbo 视频，各带 DashScope 原生异步接口脚本）
+   - 默认生图/视频模型指向百炼
+   - 修复 zustand persist merge：从未持久化过渠道时保留预置渠道（原逻辑会清空重建导致配置丢失）
+2. `.env.local`（百炼 Key）、`VERSION`、`CHANGELOG.md`（vite 构建需要）
+3. 主题存储 key、插件注册表、版本检查均指向本项目自有标识
 
-## 常用命令
+## 原始备份（可删除）
 
-```bash
-npm run lint
-npm run test
-npm run build
-```
-
-## 嵌入说明
-
-画布核心代码集中在 `src/canvas/`：
-
-- `CanvasWorkspace.tsx`：可嵌入画布工作区 UI。
-- `useCanvasController.ts`：节点、连线、选择、历史记录等状态操作。
-- `types.ts`：项目、节点、连线、视口、资产数据结构。
-- `api.ts`：示例应用使用的项目持久化 API 客户端。
-- `geometry.ts`：坐标变换、端口、连线路径等纯函数。
-- `hostBridge.ts`：暴露给外部宿主或自动化 Agent 的画布操作桥接层。
-
-后续嵌入已有 AI 创作网站时，可以复用 `src/canvas/`，由宿主网站负责传入项目数据、保存项目数据，并通过 `createCanvasHostBridge` 暴露清晰的外部操作接口。
-
-当前 Canvas Host Bridge 覆盖这些核心能力：
-
-- 读取：`getSnapshot()`、`getGraph()`、`exportSnapshot()`、`getSelection()`。
-- 节点：`createNode()`、`createTextNode()`、`createTextNodes()`、`createConfigNode()`、`updateNode()`、`updateNodeText()`、`moveNodes()`、`resizeNode()`、`deleteNodes()`。
-- 连线与视口：`connectNodes()`、`deleteConnections()`、`selectNodes()`、`setViewport()`。
-- 生成流程：`createGenerationFlow()`、`createImagePromptFlow()`、`generateImage()`、`generateVideo()`、`generateText()`、`runGeneration()`、`submitGenerationTask()`、`getGenerationStatus()`。
-- 素材：`listAssets()`、`searchAssets()`、`addAsset()`、`addAssetNode()`、`addTextAsset()`、`addTextAssetNode()`、`addImageAsset()`、`addImageAssetNode()`。
-- 历史：`undo()`、`canUndo()`。
-
-示例应用会把 `window.artboardFlowCanvas` 绑定到当前打开的画布页，便于本地调试和外部自动化验证。生产接入时，建议宿主显式保存 bridge 实例，并把素材上传、生成任务提交、生成状态查询等能力接到自己的后端适配器。
-
-示例应用还会把 `window.artboardFlowApp` 绑定到站点级桥接层，提供 `listProjects()`、`getActiveProjectId()`、`openProject()`、`createProject()`。这部分用于 Agent 或宿主先定位/打开画布；单个画布内部操作仍使用 `window.artboardFlowCanvas`。
-
-两个桥接层都支持 `getCapabilities()`，用于在运行时读取可用命令名、能力范围和简短说明，方便后续接入 Agent 工具协议或已有 AI 创作网站的宿主脚本。
-
-## Agent 风格工具入口
-
-为了更接近案例项目的 Agent 工具调用方式，示例应用额外暴露 `window.artboardFlowTools`：
-
-```ts
-const tools = window.artboardFlowTools
-const availableTools = tools.listTools()
-
-await tools.runTool('canvas_create_project', {
-  title: 'AI 视频分镜画布',
-  open: true,
-})
-
-await tools.runTool('canvas_create_text_node', {
-  title: '镜头 1',
-  text: '黄昏海边，低角度跟拍',
-  x: 240,
-  y: 180,
-})
-
-await tools.runTool('canvas_connect_nodes', {
-  sourceId: 'source-node-id',
-  targetId: 'target-node-id',
-})
-```
-
-`window.artboardFlowTools` 当前会把以下命令映射到 App/Canvas Host Bridge：
-
-- 项目级：`canvas_list_projects`、`canvas_get_active_project`、`canvas_open_project`、`canvas_create_project`。
-- 画布读取：`canvas_get_state`、`canvas_get_graph`、`canvas_get_selection`、`canvas_export_snapshot`。
-- 节点/连线/视口：`canvas_create_node`、`canvas_create_text_node`、`canvas_create_text_nodes`、`canvas_create_config_node`、`canvas_update_node`、`canvas_update_node_text`、`canvas_move_nodes`、`canvas_resize_node`、`canvas_delete_nodes`、`canvas_delete_connections`、`canvas_connect_nodes`、`canvas_select_nodes`、`canvas_set_viewport`、`canvas_apply_ops`。
-- AI 工作流：`canvas_create_image_prompt_flow`、`canvas_create_generation_flow`、`canvas_generate_text`、`canvas_generate_image`、`canvas_generate_video`、`canvas_run_generation`、`generation_get_status`。
-- 素材：`assets_list`、`assets_add`。
-
-`listTools()` 返回的每个工具都包含 `name`、`scope`、`description` 和轻量 JSON Schema 风格的 `inputSchema`。`runTool()` 会在进入真实 Host Bridge 前校验关键输入；例如 `canvas_connect_nodes` 必须传入 `connections: [{ fromNodeId, toNodeId }]`，非法输入会抛出 `INVALID_HOST_TOOL_INPUT:*` 错误，方便宿主或 Agent 在外层提示用户修正。
-
-这层不是 UI 空壳，而是薄适配层：它复用真实的画布状态、持久化、节点、连线、素材和生成任务接口。后续接入你已有的网站时，可以直接把这层包装为宿主网站内部的 Agent 工具协议。
+- `src-original-backup/`：早期自研画布源码（60 文件）
+- `docs-original-notes/`：早期开发笔记
+- `node_modules-old-backup/`：旧依赖
+- `README.old-utf16.md`：早期说明

@@ -1,45 +1,39 @@
 # AGENTS.md
 
-本项目是 `ArtboardFlow`，一个可独立运行、也可嵌入外部 AI 生图/生视频网站的无限画布模块。
+本项目是 `ArtboardFlow`，一个基于无限画布的 AI 创作工作台：生图、生视频、画布编排、提示词库与素材沉淀。前端纯浏览器存储（localStorage/IndexedDB），无后端依赖。
 
 ## 基本原则
 
 - 所有说明、界面文案和交付沟通使用简体中文。
 - 先读现有代码和文档，再修改；优先沿用本项目已有结构。
-- 只实现当前任务明确需要的功能，不额外扩展账号、多用户协作、插件市场或云同步。
+- 只实现当前任务明确需要的功能，不额外扩展账号、多用户协作或云同步。
 - 代码保持直接、可维护；没有复用价值的抽象不要新增。
 - 修改必须可追溯到用户需求，避免顺手重构无关文件。
-
-## 样板项目约束
-
-- 可以参考案例项目的产品行为、交互边界、数据字段语义和项目级约束。
-- 不要把案例项目的 AGPL 源码整段复制到本项目。
-- 需要复刻的是“无限画布、节点、连线关系、项目管理、导入导出、撤销重做、素材复用”等功能行为。
-- 新代码应按本项目结构重新实现，便于后续嵌入其他 AI 创作网站。
+- 不要改无关文件，不要做无关格式化。
 
 ## 技术栈
 
-- 前端使用 Vite、React、TypeScript。
-- 图标优先使用 `lucide-react`。
-- 后端使用 Node.js、Fastify 和 Node 内置 SQLite。
-- 后端业务数据保存在 `server/data/artboard-flow.sqlite`。
-- 前端业务模块放在 `src/canvas/`，页面外壳放在 `src/App.tsx`。
+- 前端：Vite、React、TypeScript、Ant Design、Zustand（localStorage 持久化）。
+- 构建：`bun install` / `bun run dev` / `bun run build` / `bun run typecheck`。
+- 无后端依赖；`server/` 为旧版 Fastify + SQLite 后端，已不参与运行，仅作参考。
 
-## 画布模块规范
+## 目录结构
 
-- 画布核心组件必须尽量与导航、后端和具体 AI 业务解耦。
-- 外部网站后续应能通过清晰接口插入文本、图片、视频、音频、配置节点，并读取节点/连线关系。
-- 面向外部宿主或 Agent 的能力优先集中在 `src/canvas/hostBridge.ts`；素材上传、生成任务提交、生成状态查询等外部依赖必须通过 adapter 注入，不要把具体 AI 平台逻辑写死到画布核心组件。
-- 新增或调整 Host Bridge 能力时，必须同步检查 `src/hostTools.ts` 的案例风格工具映射、`src/hostTools.test.ts` 的回归测试和 `README.md` 的嵌入说明，避免出现底层有能力但外部 Agent 调不到的断层。
-- 画布列表、打开画布、新建画布等站点级能力放在 `src/appHostBridge.ts`，不要反向耦合进 `CanvasWorkspace`。
-- 节点坐标、尺寸、连线、视口、背景模式、媒体信息和资产引用必须持久化。
-- 支持多选、框选、复制粘贴、删除、撤销重做、缩放、平移、小地图、导入导出和资产库复用。
-- 删除节点时必须同步删除相关连线。
-- 连线只保存节点 ID，端口位置由渲染时根据节点几何计算。
-- 媒体或文本资产进入资产库后，应使用后端 `/api/assets/...` 引用，避免把大体积 base64 长期塞在画布 JSON 中。
+- `src/pages/`：首页、画布、生图工作台、视频创作台、提示词库、资产、配置。
+- `src/components/`：画布组件、渠道编辑器、模型脚本编辑器、布局组件。
+- `src/stores/`：Zustand stores；`use-config-store.ts` 内置「阿里百炼」渠道与生图/生视频自定义脚本，并含 persist merge 修复（未持久化时保留预置渠道）。
+- `src/services/api/`：生图/生视频/文本/音频调用层 + `model-plugin.ts` 脚本引擎（模型可配自定义调用脚本）。
+- `src/lib/`：工具库、画布导出、本地存储封装。
 
-## 验证要求
+## AI 渠道接入规范
 
-- 完成可运行改动后至少执行 `npm run build`。
-- 涉及后端 API 时，检查 `http://127.0.0.1:8787/api/health`。
-- 涉及画布交互时，说明已验证的核心路径和未自动化验证的交互风险。
+- 默认渠道「阿里百炼」（DashScope 原生异步接口），生图模型 `qwen-image`，视频模型 `wanx2.1-t2v-turbo`，通过自定义脚本适配（创建任务 → 轮询 task_id → 取结果 URL）。
+- API Key 从根目录 `.env.local` 的 `VITE_DASHSCOPE_API_KEY` 读取（已 gitignore）。
+- 新增模型/渠道：在「配置 → 渠道」中编辑，或按 `use-config-store.ts` 中既有脚本模式追加；脚本遵守 `model-plugin.ts` 的返回约定。
+- 生图/生视频走异步任务轮询，脚本内需自行 `poll`，注意超时与错误透传。
+
+## 质量要求
+
+- 修改后运行最相关的检查：`bun run typecheck`；涉及构建链路再跑 `bun run build`。
+- 不虚构 API、路径或测试结果；未验证的操作要说明。
+- 破坏性操作（删除、覆盖、git 历史改写）前先确认，除非用户已明确授权。

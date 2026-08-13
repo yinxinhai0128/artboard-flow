@@ -1,0 +1,32 @@
+{
+  "name": "artboard-flow",
+  "version": "0.1.0",
+  "description": "Use Codex to read and operate ArtboardFlow through the local Canvas Agent MCP server.",
+  "author": {
+    "name": "yinxinhai0128",
+    "url": "https://canvas.best/"
+  },
+  "homepage": "https://canvas.best/",
+  "repository": "https://github.com/yinxinhai0128/artboard-flow",
+  "license": "AGPL-3.0",
+  "keywords": ["artboard-flow", "canvas", "mcp", "agent"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ArtboardFlow",
+    "shortDescription": "Use Codex to operate the current ArtboardFlow board.",
+    "longDescription": "Connects Codex to the local Canvas Agent MCP server so Codex can inspect the current ArtboardFlow board, create nodes, connect flows, and trigger generation through the web canvas confirmation flow.",
+    "developerName": "yinxinhai0128",
+    "category": "Productivity",
+    "capabilities": ["Canvas", "MCP", "Creative Workflow"],
+    "websiteURL": "https://canvas.best/",
+    "defaultPrompt": [
+      "打开 ArtboardFlow",
+      "读取当前画布并总结节点结构",
+      "根据选中节点创建一组生图提示词"
+    ],
+    "brandColor": "#2563EB",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png"
+  }
+}

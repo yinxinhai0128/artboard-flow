@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { assetExtensionFromMimeType, assetRecordFromKey, createAssetKey, decodeDataUrlAsset, mimeTypeFromAssetKey } from './asset-store.mjs'
 import { normalizeGenerationJobPayload, normalizeGenerationJobResult, normalizeGenerationJobStatus, parseGenerationJob } from './generation-adapter.mjs'
 import { canPersistConnection } from './project-rules.mjs'
+import { extractBearerToken, hashPassword, signToken, verifyPassword, verifyToken } from './auth-utils.mjs'
 
 const app = Fastify({ logger: true })
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -35,6 +36,14 @@ db.exec(`
     payload_json text not null,
     result_json text,
     error text
+  );
+
+  create table if not exists users (
+    id text primary key,
+    username text not null unique,
+    password_hash text not null,
+    nickname text,
+    created_at text not null
   );
 `)
 
@@ -177,6 +186,47 @@ function saveProject(project) {
 }
 
 app.get('/api/health', async () => ({ ok: true, name: 'ArtboardFlow' }))
+
+// ── 认证：注册 / 登录 / 当前用户 ─────────────────────────────
+app.post('/api/auth/register', async (request, reply) => {
+  const { username, password } = request.body || {}
+  if (typeof username !== 'string' || !/^[a-zA-Z0-9_\u4e00-\u9fa5]{2,20}$/.test(username.trim())) {
+    return reply.code(400).send({ error: '用户名需为 2-20 位字母、数字、下划线或中文' })
+  }
+  if (typeof password !== 'string' || password.length < 6) {
+    return reply.code(400).send({ error: '密码至少 6 位' })
+  }
+  const name = username.trim()
+  const existing = db.prepare('select id from users where username = ?').get(name)
+  if (existing) return reply.code(409).send({ error: '用户名已存在' })
+
+  const userId = id()
+  db.prepare('insert into users (id, username, password_hash, nickname, created_at) values (?, ?, ?, ?, ?)').run(userId, name, hashPassword(password), name, nowIso())
+  const token = signToken({ sub: userId, username: name })
+  return { token, user: { id: userId, username: name, nickname: name } }
+})
+
+app.post('/api/auth/login', async (request, reply) => {
+  const { username, password } = request.body || {}
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    return reply.code(400).send({ error: '请输入用户名和密码' })
+  }
+  const row = db.prepare('select * from users where username = ?').get(username.trim())
+  if (!row || !verifyPassword(password, row.password_hash)) {
+    return reply.code(401).send({ error: '用户名或密码错误' })
+  }
+  const token = signToken({ sub: row.id, username: row.username })
+  return { token, user: { id: row.id, username: row.username, nickname: row.nickname || row.username } }
+})
+
+app.get('/api/auth/me', async (request, reply) => {
+  const token = extractBearerToken(request)
+  const payload = token ? verifyToken(token) : null
+  if (!payload) return reply.code(401).send({ error: '未登录或令牌已过期' })
+  const row = db.prepare('select id, username, nickname from users where id = ?').get(payload.sub)
+  if (!row) return reply.code(401).send({ error: '用户不存在' })
+  return { id: row.id, username: row.username, nickname: row.nickname || row.username }
+})
 
 app.post('/api/assets', async (request, reply) => {
   const body = request.body && typeof request.body === 'object' ? request.body : {}
