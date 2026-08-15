@@ -1,21 +1,23 @@
 import { nanoid } from "nanoid";
 
 export type PromptSource = {
-    id: string;
-    name: string;
-    githubUrl: string;
-    enabled: boolean;
-    script: string;
+  id: string;
+  name: string;
+  githubUrl: string;
+  enabled: boolean;
+  script: string;
 };
 
-export function createPromptSource(source?: Partial<PromptSource>): PromptSource {
-    return {
-        id: source?.id?.trim() || nanoid(),
-        name: source?.name?.trim() || "新来源",
-        githubUrl: source?.githubUrl?.trim() || "",
-        enabled: source?.enabled ?? true,
-        script: source?.script ?? "",
-    };
+export function createPromptSource(
+  source?: Partial<PromptSource>,
+): PromptSource {
+  return {
+    id: source?.id?.trim() || nanoid(),
+    name: source?.name?.trim() || "新来源",
+    githubUrl: source?.githubUrl?.trim() || "",
+    enabled: source?.enabled ?? true,
+    script: source?.script ?? "",
+  };
 }
 
 const awesomeGptImageScript = `// awesome-gpt-image：从 README.zh-CN.md 解析，## 为标签分组，### 为单条提示词。
@@ -48,7 +50,7 @@ for (const block of splitSections(markdown, "### ")) {
 return items;`;
 
 function youMindScript(base: string, idPrefix: string, modelTag: string) {
-    return `// YouMind 系列：README_zh.md 里 "### No.N: 标题" + "#### ...提示词" 代码块。
+  return `// YouMind 系列：README_zh.md 里 "### No.N: 标题" + "#### ...提示词" 代码块。
 const base = "${base}";
 const idPrefix = "${idPrefix}";
 const modelTag = "${modelTag}";
@@ -83,23 +85,51 @@ data.forEach((item, index) => {
 return items;`;
 
 export const DEFAULT_PROMPT_SOURCES: PromptSource[] = [
-    { id: "davidwu-gpt-image2-prompts", name: "davidwu-gpt-image2-prompts", githubUrl: "https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts", enabled: true, script: davidWuGptImage2Script },
-    { id: "awesome-gpt-image", name: "awesome-gpt-image", githubUrl: "https://github.com/ZeroLu/awesome-gpt-image", enabled: true, script: awesomeGptImageScript },
-    { id: "awesome-gpt4o-image-prompts", name: "awesome-gpt4o-image-prompts", githubUrl: "https://github.com/ImgEdify/Awesome-GPT4o-Image-Prompts", enabled: true, script: awesomeGpt4oImageScript },
-    {
-        id: "youmind-gpt-image-2",
-        name: "youmind-gpt-image-2",
-        githubUrl: "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
-        enabled: true,
-        script: youMindScript("https://raw.githubusercontent.com/YouMind-OpenLab/awesome-gpt-image-2/main", "youmind-gpt-image-2", "gpt-image-2"),
-    },
-    {
-        id: "youmind-nano-banana-pro",
-        name: "youmind-nano-banana-pro",
-        githubUrl: "https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts",
-        enabled: true,
-        script: youMindScript("https://raw.githubusercontent.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts/main", "youmind-nano-banana-pro", "nano-banana-pro"),
-    },
+  {
+    id: "davidwu-gpt-image2-prompts",
+    name: "davidwu-gpt-image2-prompts",
+    githubUrl:
+      "https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts",
+    enabled: true,
+    script: davidWuGptImage2Script,
+  },
+  {
+    id: "awesome-gpt-image",
+    name: "awesome-gpt-image",
+    githubUrl: "https://github.com/ZeroLu/awesome-gpt-image",
+    enabled: true,
+    script: awesomeGptImageScript,
+  },
+  {
+    id: "awesome-gpt4o-image-prompts",
+    name: "awesome-gpt4o-image-prompts",
+    githubUrl: "https://github.com/ImgEdify/Awesome-GPT4o-Image-Prompts",
+    enabled: true,
+    script: awesomeGpt4oImageScript,
+  },
+  {
+    id: "youmind-gpt-image-2",
+    name: "youmind-gpt-image-2",
+    githubUrl: "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+    enabled: true,
+    script: youMindScript(
+      "https://raw.githubusercontent.com/YouMind-OpenLab/awesome-gpt-image-2/main",
+      "youmind-gpt-image-2",
+      "gpt-image-2",
+    ),
+  },
+  {
+    id: "youmind-nano-banana-pro",
+    name: "youmind-nano-banana-pro",
+    githubUrl:
+      "https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts",
+    enabled: true,
+    script: youMindScript(
+      "https://raw.githubusercontent.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts/main",
+      "youmind-nano-banana-pro",
+      "nano-banana-pro",
+    ),
+  },
 ];
 
 /** Starter script inserted when a user creates a blank source. */

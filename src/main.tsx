@@ -11,12 +11,13 @@ import { router } from "@/router";
 
 initAnalytics();
 
-document.body.style.fontFamily = '"SF Pro Display","SF Pro Text","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif';
+document.body.style.fontFamily =
+  '"SF Pro Display","SF Pro Text","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif';
 
 createRoot(document.getElementById("root")!).render(
-    <React.StrictMode>
-        <AppProviders>
-            <RouterProvider router={router} />
-        </AppProviders>
-    </React.StrictMode>,
+  <React.StrictMode>
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
+  </React.StrictMode>,
 );

@@ -1,4 +1,8 @@
-import { createBrowserRouter, Outlet } from "react-router-dom";
+import {
+  createBrowserRouter,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
 
 import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
 import UserLayout from "@/layouts/user-layout";
@@ -12,26 +16,39 @@ import ImagePage from "@/pages/image";
 import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
 import VideoPage from "@/pages/video";
+import { useAuthStore } from "@/stores/use-auth-store";
+
+/** 强制登录守卫：未登录一律跳转 /login。 */
+function RequireAuth() {
+  const token = useAuthStore((state) => state.token);
+  if (!token) return <Navigate to="/login" replace />;
+  return <Outlet />;
+}
 
 export const router = createBrowserRouter([
-    {
+  {
+    element: <RequireAuth />,
+    children: [
+      {
         element: (
-            <UserLayout>
-                <AnalyticsTracker />
-                <Outlet />
-            </UserLayout>
+          <UserLayout>
+            <AnalyticsTracker />
+            <Outlet />
+          </UserLayout>
         ),
         children: [
-            { path: "/", element: <HomePage /> },
-            { path: "/login", element: <AuthPage /> },
-            { path: "/image", element: <ImagePage /> },
-            { path: "/video", element: <VideoPage /> },
-            { path: "/assets", element: <AssetsPage /> },
-            { path: "/prompts", element: <PromptsPage /> },
-            { path: "/canvas", element: <CanvasPage /> },
-            { path: "/canvas/:id", element: <CanvasProjectPage /> },
-            { path: "/config", element: <ConfigPage /> },
+          { path: "/", element: <HomePage /> },
+          { path: "/image", element: <ImagePage /> },
+          { path: "/video", element: <VideoPage /> },
+          { path: "/assets", element: <AssetsPage /> },
+          { path: "/prompts", element: <PromptsPage /> },
+          { path: "/canvas", element: <CanvasPage /> },
+          { path: "/canvas/:id", element: <CanvasProjectPage /> },
+          { path: "/config", element: <ConfigPage /> },
         ],
-    },
-    { path: "*", element: <NotFound /> },
+      },
+    ],
+  },
+  { path: "/login", element: <AuthPage /> },
+  { path: "*", element: <NotFound /> },
 ]);

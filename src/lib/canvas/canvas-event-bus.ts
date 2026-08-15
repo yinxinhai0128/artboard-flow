@@ -7,41 +7,44 @@ type Handler = (payload: unknown) => void;
 const handlers = new Map<string, Set<Handler>>();
 
 export function emitCanvasEvent(event: string, payload?: unknown) {
-    handlers.get(event)?.forEach((handler) => {
-        try {
-            handler(payload);
-        } catch (error) {
-            console.error(`[canvas-event] handler for "${event}" failed`, error);
-        }
-    });
+  handlers.get(event)?.forEach((handler) => {
+    try {
+      handler(payload);
+    } catch (error) {
+      console.error(`[canvas-event] handler for "${event}" failed`, error);
+    }
+  });
 }
 
 export function onCanvasEvent(event: string, handler: Handler) {
-    let set = handlers.get(event);
-    if (!set) {
-        set = new Set();
-        handlers.set(event, set);
-    }
-    set.add(handler);
-    return () => set!.delete(handler);
+  let set = handlers.get(event);
+  if (!set) {
+    set = new Set();
+    handlers.set(event, set);
+  }
+  set.add(handler);
+  return () => set!.delete(handler);
 }
 
 // 插件私有存储,按 pluginId 命名空间隔离
 const stores = new Map<string, LocalForage>();
 
 export function createPluginStorage(pluginId: string): PluginStorage {
-    let store = stores.get(pluginId);
-    if (!store) {
-        store = localforage.createInstance({ name: "artboard-flow-plugins", storeName: pluginId });
-        stores.set(pluginId, store);
-    }
-    return {
-        get: (key) => store!.getItem(key),
-        set: async (key, value) => {
-            await store!.setItem(key, value);
-        },
-        remove: async (key) => {
-            await store!.removeItem(key);
-        },
-    };
+  let store = stores.get(pluginId);
+  if (!store) {
+    store = localforage.createInstance({
+      name: "artboard-flow-plugins",
+      storeName: pluginId,
+    });
+    stores.set(pluginId, store);
+  }
+  return {
+    get: (key) => store!.getItem(key),
+    set: async (key, value) => {
+      await store!.setItem(key, value);
+    },
+    remove: async (key) => {
+      await store!.removeItem(key);
+    },
+  };
 }
