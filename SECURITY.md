@@ -40,7 +40,7 @@ an intentional trade-off for extensibility, and the installer shows a warning
 before installing. Therefore:
 
 - Only install plugins from sources you trust.
-- Reports that a *malicious plugin* can access page data or API keys are **out
+- Reports that a _malicious plugin_ can access page data or API keys are **out
   of scope** — that is the documented behavior of the trust model.
 - Reports **in scope** include: the app loading/executing plugin code without
   the install confirmation, a plugin escaping its declared node type to break
@@ -77,4 +77,3 @@ this community project.
 
 Please allow time for investigation and remediation before publishing details.
 Credit will be given on request unless you prefer to remain anonymous.
-

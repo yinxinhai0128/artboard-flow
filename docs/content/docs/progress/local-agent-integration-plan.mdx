@@ -95,11 +95,11 @@ Connect token: xxxxxx
 前端需要提供一个画布 Agent 控制层，内部调用现有 store / hook，不直接让外部操作 React 组件：
 
 ```ts
-canvasAgent.getState()
-canvasAgent.getSelection()
-canvasAgent.applyOps(ops)
-canvasAgent.focusNodes(ids)
-canvasAgent.exportSnapshot()
+canvasAgent.getState();
+canvasAgent.getSelection();
+canvasAgent.applyOps(ops);
+canvasAgent.focusNodes(ids);
+canvasAgent.exportSnapshot();
 ```
 
 建议先支持最小操作集：
@@ -163,7 +163,10 @@ Sidebar -> canvas-agent -> Claude Code CLI / Claude Agent SDK
 type AgentEvent =
   | { type: "thread.started"; thread_id: string }
   | { type: "turn.started" }
-  | { type: "item.started" | "item.updated" | "item.completed"; item: ThreadItem }
+  | {
+      type: "item.started" | "item.updated" | "item.completed";
+      item: ThreadItem;
+    }
   | { type: "turn.completed"; usage: Usage }
   | { type: "turn.failed"; error: { message: string } };
 ```

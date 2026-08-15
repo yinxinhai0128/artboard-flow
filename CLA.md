@@ -51,12 +51,12 @@ Contribution as part of the Project.
 
 You represent that:
 
-* You have the legal right to submit the Contribution.
-* The Contribution is your original work, or you have permission to submit it
+- You have the legal right to submit the Contribution.
+- The Contribution is your original work, or you have permission to submit it
   under this Agreement.
-* Any third-party material included in the Contribution is clearly identified
+- Any third-party material included in the Contribution is clearly identified
   and compatible with the Project's license and this Agreement.
-* If you submit a Contribution on behalf of an employer or organization, you
+- If you submit a Contribution on behalf of an employer or organization, you
   are authorized to do so.
 
 ## 5. No Obligation

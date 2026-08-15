@@ -72,21 +72,29 @@ import { definePlugin, useState } from "@artboard-flow/plugin-sdk";
 import type { CanvasNodeContentProps } from "@artboard-flow/plugin-sdk";
 
 function Content({ ctx }: CanvasNodeContentProps) {
-    const [n, setN] = useState(0);
-    return (
-        <button onMouseDown={(e) => e.stopPropagation()} onClick={() => setN((v) => v + 1)} style={{ color: ctx.theme.node.text }}>
-            {ctx.node.title}: {n}
-        </button>
-    );
+  const [n, setN] = useState(0);
+  return (
+    <button
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={() => setN((v) => v + 1)}
+      style={{ color: ctx.theme.node.text }}
+    >
+      {ctx.node.title}: {n}
+    </button>
+  );
 }
 
 export default definePlugin({
-    id: "my-plugin",
-    name: "我的插件",
-    version: "1.0.0",
-    css: "…",                 // 可选:插件样式,自动注入/清理
-    nodes: [ /* CanvasNodeDefinition[] */ ],
-    setup(app) { return () => {}; }, // 可选,返回清理函数;app 含 injectCSS/emit/on
+  id: "my-plugin",
+  name: "我的插件",
+  version: "1.0.0",
+  css: "…", // 可选:插件样式,自动注入/清理
+  nodes: [
+    /* CanvasNodeDefinition[] */
+  ],
+  setup(app) {
+    return () => {};
+  }, // 可选,返回清理函数;app 含 injectCSS/emit/on
 });
 ```
 
@@ -118,17 +126,17 @@ SDK 导出的 hooks(`useState/useEffect/useMemo/useRef/...`)运行时转发宿�
 
 `Content` / `Panel` / `toolbar` 都会拿到 `ctx`(类型 `CanvasNodeContext`):
 
-| 能力 | 说明 |
-| --- | --- |
-| `ctx.node` | 当前节点数据(含 `metadata.content` 等) |
-| `ctx.theme` / `ctx.scale` | 当前画布主题 token 与缩放,用来让 UI 跟随主题 |
-| `ctx.updateMetadata(patch)` | 更新自身 metadata(如保存内容) |
-| `ctx.updateNode(patch)` | 更新自身 title/width/height |
-| `ctx.getNode(id)` / `ctx.getNodes()` / `ctx.getConnections()` | 读画布 |
-| `ctx.getUpstream()` / `ctx.getDownstream()` | 取上/下游相连节点 |
-| `ctx.applyOps(ops)` | 用画布指令集增删节点/连线、选择、触发生成(见下) |
-| `ctx.emit(event, payload)` / `ctx.on(event, handler)` | 节点/插件间事件通信 |
-| `ctx.storage` | 插件私有持久化(按插件 id 命名空间) |
+| 能力                                                          | 说明                                            |
+| ------------------------------------------------------------- | ----------------------------------------------- |
+| `ctx.node`                                                    | 当前节点数据(含 `metadata.content` 等)          |
+| `ctx.theme` / `ctx.scale`                                     | 当前画布主题 token 与缩放,用来让 UI 跟随主题    |
+| `ctx.updateMetadata(patch)`                                   | 更新自身 metadata(如保存内容)                   |
+| `ctx.updateNode(patch)`                                       | 更新自身 title/width/height                     |
+| `ctx.getNode(id)` / `ctx.getNodes()` / `ctx.getConnections()` | 读画布                                          |
+| `ctx.getUpstream()` / `ctx.getDownstream()`                   | 取上/下游相连节点                               |
+| `ctx.applyOps(ops)`                                           | 用画布指令集增删节点/连线、选择、触发生成(见下) |
+| `ctx.emit(event, payload)` / `ctx.on(event, handler)`         | 节点/插件间事件通信                             |
+| `ctx.storage`                                                 | 插件私有持久化(按插件 id 命名空间)              |
 
 > `metadata` 的**内置字段**(content、status、model…)是强类型;插件写入的**自定义字段**读出为 `unknown`,按需 `as` 断言(参考 `sticky-note` 的 `pluginColor`)。
 

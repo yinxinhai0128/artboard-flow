@@ -1,29 +1,29 @@
-import Link from 'next/link';
-import { ArrowUpRight, BookOpen, Rocket } from 'lucide-react';
-import { appName, gitConfig } from '@/lib/shared';
+import Link from "next/link";
+import { ArrowUpRight, BookOpen, Rocket } from "lucide-react";
+import { appName, gitConfig } from "@/lib/shared";
 
 const githubUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
-const demoUrl = 'http://localhost:3000/';
+const demoUrl = "http://localhost:3000/";
 const starHistoryUrl = `https://www.star-history.com/?repos=${gitConfig.user}%2F${gitConfig.repo}&type=date`;
 const starHistoryChart = `https://api.star-history.com/chart?repos=${gitConfig.user}/${gitConfig.repo}&type=date&transparent=true`;
 const darkStarHistoryChart = `${starHistoryChart}&theme=dark`;
 
 const previewImages = [
   {
-    src: 'https://i.ibb.co/TDFvGWDT/image.png',
-    title: '画布编排',
+    src: "https://i.ibb.co/TDFvGWDT/image.png",
+    title: "画布编排",
   },
   {
-    src: 'https://i.ibb.co/zVwJq3YS/image.png',
-    title: '图片生成',
+    src: "https://i.ibb.co/zVwJq3YS/image.png",
+    title: "图片生成",
   },
   {
-    src: 'https://i.ibb.co/PvY3qhhK/image.png',
-    title: '参考图编辑',
+    src: "https://i.ibb.co/PvY3qhhK/image.png",
+    title: "参考图编辑",
   },
   {
-    src: 'https://i.ibb.co/7D04LwN/image.png',
-    title: '节点工作流',
+    src: "https://i.ibb.co/7D04LwN/image.png",
+    title: "节点工作流",
   },
 ];
 
@@ -38,10 +38,13 @@ export default function HomePage() {
           </div>
           <h1 className="mt-6 max-w-3xl text-4xl font-semibold leading-tight text-zinc-950 dark:text-zinc-50 md:text-6xl [font-family:var(--font-display)]">
             {appName}
-            <span className="block text-zinc-500 dark:text-zinc-400">文档中心</span>
+            <span className="block text-zinc-500 dark:text-zinc-400">
+              文档中心
+            </span>
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-8 text-zinc-600 dark:text-zinc-400">
-            面向图片创作的无限画布，把画布编排、AI 生成、参考图编辑、提示词库和素材沉淀放在同一个工作流里。
+            面向图片创作的无限画布，把画布编排、AI
+            生成、参考图编辑、提示词库和素材沉淀放在同一个工作流里。
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link

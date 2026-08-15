@@ -11,8 +11,10 @@ import type { CanvasPlugin, CanvasPluginFactory, PluginRuntime } from "./types";
 
 export function definePlugin(plugin: CanvasPlugin): CanvasPlugin;
 export function definePlugin(factory: CanvasPluginFactory): CanvasPluginFactory;
-export function definePlugin(input: CanvasPlugin | CanvasPluginFactory): CanvasPlugin | CanvasPluginFactory {
-    return input;
+export function definePlugin(
+  input: CanvasPlugin | CanvasPluginFactory,
+): CanvasPlugin | CanvasPluginFactory {
+  return input;
 }
 
 export type { PluginRuntime };

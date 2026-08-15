@@ -47,3 +47,6 @@ docs-original-notes/
 README.old-utf16.md
 package-lock.json.old
 scripts/debrand.py
+
+# build backup dirs
+dist-old*

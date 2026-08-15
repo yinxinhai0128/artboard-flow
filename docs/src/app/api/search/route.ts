@@ -1,6 +1,6 @@
-import { source } from '@/lib/source';
-import { createDocsSearchTokenizer } from '@/lib/search-tokenizer';
-import { createFromSource } from 'fumadocs-core/search/server';
+import { source } from "@/lib/source";
+import { createDocsSearchTokenizer } from "@/lib/search-tokenizer";
+import { createFromSource } from "fumadocs-core/search/server";
 
 export const revalidate = false;
 
