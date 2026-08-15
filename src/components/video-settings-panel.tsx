@@ -1,18 +1,17 @@
 import { type ReactNode } from "react";
-import { Switch } from "antd";
+import { Slider } from "antd";
 
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
 import {
   boolConfig,
-  isSeedanceFastModel,
-  isSeedanceVideoConfig,
+  isSeedanceVideoModel,
   normalizeSeedanceDuration,
   normalizeSeedanceRatio,
   normalizeSeedanceResolution,
-  seedanceDurationOptions,
+  seedanceMaxDuration,
   seedancePixelLabel,
   seedanceRatioOptions,
-  seedanceResolutionOptions,
+  seedanceResolutionOptionsFor,
 } from "@/lib/seedance-video";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
@@ -51,7 +50,8 @@ type VideoSettingsPanelProps = {
       | "size"
       | "videoSeconds"
       | "videoGenerateAudio"
-      | "videoWatermark",
+      | "videoWatermark"
+      | "videoCount",
     value: string,
   ) => void;
   theme: CanvasTheme;
@@ -66,7 +66,7 @@ export function VideoSettingsPanel({
   showTitle = true,
   className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5",
 }: VideoSettingsPanelProps) {
-  if (isSeedanceVideoConfig(config)) {
+  if (isSeedanceVideoModel(modelOptionName(config.videoModel || config.model))) {
     return (
       <SeedanceVideoSettingsPanel
         config={config}
@@ -199,12 +199,15 @@ function SeedanceVideoSettingsPanel({
   showTitle,
   className,
 }: VideoSettingsPanelProps) {
-  const model = modelOptionName(config.model || config.videoModel);
+  const model = modelOptionName(config.videoModel || config.model);
   const resolution = normalizeSeedanceResolution(config.vquality, model);
   const ratio = normalizeSeedanceRatio(config.size);
-  const duration = normalizeSeedanceDuration(config.videoSeconds);
+  const duration = normalizeSeedanceDuration(config.videoSeconds, model);
   const generateAudio = boolConfig(config.videoGenerateAudio, true);
   const watermark = boolConfig(config.videoWatermark, false);
+  const videoCount = Math.min(4, Math.max(1, parseInt(config.videoCount, 10) || 1));
+  const sliderDuration =
+    duration === -1 ? seedanceMaxDuration(model) : duration;
 
   return (
     <ImageSettingsTheme theme={theme}>
@@ -217,28 +220,18 @@ function SeedanceVideoSettingsPanel({
           <div className="text-lg font-semibold">视频设置</div>
         ) : null}
         <SettingGroup title="分辨率" color={theme.node.muted}>
-          <div className="grid grid-cols-3 gap-2.5">
-            {seedanceResolutionOptions.map((item) => {
-              const disabled =
-                item.value === "1080p" && isSeedanceFastModel(model);
-              return (
-                <OptionPill
-                  key={item.value}
-                  selected={resolution === item.value}
-                  disabled={disabled}
-                  theme={theme}
-                  onClick={() => onConfigChange("vquality", item.value)}
-                >
-                  {item.label}
-                </OptionPill>
-              );
-            })}
+          <div className="grid grid-cols-4 gap-2.5">
+            {seedanceResolutionOptionsFor(model).map((item) => (
+              <OptionPill
+                key={item.value}
+                selected={resolution === item.value}
+                theme={theme}
+                onClick={() => onConfigChange("vquality", item.value)}
+              >
+                {item.label}
+              </OptionPill>
+            ))}
           </div>
-          {isSeedanceFastModel(model) ? (
-            <div className="text-[11px] leading-4 opacity-55">
-              fast 模型不支持 1080p，会自动使用 720p。
-            </div>
-          ) : null}
         </SettingGroup>
         <SettingGroup title="比例" color={theme.node.muted}>
           <div className="grid grid-cols-3 gap-2.5">
@@ -270,48 +263,63 @@ function SeedanceVideoSettingsPanel({
             ))}
           </div>
         </SettingGroup>
-        <SettingGroup title="时长" color={theme.node.muted}>
-          <div className="grid grid-cols-4 gap-2.5">
-            {seedanceDurationOptions.map((value) => (
+        <SettingGroup title="视频时长" color={theme.node.muted}>
+          <DurationSlider
+            value={sliderDuration}
+            min={4}
+            max={seedanceMaxDuration(model)}
+            theme={theme}
+            onChange={(value) => onConfigChange("videoSeconds", String(value))}
+          />
+        </SettingGroup>
+        <SettingGroup title="生成音频" color={theme.node.muted}>
+          <div className="grid grid-cols-2 gap-2.5">
+            <OptionPill
+              selected={generateAudio}
+              theme={theme}
+              onClick={() => onConfigChange("videoGenerateAudio", "true")}
+            >
+              开启
+            </OptionPill>
+            <OptionPill
+              selected={!generateAudio}
+              theme={theme}
+              onClick={() => onConfigChange("videoGenerateAudio", "false")}
+            >
+              关闭
+            </OptionPill>
+          </div>
+        </SettingGroup>
+        <SettingGroup title="生成数量" color={theme.node.muted}>
+          <div className="grid grid-cols-3 gap-2.5">
+            {[1, 2, 4].map((count) => (
               <OptionPill
-                key={value}
-                selected={duration === value}
+                key={count}
+                selected={videoCount === count}
                 theme={theme}
-                onClick={() => onConfigChange("videoSeconds", String(value))}
+                onClick={() => onConfigChange("videoCount", String(count))}
               >
-                {value === -1 ? "智能" : `${value}s`}
+                {count}个
               </OptionPill>
             ))}
           </div>
-          <NumberInput
-            value={String(duration)}
-            min={-1}
-            max={15}
-            theme={theme}
-            onChange={(value) => onConfigChange("videoSeconds", value)}
-          />
         </SettingGroup>
-        <SettingGroup title="输出" color={theme.node.muted}>
-          <div
-            className="grid gap-2 rounded-xl border p-2.5"
-            style={{ borderColor: theme.node.stroke }}
-          >
-            <SwitchRow
-              label="生成声音"
-              checked={generateAudio}
+        <SettingGroup title="水印" color={theme.node.muted}>
+          <div className="grid grid-cols-2 gap-2.5">
+            <OptionPill
+              selected={watermark}
               theme={theme}
-              onChange={(checked) =>
-                onConfigChange("videoGenerateAudio", String(checked))
-              }
-            />
-            <SwitchRow
-              label="添加水印"
-              checked={watermark}
+              onClick={() => onConfigChange("videoWatermark", "true")}
+            >
+              开启
+            </OptionPill>
+            <OptionPill
+              selected={!watermark}
               theme={theme}
-              onChange={(checked) =>
-                onConfigChange("videoWatermark", String(checked))
-              }
-            />
+              onClick={() => onConfigChange("videoWatermark", "false")}
+            >
+              关闭
+            </OptionPill>
           </div>
         </SettingGroup>
       </div>
@@ -403,6 +411,40 @@ function SettingGroup({
         {title}
       </div>
       {children}
+    </div>
+  );
+}
+
+function DurationSlider({
+  value,
+  min,
+  max,
+  theme,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  theme: CanvasTheme;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <Slider
+        className="flex-1"
+        min={min}
+        max={max}
+        step={1}
+        value={value}
+        onChange={onChange}
+        tooltip={{ open: false }}
+      />
+      <div
+        className="w-16 shrink-0 rounded-lg border py-1.5 text-center text-sm"
+        style={{ borderColor: theme.node.stroke, color: theme.node.text }}
+      >
+        {value}s
+      </div>
     </div>
   );
 }
@@ -540,29 +582,6 @@ function ratioPreview(ratio: string) {
   if (ratio === "21:9") return { width: 21, height: 9 };
   if (ratio === "adaptive") return { width: 0, height: 0 };
   return { width: 16, height: 9 };
-}
-
-function SwitchRow({
-  label,
-  checked,
-  theme,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  theme: CanvasTheme;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex h-8 items-center justify-between gap-3">
-      <span className="text-sm" style={{ color: theme.node.text }}>
-        {label}
-      </span>
-      <span onMouseDown={(event) => event.stopPropagation()}>
-        <Switch size="small" checked={checked} onChange={onChange} />
-      </span>
-    </div>
-  );
 }
 
 function readSizeDimensions(size: string) {

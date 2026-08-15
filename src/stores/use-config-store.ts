@@ -40,6 +40,7 @@ export type AiConfig = {
   vquality: string;
   videoGenerateAudio: string;
   videoWatermark: string;
+  videoCount: string;
   systemPrompt: string;
   models: string[];
   quality: string;
@@ -180,6 +181,7 @@ export const defaultConfig: AiConfig = {
   vquality: "720",
   videoGenerateAudio: "true",
   videoWatermark: "false",
+  videoCount: "1",
   systemPrompt: "",
   models: [
     "bailian::qwen-image",
@@ -401,6 +403,7 @@ export const useConfigStore = create<ConfigStore>()(
             vquality: config.vquality || "720",
             videoGenerateAudio: config.videoGenerateAudio || "true",
             videoWatermark: config.videoWatermark || "false",
+            videoCount: config.videoCount || "1",
             canvasImageCount: config.canvasImageCount || "3",
           },
         };

@@ -49,11 +49,13 @@ import { formatBytes, formatDuration } from "@/lib/image-utils";
 import {
   boolConfig,
   isSeedanceVideoConfig,
+  normalizeSeedanceDuration,
   normalizeSeedanceRatio,
   seedanceReferenceLabel,
+  seedanceReferenceLimitsFor,
   seedanceVideoReferenceError,
   seedanceVideoReferenceHint,
-  SEEDANCE_REFERENCE_LIMITS,
+  type SeedanceReferenceLimits,
 } from "@/lib/seedance-video";
 import {
   deleteStoredMedia,
@@ -71,6 +73,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import {
   modelOptionLabel,
+  modelOptionName,
   useConfigStore,
   useEffectiveConfig,
   type AiConfig,
@@ -176,6 +179,7 @@ export default function VideoPage() {
   const agentTaskIdRef = useRef<string | undefined>(undefined);
 
   const model = effectiveConfig.videoModel || effectiveConfig.model;
+  const seedanceLimits = seedanceReferenceLimitsFor(modelOptionName(model));
   const canGenerate = Boolean(prompt.trim());
 
   useEffect(() => {
@@ -207,47 +211,53 @@ export default function VideoPage() {
       .filter(
         (file) =>
           file.type.startsWith("image/") &&
-          file.size <= SEEDANCE_REFERENCE_LIMITS.imageMaxBytes,
+          file.size <= seedanceLimits.imageMaxBytes,
       )
-      .slice(0, SEEDANCE_REFERENCE_LIMITS.images - references.length);
+      .slice(0, seedanceLimits.images - references.length);
     const videoFiles = selectedFiles
       .filter(
         (file) =>
           file.type.startsWith("video/") &&
-          file.size <= SEEDANCE_REFERENCE_LIMITS.videoMaxBytes,
+          file.size <= seedanceLimits.videoMaxBytes,
       )
-      .slice(0, SEEDANCE_REFERENCE_LIMITS.videos - videoReferences.length);
+      .slice(0, seedanceLimits.videos - videoReferences.length);
     const audioFiles = selectedFiles
       .filter(
         (file) =>
           isSupportedAudioFile(file) &&
-          file.size <= SEEDANCE_REFERENCE_LIMITS.audioMaxBytes,
+          file.size <= seedanceLimits.audioMaxBytes,
       )
-      .slice(0, SEEDANCE_REFERENCE_LIMITS.audios - audioReferences.length);
+      .slice(0, seedanceLimits.audios - audioReferences.length);
     if (
       selectedFiles.some(
         (file) =>
           file.type.startsWith("image/") &&
-          file.size > SEEDANCE_REFERENCE_LIMITS.imageMaxBytes,
+          file.size > seedanceLimits.imageMaxBytes,
       )
     )
-      message.warning("已忽略超过 30MB 的参考图");
+      message.warning(
+        `已忽略超过 ${seedanceLimits.imageMaxBytes / (1024 * 1024)}MB 的参考图`,
+      );
     if (
       selectedFiles.some(
         (file) =>
           file.type.startsWith("video/") &&
-          file.size > SEEDANCE_REFERENCE_LIMITS.videoMaxBytes,
+          file.size > seedanceLimits.videoMaxBytes,
       )
     )
-      message.warning("已忽略超过 50MB 的参考视频");
+      message.warning(
+        `已忽略超过 ${seedanceLimits.videoMaxBytes / (1024 * 1024)}MB 的参考视频`,
+      );
     if (
       selectedFiles.some(
         (file) =>
           isSupportedAudioFile(file) &&
-          file.size > SEEDANCE_REFERENCE_LIMITS.audioMaxBytes,
+          file.size > seedanceLimits.audioMaxBytes,
       )
     )
-      message.warning("已忽略超过 15MB 的参考音频");
+      message.warning(
+        `已忽略超过 ${seedanceLimits.audioMaxBytes / (1024 * 1024)}MB 的参考音频`,
+      );
     const nextReferences = await Promise.all(
       imageFiles.map(async (file) => {
         const image = await uploadImage(file);
@@ -292,20 +302,21 @@ export default function VideoPage() {
         }),
       ),
       message.warning,
+      seedanceLimits,
     );
     setReferences((value) =>
-      [...value, ...nextReferences].slice(0, SEEDANCE_REFERENCE_LIMITS.images),
+      [...value, ...nextReferences].slice(0, seedanceLimits.images),
     );
     setVideoReferences((value) =>
       [...value, ...nextVideoReferences].slice(
         0,
-        SEEDANCE_REFERENCE_LIMITS.videos,
+        seedanceLimits.videos,
       ),
     );
     setAudioReferences((value) =>
       [...value, ...nextAudioReferences].slice(
         0,
-        SEEDANCE_REFERENCE_LIMITS.audios,
+        seedanceLimits.audios,
       ),
     );
   };
@@ -326,7 +337,7 @@ export default function VideoPage() {
       }
       const nextReferences = await Promise.all(
         blobs
-          .slice(0, SEEDANCE_REFERENCE_LIMITS.images - references.length)
+          .slice(0, seedanceLimits.images - references.length)
           .map(async (blob, index) => {
             const image = await uploadImage(blob);
             return {
@@ -341,7 +352,7 @@ export default function VideoPage() {
       setReferences((value) =>
         [...value, ...nextReferences].slice(
           0,
-          SEEDANCE_REFERENCE_LIMITS.images,
+          seedanceLimits.images,
         ),
       );
       message.success(`已读取 ${nextReferences.length} 张参考图`);
@@ -366,30 +377,87 @@ export default function VideoPage() {
     if (agentTaskId)
       updateAgentTask(agentTaskId, { status: "running", error: undefined });
     setPreviewLog(null);
-    setResults([{ id: nanoid(), status: "pending" }]);
+    const count = normalizeVideoCount(snapshot.config.videoCount);
+    setResults(
+      Array.from({ length: count }, () => ({
+        id: nanoid(),
+        status: "pending" as const,
+      })),
+    );
     const batchStartedAt = performance.now();
     setStartedAt(batchStartedAt);
     try {
-      const task = await createVideoGenerationTask(
-        snapshot.config,
-        snapshot.text,
-        snapshot.references,
-        snapshot.videoReferences,
-        snapshot.audioReferences,
+      const settled = await Promise.allSettled(
+        Array.from({ length: count }, () =>
+          createVideoGenerationTask(
+            snapshot.config,
+            snapshot.text,
+            snapshot.references,
+            snapshot.videoReferences,
+            snapshot.audioReferences,
+          ),
+        ),
       );
-      const log = buildLog({
-        prompt: snapshot.text,
-        model,
-        config: snapshot.config,
-        references: snapshot.references,
-        videoReferences: snapshot.videoReferences,
-        audioReferences: snapshot.audioReferences,
-        durationMs: 0,
-        status: "生成中",
-        task,
-      });
-      await saveLog(log, false);
-      void pollGenerationLog(log, snapshot.config, agentTaskId);
+      const rejected = settled.filter(
+        (item): item is PromiseRejectedResult => item.status === "rejected",
+      );
+      if (rejected.length === settled.length) {
+        const first = rejected[0];
+        throw new Error(
+          first && first.reason instanceof Error
+            ? first.reason.message
+            : "生成失败",
+        );
+      }
+      for (const item of settled) {
+        if (item.status === "fulfilled") {
+          const task = item.value;
+          const log = buildLog({
+            prompt: snapshot.text,
+            model,
+            config: snapshot.config,
+            references: snapshot.references,
+            videoReferences: snapshot.videoReferences,
+            audioReferences: snapshot.audioReferences,
+            durationMs: 0,
+            status: "生成中",
+            task,
+          });
+          await saveLog(log, false);
+          void pollGenerationLog(log, snapshot.config, agentTaskId);
+        } else {
+          const errorMessage =
+            item.reason instanceof Error ? item.reason.message : "生成失败";
+          setResults((value) => {
+            const pendingIndex = value.findIndex(
+              (result) => result.status === "pending",
+            );
+            if (pendingIndex < 0) return value;
+            return value.map((result, index) =>
+              index === pendingIndex
+                ? {
+                    id: result.id,
+                    status: "failed" as const,
+                    error: errorMessage,
+                  }
+                : result,
+            );
+          });
+          void saveLog(
+            buildLog({
+              prompt: snapshot.text,
+              model,
+              config: snapshot.config,
+              references: snapshot.references,
+              videoReferences: snapshot.videoReferences,
+              audioReferences: snapshot.audioReferences,
+              durationMs: performance.now() - batchStartedAt,
+              status: "失败",
+              error: errorMessage,
+            }),
+          );
+        }
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "生成失败";
       setResults([{ id: nanoid(), status: "failed", error: errorMessage }]);
@@ -456,7 +524,10 @@ export default function VideoPage() {
       openConfigDialog(true);
       return null;
     }
-    const videoReferenceError = seedanceVideoReferenceError(videoReferences);
+    const videoReferenceError = seedanceVideoReferenceError(
+      videoReferences,
+      seedanceLimits,
+    );
     if (videoReferenceError) {
       message.error(`${videoReferenceError}。${seedanceVideoReferenceHint}`);
       return null;
@@ -513,7 +584,7 @@ export default function VideoPage() {
             dataUrl: stored.url,
             storageKey: stored.storageKey,
           },
-        ].slice(0, SEEDANCE_REFERENCE_LIMITS.images),
+        ].slice(0, seedanceLimits.images),
       );
     } else if (payload.kind === "video") {
       setVideoReferences((value) =>
@@ -528,7 +599,7 @@ export default function VideoPage() {
             width: payload.width,
             height: payload.height,
           },
-        ].slice(0, SEEDANCE_REFERENCE_LIMITS.videos),
+        ].slice(0, seedanceLimits.videos),
       );
     }
     setAssetPickerOpen(false);
@@ -615,9 +686,20 @@ export default function VideoPage() {
             bytes: stored.bytes,
             mimeType: stored.mimeType,
           };
-          setResults([
-            { id: nextVideo.id, status: "success", video: nextVideo },
-          ]);
+          setResults((value) => {
+            const pendingIndex = value.findIndex(
+              (result) => result.status === "pending",
+            );
+            const success: GenerationResult = {
+              id: nextVideo.id,
+              status: "success",
+              video: nextVideo,
+            };
+            if (pendingIndex < 0) return [...value, success];
+            return value.map((result, index) =>
+              index === pendingIndex ? success : result,
+            );
+          });
           if (agentTaskId)
             updateAgentTask(agentTaskId, {
               status: "succeeded",
@@ -641,7 +723,20 @@ export default function VideoPage() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "生成失败";
-      setResults([{ id: log.id, status: "failed", error: errorMessage }]);
+      setResults((value) => {
+        const pendingIndex = value.findIndex(
+          (result) => result.status === "pending",
+        );
+        const failed: GenerationResult = {
+          id: log.id,
+          status: "failed",
+          error: errorMessage,
+        };
+        if (pendingIndex < 0) return [...value, failed];
+        return value.map((result, index) =>
+          index === pendingIndex ? failed : result,
+        );
+      });
       if (agentTaskId)
         updateAgentTask(agentTaskId, {
           status: "failed",
@@ -816,7 +911,7 @@ export default function VideoPage() {
                   ))}
                   {!references.length ? (
                     <div className="flex min-w-full items-center justify-center text-sm text-stone-500">
-                      暂无参考图，最多 9 张
+                      暂无参考图，最多 {seedanceLimits.images} 张
                     </div>
                   ) : null}
                 </div>
@@ -873,7 +968,7 @@ export default function VideoPage() {
                   ))}
                   {!videoReferences.length ? (
                     <div className="flex min-w-full items-center justify-center text-sm text-stone-500">
-                      暂无参考视频，最多 3 个
+                      暂无参考视频，最多 {seedanceLimits.videos} 个
                     </div>
                   ) : null}
                 </div>
@@ -934,7 +1029,8 @@ export default function VideoPage() {
                   ))}
                   {!audioReferences.length ? (
                     <div className="flex min-w-full items-center justify-center text-center text-sm text-stone-500">
-                      暂无参考音频，最多 3 个，mp3/wav，单个 15MB 内
+                      暂无参考音频，最多 {seedanceLimits.audios} 个，mp3/wav，单个{" "}
+                      {seedanceLimits.audioMaxBytes / (1024 * 1024)}MB 内
                     </div>
                   ) : null}
                 </div>
@@ -1468,19 +1564,20 @@ function filterAudioReferencesByDuration(
   existing: ReferenceAudio[],
   next: ReferenceAudio[],
   warn: (content: string) => void,
+  limits: SeedanceReferenceLimits,
 ) {
+  const minMs = limits.minAssetSeconds * 1000;
+  const maxMs = limits.maxAssetSeconds * 1000;
+  const maxTotalMs = limits.maxCombinedSeconds * 1000;
   let total = existing.reduce((sum, item) => sum + (item.durationMs || 0), 0);
   const accepted: ReferenceAudio[] = [];
   let skipped = false;
   for (const item of next) {
-    if (
-      item.durationMs &&
-      (item.durationMs < 2000 || item.durationMs > 15000)
-    ) {
+    if (item.durationMs && (item.durationMs < minMs || item.durationMs > maxMs)) {
       skipped = true;
       continue;
     }
-    if (item.durationMs && total + item.durationMs > 15000) {
+    if (item.durationMs && total + item.durationMs > maxTotalMs) {
       skipped = true;
       continue;
     }
@@ -1488,7 +1585,9 @@ function filterAudioReferencesByDuration(
     accepted.push(item);
   }
   if (skipped)
-    warn("已忽略不符合时长要求的参考音频：单个 2-15 秒，总时长不超过 15 秒");
+    warn(
+      `已忽略不符合时长要求的参考音频：单个 ${limits.minAssetSeconds}-${limits.maxAssetSeconds} 秒，总时长不超过 ${limits.maxCombinedSeconds} 秒`,
+    );
   return accepted;
 }
 
@@ -1607,7 +1706,11 @@ function buildVideoConfig(config: AiConfig, model: string): AiConfig {
     size: seedance
       ? normalizeSeedanceRatio(config.size)
       : normalizeVideoSize(config.size),
-    videoSeconds: normalizeVideoSeconds(config.videoSeconds),
+    videoSeconds: seedance
+      ? String(
+          normalizeSeedanceDuration(config.videoSeconds, modelOptionName(model)),
+        )
+      : normalizeVideoSeconds(config.videoSeconds),
     vquality: normalizeResolution(config.vquality),
     videoGenerateAudio: String(boolConfig(config.videoGenerateAudio, true)),
     videoWatermark: String(boolConfig(config.videoWatermark, false)),
@@ -1618,6 +1721,11 @@ function normalizeVideoSeconds(value: string) {
   if (String(value).trim() === "-1") return "-1";
   const seconds = Math.floor(Number(value) || 6);
   return String(Math.max(1, Math.min(20, seconds)));
+}
+
+function normalizeVideoCount(value: string) {
+  const count = Math.floor(Number(value) || 1);
+  return Math.max(1, Math.min(4, count));
 }
 
 function normalizeVideoSize(value: string) {
