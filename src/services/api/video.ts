@@ -16,8 +16,10 @@ import {
   normalizeSeedanceDuration,
   normalizeSeedanceRatio,
   normalizeSeedanceResolution,
+  seedanceAudioReferenceError,
+  seedanceModelProfile,
   seedanceVideoReferenceError,
-  SEEDANCE_REFERENCE_LIMITS,
+  type SeedanceReferenceLimits,
 } from "@/lib/seedance-video";
 import {
   buildApiUrl,
@@ -377,31 +379,36 @@ async function createSeedanceTask(
   audioReferences: ReferenceAudio[],
   options?: RequestOptions,
 ): Promise<VideoGenerationTask> {
-  if (audioReferences.length && !references.length && !videoReferences.length) {
+  const modelName = modelOptionName(model);
+  const { referenceLimits } = seedanceModelProfile(modelName);
+  if (
+    audioReferences.length &&
+    !references.length &&
+    !videoReferences.length &&
+    !referenceLimits.audioOnlyAllowed
+  ) {
     throw new Error(
       "Seedance 参考音频不能单独使用，请同时添加参考图或参考视频",
     );
   }
-  assertSeedanceVideoReferences(videoReferences);
-  assertSeedanceAudioReferences(audioReferences);
+  assertSeedanceVideoReferences(videoReferences, referenceLimits);
+  assertSeedanceAudioReferences(audioReferences, referenceLimits);
   const content = await buildSeedanceContent(
     config,
     prompt,
     references,
     videoReferences,
     audioReferences,
+    referenceLimits,
   );
   if (!content.length)
     throw new Error("请输入视频提示词，或连接参考图片/视频/音频");
   const payload = {
-    model: modelOptionName(model),
+    model: modelName,
     content,
     ratio: normalizeSeedanceRatio(config.size),
-    resolution: normalizeSeedanceResolution(
-      config.vquality,
-      modelOptionName(model),
-    ),
-    duration: normalizeSeedanceDuration(config.videoSeconds),
+    resolution: normalizeSeedanceResolution(config.vquality, modelName),
+    duration: normalizeSeedanceDuration(config.videoSeconds, modelName),
     generate_audio: boolConfig(config.videoGenerateAudio, true),
     watermark: boolConfig(config.videoWatermark, false),
   };
@@ -481,8 +488,13 @@ async function createGatewayTask(
   const payload = {
     model: modelOptionName(model),
     prompt: text || prompt.trim(),
-    size: normalizeVideoSize(config.size) || "1280x720",
     seconds: normalizeVideoSeconds(config.videoSeconds),
+    metadata: {
+      resolution: normalizeSeedanceResolution(config.vquality, model),
+      ratio: normalizeSeedanceRatio(config.size),
+      generate_audio: boolConfig(config.videoGenerateAudio, true),
+      watermark: boolConfig(config.videoWatermark, false),
+    },
   };
   try {
     const created = (
@@ -550,28 +562,20 @@ async function pollGatewayTask(
   }
 }
 
-function assertSeedanceVideoReferences(videoReferences: ReferenceVideo[]) {
-  const error = seedanceVideoReferenceError(videoReferences);
+function assertSeedanceVideoReferences(
+  videoReferences: ReferenceVideo[],
+  limits: SeedanceReferenceLimits,
+) {
+  const error = seedanceVideoReferenceError(videoReferences, limits);
   if (error) throw new Error(error);
-  let total = 0;
-  for (const video of videoReferences) {
-    if (!video.durationMs) continue;
-    if (video.durationMs < 2000 || video.durationMs > 15000)
-      throw new Error("Seedance 参考视频单个时长需要在 2-15 秒之间");
-    total += video.durationMs;
-  }
-  if (total > 15000) throw new Error("Seedance 参考视频总时长不能超过 15 秒");
 }
 
-function assertSeedanceAudioReferences(audioReferences: ReferenceAudio[]) {
-  let total = 0;
-  for (const audio of audioReferences) {
-    if (!audio.durationMs) continue;
-    if (audio.durationMs < 2000 || audio.durationMs > 15000)
-      throw new Error("Seedance 参考音频单个时长需要在 2-15 秒之间");
-    total += audio.durationMs;
-  }
-  if (total > 15000) throw new Error("Seedance 参考音频总时长不能超过 15 秒");
+function assertSeedanceAudioReferences(
+  audioReferences: ReferenceAudio[],
+  limits: SeedanceReferenceLimits,
+) {
+  const error = seedanceAudioReferenceError(audioReferences, limits);
+  if (error) throw new Error(error);
 }
 
 function seedanceApiUrl(config: AiConfig, taskId?: string) {
@@ -587,6 +591,7 @@ async function buildSeedanceContent(
   references: ReferenceImage[],
   videoReferences: ReferenceVideo[],
   audioReferences: ReferenceAudio[],
+  limits: SeedanceReferenceLimits,
 ) {
   const content: Array<Record<string, unknown>> = [];
   const text = buildSeedancePromptText(
@@ -596,27 +601,21 @@ async function buildSeedanceContent(
     audioReferences,
   );
   if (text) content.push({ type: "text", text });
-  for (const image of references.slice(0, SEEDANCE_REFERENCE_LIMITS.images)) {
+  for (const image of references.slice(0, limits.images)) {
     content.push({
       type: "image_url",
       image_url: { url: await resolveSeedanceImageUrl(config, image) },
       role: "reference_image",
     });
   }
-  for (const video of videoReferences.slice(
-    0,
-    SEEDANCE_REFERENCE_LIMITS.videos,
-  )) {
+  for (const video of videoReferences.slice(0, limits.videos)) {
     content.push({
       type: "video_url",
       video_url: { url: await resolveSeedanceVideoUrl(video) },
       role: "reference_video",
     });
   }
-  for (const audio of audioReferences.slice(
-    0,
-    SEEDANCE_REFERENCE_LIMITS.audios,
-  )) {
+  for (const audio of audioReferences.slice(0, limits.audios)) {
     content.push({
       type: "audio_url",
       audio_url: { url: await resolveSeedanceAudioUrl(audio) },

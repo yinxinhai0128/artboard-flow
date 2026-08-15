@@ -6,20 +6,63 @@ import {
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
-export const SEEDANCE_REFERENCE_LIMITS = {
+export type SeedanceReferenceLimits = {
+  images: number;
+  videos: number;
+  audios: number;
+  imageMaxBytes: number;
+  videoMaxBytes: number;
+  audioMaxBytes: number;
+  /** 单个参考视频/音频的时长范围（秒） */
+  minAssetSeconds: number;
+  maxAssetSeconds: number;
+  /** 参考视频总时长 / 参考音频总时长上限（秒） */
+  maxCombinedSeconds: number;
+  /** 是否允许仅用参考音频（无图/视频）生成 */
+  audioOnlyAllowed: boolean;
+};
+
+/** Seedance 2.0 系列参考资产约束（沿用既有行为，向后兼容）。 */
+export const SEEDANCE_REFERENCE_LIMITS: SeedanceReferenceLimits = {
   images: 9,
   videos: 3,
   audios: 3,
   imageMaxBytes: 30 * 1024 * 1024,
   videoMaxBytes: 50 * 1024 * 1024,
   audioMaxBytes: 15 * 1024 * 1024,
+  minAssetSeconds: 2,
+  maxAssetSeconds: 15,
+  maxCombinedSeconds: 15,
+  audioOnlyAllowed: false,
+};
+
+/** Seedance 2.5 参考资产约束（即梦官方使用手册：图 30 / 视频 10 / 音频 10；视频 <200MB、2-30s、合计≤30s；音频 <15MB、2-30s、合计≤30s；支持仅音频参考）。 */
+export const SEEDANCE_25_REFERENCE_LIMITS: SeedanceReferenceLimits = {
+  images: 30,
+  videos: 10,
+  audios: 10,
+  imageMaxBytes: 30 * 1024 * 1024,
+  videoMaxBytes: 200 * 1024 * 1024,
+  audioMaxBytes: 15 * 1024 * 1024,
+  minAssetSeconds: 2,
+  maxAssetSeconds: 30,
+  maxCombinedSeconds: 30,
+  audioOnlyAllowed: true,
 };
 
 export const seedanceResolutionOptions = [
   { value: "480p", label: "480p" },
   { value: "720p", label: "720p" },
   { value: "1080p", label: "1080p" },
+  { value: "4k", label: "4K" },
 ] as const;
+
+/** 按模型返回可选分辨率：仅 Seedance 2.0 标准版支持 1080p/4K；2.5、fast、mini 均只有 480p/720p。 */
+export function seedanceResolutionOptionsFor(model: string) {
+  return isSeedance20StandardModel(model)
+    ? seedanceResolutionOptions
+    : seedanceResolutionOptions.slice(0, 2);
+}
 
 export const seedanceRatioOptions = [
   { value: "16:9", label: "横屏" },
@@ -32,6 +75,11 @@ export const seedanceRatioOptions = [
 ] as const;
 
 export const seedanceDurationOptions = [-1, 4, 5, 6, 8, 10, 12, 15] as const;
+
+/** Seedance 2.5 原生支持最长 30 秒单段生成（官方/多源确认）。 */
+export const seedance25DurationOptions = [
+  -1, 4, 5, 6, 8, 10, 12, 15, 20, 30,
+] as const;
 
 const seedancePixels = {
   "480p": {
@@ -58,6 +106,14 @@ const seedancePixels = {
     "9:16": "1080x1920",
     "21:9": "2206x946",
   },
+  "4k": {
+    "16:9": "3840x2160",
+    "4:3": "3328x2496",
+    "1:1": "2880x2880",
+    "3:4": "2496x3328",
+    "9:16": "2160x3840",
+    "21:9": "4412x1892",
+  },
 } as const;
 
 export function isSeedanceVideoConfig(
@@ -65,7 +121,7 @@ export function isSeedanceVideoConfig(
 ) {
   const requestConfig =
     "channels" in config
-      ? resolveModelRequestConfig(config, config.model || config.videoModel)
+      ? resolveModelRequestConfig(config, config.videoModel || config.model)
       : config;
   return isArkBaseUrl(requestConfig.baseUrl) || isArkPlanBaseUrl(requestConfig.baseUrl);
 }
@@ -91,6 +147,52 @@ export function isSeedanceFastModel(model: string) {
   return isSeedanceVideoModel(value) && value.includes("fast");
 }
 
+/** Seedance 2.5（doubao-seedance-2-5-*）模型判断。 */
+export function isSeedance25Model(model: string) {
+  const value = model.toLowerCase();
+  return isSeedanceVideoModel(value) && /2[-.]5/.test(value);
+}
+
+/** Seedance 2.0 标准版（doubao-seedance-2-0-260128，非 fast/mini）——唯一支持 1080p/4K 的模型。 */
+export function isSeedance20StandardModel(model: string) {
+  const value = model.toLowerCase();
+  return (
+    isSeedanceVideoModel(value) &&
+    /2[-.]0/.test(value) &&
+    !value.includes("fast") &&
+    !value.includes("mini")
+  );
+}
+
+export function seedanceReferenceLimitsFor(model: string) {
+  return isSeedance25Model(model)
+    ? SEEDANCE_25_REFERENCE_LIMITS
+    : SEEDANCE_REFERENCE_LIMITS;
+}
+
+export type SeedanceModelProfile = {
+  maxDuration: number;
+  referenceLimits: SeedanceReferenceLimits;
+};
+
+/** Seedance 模型能力画像（单一来源，供 API 与 UI 共用，避免散落 if/else）。 */
+export function seedanceModelProfile(model: string): SeedanceModelProfile {
+  return {
+    maxDuration: seedanceMaxDuration(model),
+    referenceLimits: seedanceReferenceLimitsFor(model),
+  };
+}
+
+export function seedanceDurationOptionsFor(model: string) {
+  return isSeedance25Model(model)
+    ? seedance25DurationOptions
+    : seedanceDurationOptions;
+}
+
+export function seedanceMaxDuration(model: string) {
+  return isSeedance25Model(model) ? 30 : 15;
+}
+
 export function isArkPlanBaseUrl(baseUrl: string) {
   return (
     baseUrl.toLowerCase().includes("ark.cn-beijing.volces.com/api/plan/v3") ||
@@ -100,10 +202,8 @@ export function isArkPlanBaseUrl(baseUrl: string) {
 
 export function normalizeSeedanceResolution(value: string, model = "") {
   const normalized = normalizeResolutionToken(value);
-  if (isSeedanceFastModel(model) && normalized === "1080p") return "720p";
-  return seedanceResolutionOptions.some((item) => item.value === normalized)
-    ? normalized
-    : "720p";
+  const allowed = seedanceResolutionOptionsFor(model);
+  return allowed.some((item) => item.value === normalized) ? normalized : "720p";
 }
 
 export function normalizeResolutionToken(value: string) {
@@ -113,10 +213,10 @@ export function normalizeResolutionToken(value: string) {
   return `${resolution}p`;
 }
 
-export function normalizeSeedanceDuration(value: string) {
+export function normalizeSeedanceDuration(value: string, model = "") {
   if (String(value).trim() === "-1") return -1;
   const seconds = Math.floor(Number(value) || 5);
-  return Math.max(4, Math.min(15, seconds));
+  return Math.max(4, Math.min(seedanceMaxDuration(model), seconds));
 }
 
 export function normalizeSeedanceRatio(value: string) {
@@ -185,16 +285,22 @@ export function buildSeedancePromptText(
   return `参考资产编号：${labels.join("、")}。请按这些编号理解提示词中的图片、视频和音频引用。\n\n${text}`;
 }
 
-export function seedanceVideoReferenceError(videos: ReferenceVideo[]) {
+export function seedanceVideoReferenceError(
+  videos: ReferenceVideo[],
+  limits: SeedanceReferenceLimits = SEEDANCE_REFERENCE_LIMITS,
+) {
   let totalDurationMs = 0;
   for (let index = 0; index < videos.length; index += 1) {
     const video = videos[index];
     const label = seedanceReferenceLabel("video", index);
-    if (video.bytes && video.bytes > SEEDANCE_REFERENCE_LIMITS.videoMaxBytes)
-      return `${label} 超过 50MB，请压缩后再上传`;
+    if (video.bytes && video.bytes > limits.videoMaxBytes)
+      return `${label} 超过 ${limits.videoMaxBytes / (1024 * 1024)}MB，请压缩后再上传`;
     if (video.durationMs) {
-      if (video.durationMs < 2000 || video.durationMs > 15000)
-        return `${label} 时长需要在 2-15 秒之间`;
+      if (
+        video.durationMs < limits.minAssetSeconds * 1000 ||
+        video.durationMs > limits.maxAssetSeconds * 1000
+      )
+        return `${label} 时长需要在 ${limits.minAssetSeconds}-${limits.maxAssetSeconds} 秒之间`;
       totalDurationMs += video.durationMs;
     }
     if (video.width && video.height) {
@@ -213,7 +319,29 @@ export function seedanceVideoReferenceError(videos: ReferenceVideo[]) {
         return `${label} 像素总量不符合 Seedance 要求，请转成 480p/720p/1080p 后再上传`;
     }
   }
-  if (totalDurationMs > 15000) return "Seedance 参考视频总时长不能超过 15 秒";
+  if (totalDurationMs > limits.maxCombinedSeconds * 1000)
+    return `Seedance 参考视频总时长不能超过 ${limits.maxCombinedSeconds} 秒`;
+  return "";
+}
+
+export function seedanceAudioReferenceError(
+  audios: ReferenceAudio[],
+  limits: SeedanceReferenceLimits = SEEDANCE_REFERENCE_LIMITS,
+) {
+  let totalDurationMs = 0;
+  for (let index = 0; index < audios.length; index += 1) {
+    const audio = audios[index];
+    if (!audio.durationMs) continue;
+    const label = seedanceReferenceLabel("audio", index);
+    if (
+      audio.durationMs < limits.minAssetSeconds * 1000 ||
+      audio.durationMs > limits.maxAssetSeconds * 1000
+    )
+      return `${label} 时长需要在 ${limits.minAssetSeconds}-${limits.maxAssetSeconds} 秒之间`;
+    totalDurationMs += audio.durationMs;
+  }
+  if (totalDurationMs > limits.maxCombinedSeconds * 1000)
+    return `Seedance 参考音频总时长不能超过 ${limits.maxCombinedSeconds} 秒`;
   return "";
 }
 
