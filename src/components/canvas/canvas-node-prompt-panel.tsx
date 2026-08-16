@@ -254,6 +254,7 @@ function buildNodeConfig(
   return {
     ...globalConfig,
     model,
+    ...(mode === "video" ? { videoModel: model } : {}),
     quality:
       node.metadata?.quality || globalConfig.quality || defaultConfig.quality,
     size: node.metadata?.size || globalConfig.size || defaultConfig.size,
