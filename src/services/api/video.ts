@@ -485,6 +485,15 @@ async function createGatewayTask(
     throw new Error("网关视频暂不支持参考视频/音频，请移除后重试");
   }
   const text = buildSeedancePromptText(prompt, references, [], []);
+  // 参考图通过 metadata.content 传（带 role），new-api 的 UnmarshalMetadata 会
+  // 把 metadata.content 反序列化进火山方舟的 content 数组并保留 role 字段。
+  const referenceContent = await Promise.all(
+    references.slice(0, 9).map(async (image) => ({
+      type: "image_url",
+      image_url: { url: await resolveSeedanceImageUrl(config, image) },
+      role: "reference_image",
+    })),
+  );
   const payload = {
     model: modelOptionName(model),
     prompt: text || prompt.trim(),
@@ -494,6 +503,7 @@ async function createGatewayTask(
       ratio: normalizeSeedanceRatio(config.size),
       generate_audio: boolConfig(config.videoGenerateAudio, true),
       watermark: boolConfig(config.videoWatermark, false),
+      ...(referenceContent.length ? { content: referenceContent } : {}),
     },
   };
   try {
