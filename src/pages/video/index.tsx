@@ -669,7 +669,7 @@ export default function VideoPage() {
       log.task.model || log.model,
     );
     try {
-      for (let attempt = 0; attempt < 120; attempt += 1) {
+      for (let attempt = 0; attempt < 200; attempt += 1) {
         const state = await pollVideoGenerationTask(
           configOverride || taskConfig,
           log.task,
@@ -718,7 +718,7 @@ export default function VideoPage() {
           return;
         }
         if (state.status === "failed") throw new Error(state.error);
-        if (attempt === 119) throw new Error("视频生成超时，请稍后重试");
+        if (attempt === 199) throw new Error("视频生成超时，请稍后重试");
         await delay(log.task.provider === "seedance" ? 5000 : 2500);
       }
     } catch (error) {
