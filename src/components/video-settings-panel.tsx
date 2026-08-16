@@ -51,6 +51,7 @@ type VideoSettingsPanelProps = {
       | "videoSeconds"
       | "videoGenerateAudio"
       | "videoWatermark"
+      | "videoTaskType"
       | "videoCount",
     value: string,
   ) => void;
@@ -206,6 +207,10 @@ function SeedanceVideoSettingsPanel({
   const generateAudio = boolConfig(config.videoGenerateAudio, true);
   const watermark = boolConfig(config.videoWatermark, false);
   const videoCount = Math.min(4, Math.max(1, parseInt(config.videoCount, 10) || 1));
+  const taskType =
+    config.videoTaskType === "edit" || config.videoTaskType === "extend"
+      ? config.videoTaskType
+      : "auto";
   const sliderDuration =
     duration === -1 ? seedanceMaxDuration(model) : duration;
 
@@ -271,6 +276,27 @@ function SeedanceVideoSettingsPanel({
             theme={theme}
             onChange={(value) => onConfigChange("videoSeconds", String(value))}
           />
+        </SettingGroup>
+        <SettingGroup title="任务类型" color={theme.node.muted}>
+          <div className="grid grid-cols-3 gap-2.5">
+            {[
+              { value: "auto", label: "自动" },
+              { value: "edit", label: "视频编辑" },
+              { value: "extend", label: "视频延长" },
+            ].map((item) => (
+              <OptionPill
+                key={item.value}
+                selected={taskType === item.value}
+                theme={theme}
+                onClick={() => onConfigChange("videoTaskType", item.value)}
+              >
+                {item.label}
+              </OptionPill>
+            ))}
+          </div>
+          <div className="mt-1.5 text-[11px] leading-snug opacity-55">
+            需连接参考视频才生效：编辑需提示词含「编辑/增删/修改」，延长需含「延长/续写」。
+          </div>
         </SettingGroup>
         <SettingGroup title="生成音频" color={theme.node.muted}>
           <div className="grid grid-cols-2 gap-2.5">

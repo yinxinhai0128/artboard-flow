@@ -278,6 +278,10 @@ function buildNodeConfig(
       node.metadata?.watermark ||
       globalConfig.videoWatermark ||
       defaultConfig.videoWatermark,
+    videoTaskType:
+      node.metadata?.videoTaskType ||
+      globalConfig.videoTaskType ||
+      defaultConfig.videoTaskType,
     audioVoice:
       node.metadata?.audioVoice ||
       globalConfig.audioVoice ||

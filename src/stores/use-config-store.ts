@@ -41,6 +41,8 @@ export type AiConfig = {
   videoGenerateAudio: string;
   videoWatermark: string;
   videoCount: string;
+  /** 视频任务类型：auto=自动判断 / edit=视频编辑 / extend=视频延长（Seedance 2.5 全模态参考任务） */
+  videoTaskType: string;
   systemPrompt: string;
   models: string[];
   quality: string;
@@ -182,6 +184,7 @@ export const defaultConfig: AiConfig = {
   videoGenerateAudio: "true",
   videoWatermark: "false",
   videoCount: "1",
+  videoTaskType: "auto",
   systemPrompt: "",
   models: [
     "bailian::qwen-image",
@@ -404,6 +407,7 @@ export const useConfigStore = create<ConfigStore>()(
             videoGenerateAudio: config.videoGenerateAudio || "true",
             videoWatermark: config.videoWatermark || "false",
             videoCount: config.videoCount || "1",
+            videoTaskType: config.videoTaskType || "auto",
             canvasImageCount: config.canvasImageCount || "3",
           },
         };

@@ -376,6 +376,11 @@ function hasFirstOrLastFrame(references: ReferenceImage[]) {
   );
 }
 
+function normalizeVideoTaskType(value?: string): "auto" | "edit" | "extend" {
+  if (value === "edit" || value === "extend") return value;
+  return "auto";
+}
+
 async function createSeedanceTask(
   config: AiConfig,
   model: string,
@@ -421,7 +426,9 @@ async function createSeedanceTask(
     duration: normalizeSeedanceDuration(config.videoSeconds, modelName),
     generate_audio: boolConfig(config.videoGenerateAudio, true),
     watermark: boolConfig(config.videoWatermark, false),
-    ...(hasReferenceVideo ? { omni_reference_task_type: "auto" } : {}),
+    ...(hasReferenceVideo
+      ? { omni_reference_task_type: normalizeVideoTaskType(config.videoTaskType) }
+      : {}),
   };
 
   try {
@@ -536,7 +543,13 @@ async function createGatewayTask(
           : normalizeSeedanceRatio(config.size),
       generate_audio: boolConfig(config.videoGenerateAudio, true),
       watermark: boolConfig(config.videoWatermark, false),
-      ...(hasReferenceVideo ? { omni_reference_task_type: "auto" } : {}),
+      ...(hasReferenceVideo
+        ? {
+            omni_reference_task_type: normalizeVideoTaskType(
+              config.videoTaskType,
+            ),
+          }
+        : {}),
       ...(referenceContent.length ? { content: referenceContent } : {}),
     },
   };
