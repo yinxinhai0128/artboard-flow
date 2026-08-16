@@ -370,6 +370,12 @@ async function pollOpenAIVideoTask(
   }
 }
 
+function hasFirstOrLastFrame(references: ReferenceImage[]) {
+  return references.some(
+    (image) => image.role === "first_frame" || image.role === "last_frame",
+  );
+}
+
 async function createSeedanceTask(
   config: AiConfig,
   model: string,
@@ -403,14 +409,19 @@ async function createSeedanceTask(
   );
   if (!content.length)
     throw new Error("请输入视频提示词，或连接参考图片/视频/音频");
+  const hasReferenceVideo = videoReferences.length > 0;
   const payload = {
     model: modelName,
     content,
-    ratio: normalizeSeedanceRatio(config.size),
+    ratio:
+      hasFirstOrLastFrame(references) || hasReferenceVideo
+        ? "adaptive"
+        : normalizeSeedanceRatio(config.size),
     resolution: normalizeSeedanceResolution(config.vquality, modelName),
     duration: normalizeSeedanceDuration(config.videoSeconds, modelName),
     generate_audio: boolConfig(config.videoGenerateAudio, true),
     watermark: boolConfig(config.videoWatermark, false),
+    ...(hasReferenceVideo ? { omni_reference_task_type: "auto" } : {}),
   };
 
   try {
@@ -481,28 +492,51 @@ async function createGatewayTask(
   audioReferences: ReferenceAudio[],
   options?: RequestOptions,
 ): Promise<VideoGenerationTask> {
-  if (videoReferences.length || audioReferences.length) {
-    throw new Error("网关视频暂不支持参考视频/音频，请移除后重试");
-  }
-  const text = buildSeedancePromptText(prompt, references, [], []);
-  // 参考图通过 metadata.content 传（带 role），new-api 的 UnmarshalMetadata 会
+  const text = buildSeedancePromptText(
+    prompt,
+    references,
+    videoReferences,
+    audioReferences,
+  );
+  // 参考素材通过 metadata.content 传（带 role），new-api 的 UnmarshalMetadata 会
   // 把 metadata.content 反序列化进火山方舟的 content 数组并保留 role 字段。
-  const referenceContent = await Promise.all(
-    references.slice(0, 9).map(async (image) => ({
+  const referenceContent: Array<Record<string, unknown>> = [];
+  for (const image of references.slice(0, 9)) {
+    referenceContent.push({
       type: "image_url",
       image_url: { url: await resolveSeedanceImageUrl(config, image) },
-      role: "reference_image",
-    })),
-  );
+      role: image.role || "reference_image",
+    });
+  }
+  for (const video of videoReferences.slice(0, 3)) {
+    referenceContent.push({
+      type: "video_url",
+      video_url: { url: await resolveSeedanceVideoUrl(video) },
+      role: "reference_video",
+    });
+  }
+  for (const audio of audioReferences.slice(0, 3)) {
+    referenceContent.push({
+      type: "audio_url",
+      audio_url: { url: await resolveSeedanceAudioUrl(audio) },
+      role: "reference_audio",
+    });
+  }
+  const hasReferenceVideo = videoReferences.length > 0;
+  const hasFirstLast = hasFirstOrLastFrame(references);
   const payload = {
     model: modelOptionName(model),
     prompt: text || prompt.trim(),
     seconds: normalizeVideoSeconds(config.videoSeconds),
     metadata: {
       resolution: normalizeSeedanceResolution(config.vquality, model),
-      ratio: normalizeSeedanceRatio(config.size),
+      ratio:
+        hasFirstLast || hasReferenceVideo
+          ? "adaptive"
+          : normalizeSeedanceRatio(config.size),
       generate_audio: boolConfig(config.videoGenerateAudio, true),
       watermark: boolConfig(config.videoWatermark, false),
+      ...(hasReferenceVideo ? { omni_reference_task_type: "auto" } : {}),
       ...(referenceContent.length ? { content: referenceContent } : {}),
     },
   };
@@ -615,7 +649,7 @@ async function buildSeedanceContent(
     content.push({
       type: "image_url",
       image_url: { url: await resolveSeedanceImageUrl(config, image) },
-      role: "reference_image",
+      role: image.role || "reference_image",
     });
   }
   for (const video of videoReferences.slice(0, limits.videos)) {

@@ -3,7 +3,7 @@ import {
   resolveModelRequestConfig,
   type AiConfig,
 } from "@/stores/use-config-store";
-import type { ReferenceImage } from "@/types/image";
+import type { ReferenceImage, SeedanceImageRole } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
 export type SeedanceReferenceLimits = {
@@ -267,6 +267,18 @@ export function seedanceReferenceLabel(
   if (kind === "image") return `图片${index + 1}`;
   if (kind === "video") return `视频${index + 1}`;
   return `音频${index + 1}`;
+}
+
+export function seedanceImageRoleLabel(role?: string) {
+  if (role === "first_frame") return "首帧";
+  if (role === "last_frame") return "尾帧";
+  return "参考";
+}
+
+export function nextSeedanceImageRole(role?: string): SeedanceImageRole {
+  if (!role || role === "reference_image") return "first_frame";
+  if (role === "first_frame") return "last_frame";
+  return "reference_image";
 }
 
 export function buildSeedancePromptText(

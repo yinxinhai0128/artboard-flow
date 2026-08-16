@@ -50,8 +50,10 @@ import { formatBytes, formatDuration } from "@/lib/image-utils";
 import {
   boolConfig,
   isSeedanceVideoConfig,
+  nextSeedanceImageRole,
   normalizeSeedanceDuration,
   normalizeSeedanceRatio,
+  seedanceImageRoleLabel,
   seedanceReferenceLabel,
   seedanceReferenceLimitsFor,
   seedanceVideoReferenceError,
@@ -929,6 +931,30 @@ export default function VideoPage() {
                       <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
                         {seedanceReferenceLabel("image", index)}
                       </span>
+                      <button
+                        type="button"
+                        className={`absolute bottom-1 left-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
+                          item.role === "first_frame" ||
+                          item.role === "last_frame"
+                            ? "bg-blue-500 text-white"
+                            : "bg-black/60 text-white"
+                        }`}
+                        onClick={() =>
+                          setReferences((value) =>
+                            value.map((ref) =>
+                              ref.id === item.id
+                                ? {
+                                    ...ref,
+                                    role: nextSeedanceImageRole(ref.role),
+                                  }
+                                : ref,
+                            ),
+                          )
+                        }
+                        title="点击切换：参考图 → 首帧 → 尾帧"
+                      >
+                        {seedanceImageRoleLabel(item.role)}
+                      </button>
                       <ReferenceOrderButtons
                         index={index}
                         total={references.length}
