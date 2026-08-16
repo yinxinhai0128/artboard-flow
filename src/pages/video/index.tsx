@@ -14,6 +14,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  Users,
   VideoIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -164,6 +165,8 @@ export default function VideoPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const [assetIdModalOpen, setAssetIdModalOpen] = useState(false);
+  const [assetIdInput, setAssetIdInput] = useState("");
   const [startedAt, setStartedAt] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
@@ -605,6 +608,30 @@ export default function VideoPage() {
     setAssetPickerOpen(false);
   };
 
+  // 火山方舟授权资产（虚拟人像/真人素材）—— asset ID 转 asset:// 参考图
+  const addAssetReference = (assetId: string) => {
+    const trimmed = assetId.trim();
+    if (!trimmed) return;
+    setReferences((value) =>
+      [
+        ...value,
+        {
+          id: nanoid(),
+          name: `虚拟人像 ${trimmed}`,
+          type: "image/png",
+          dataUrl: "",
+          url: `asset://${trimmed}`,
+        },
+      ].slice(0, seedanceLimits.images),
+    );
+  };
+
+  const confirmAssetId = () => {
+    addAssetReference(assetIdInput);
+    setAssetIdInput("");
+    setAssetIdModalOpen(false);
+  };
+
   const createSession = () => {
     setPrompt("");
     setReferences([]);
@@ -870,6 +897,13 @@ export default function VideoPage() {
                     >
                       上传
                     </Button>
+                    <Button
+                      size="small"
+                      icon={<Users className="size-3.5" />}
+                      onClick={() => setAssetIdModalOpen(true)}
+                    >
+                      虚拟人像
+                    </Button>
                   </div>
                 </div>
                 <div className="hover-scrollbar hover-scrollbar-hint flex min-h-24 w-full min-w-0 max-w-full gap-2 overflow-x-scroll overflow-y-hidden rounded-lg border border-dashed border-stone-300 p-2 pb-3 overscroll-x-contain dark:border-stone-700">
@@ -878,11 +912,20 @@ export default function VideoPage() {
                       key={item.id}
                       className="group relative size-20 shrink-0 overflow-hidden rounded-md border border-stone-200 dark:border-stone-800"
                     >
-                      <img
-                        src={item.dataUrl}
-                        alt={item.name}
-                        className="size-full object-cover"
-                      />
+                      {item.url?.startsWith("asset://") ? (
+                        <div className="flex size-full flex-col items-center justify-center gap-1 bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-700">
+                          <Users className="size-7 text-stone-400" />
+                          <span className="max-w-full truncate px-1 text-[9px] text-stone-500">
+                            {item.url.slice("asset://".length)}
+                          </span>
+                        </div>
+                      ) : (
+                        <img
+                          src={item.dataUrl}
+                          alt={item.name}
+                          className="size-full object-cover"
+                        />
+                      )}
                       <span className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
                         {seedanceReferenceLabel("image", index)}
                       </span>
@@ -1175,6 +1218,38 @@ export default function VideoPage() {
         onInsert={(payload) => void insertPickedAsset(payload)}
         onClose={() => setAssetPickerOpen(false)}
       />
+      <Modal
+        title="添加虚拟人像"
+        open={assetIdModalOpen}
+        onCancel={() => {
+          setAssetIdModalOpen(false);
+          setAssetIdInput("");
+        }}
+        onOk={confirmAssetId}
+        okText="添加"
+        cancelText="取消"
+        okButtonProps={{ disabled: !assetIdInput.trim() }}
+      >
+        <div className="space-y-2.5 py-1">
+          <div className="text-sm leading-6 text-stone-600 dark:text-stone-400">
+            输入火山方舟「虚拟人像库」的素材 ID（asset ID），将以{" "}
+            <code className="rounded bg-stone-100 px-1 dark:bg-stone-800">
+              asset://
+            </code>{" "}
+            形式作为参考图使用。
+          </div>
+          <Input
+            value={assetIdInput}
+            onChange={(event) => setAssetIdInput(event.target.value)}
+            onPressEnter={confirmAssetId}
+            placeholder="粘贴 asset ID"
+            autoFocus
+          />
+          <div className="text-xs text-stone-500">
+            提示词中请用「图片1」等编号引用该人像素材。
+          </div>
+        </div>
+      </Modal>
       <Modal
         title="删除生成记录"
         open={deleteConfirmOpen}
