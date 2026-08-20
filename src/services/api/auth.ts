@@ -41,6 +41,16 @@ async function requestJson<T>(
   return data as T;
 }
 
+export async function register(
+  username: string,
+  password: string,
+): Promise<void> {
+  await requestJson<unknown>("/api/user/register", {
+    method: "POST",
+    body: { username, password, password2: password },
+  });
+}
+
 export async function login(
   username: string,
   password: string,
