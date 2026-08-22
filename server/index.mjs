@@ -36,6 +36,12 @@ import {
   normalizeIpAsset,
   parseIpAssetRow,
 } from "./ip-asset-store.mjs";
+import {
+  normalizeShot,
+  normalizeStoryboard,
+  parseShotRow,
+  parseStoryboardRow,
+} from "./storyboard-store.mjs";
 
 const app = Fastify({ logger: true });
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -81,6 +87,28 @@ db.exec(`
     reference_keys_json text not null,
     style_keywords text,
     description text,
+    created_at text not null,
+    updated_at text not null
+  );
+
+  create table if not exists storyboards (
+    id text primary key,
+    title text not null,
+    ip_asset_ids_json text not null,
+    created_at text not null,
+    updated_at text not null
+  );
+
+  create table if not exists storyboard_shots (
+    id text primary key,
+    storyboard_id text not null,
+    order_index integer not null,
+    duration_sec integer not null,
+    description text not null,
+    camera text not null,
+    ip_asset_id text,
+    prompt_override text,
+    status text not null,
     created_at text not null,
     updated_at text not null
   );
@@ -517,6 +545,300 @@ app.delete("/api/ip-assets/:id", async (request, reply) => {
   return { ok: true };
 });
 
+// ── 分镜脚本：storyboards + shots ───────────────────────────
+app.get("/api/storyboards", async () => {
+  const rows = db
+    .prepare(
+      `
+    select id, title, ip_asset_ids_json, created_at, updated_at
+    from storyboards
+    order by datetime(updated_at) desc
+  `,
+    )
+    .all();
+  return rows.map(parseStoryboardRow);
+});
+
+app.post("/api/storyboards", async (request, reply) => {
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  try {
+    const normalized = normalizeStoryboard(body);
+    if (normalized.ipAssetIds.length) {
+      for (const aid of normalized.ipAssetIds) {
+        const row = db.prepare("select id from ip_assets where id = ?").get(aid);
+        if (!row) return reply.code(400).send({ error: `关联IP资产不存在: ${aid}` });
+      }
+    }
+    const now = nowIso();
+    const storyboardId = id();
+    db.prepare(
+      `
+    insert into storyboards (id, title, ip_asset_ids_json, created_at, updated_at)
+    values (?, ?, ?, ?, ?)
+  `,
+    ).run(
+      storyboardId,
+      normalized.title,
+      JSON.stringify(normalized.ipAssetIds),
+      now,
+      now,
+    );
+    const row = db.prepare("select * from storyboards where id = ?").get(storyboardId);
+    return reply.code(201).send(parseStoryboardRow(row));
+  } catch (error) {
+    return reply
+      .code(400)
+      .send({ error: error instanceof Error ? error.message : "参数错误" });
+  }
+});
+
+app.get("/api/storyboards/:id", async (request, reply) => {
+  const row = db.prepare("select * from storyboards where id = ?").get(request.params.id);
+  if (!row) return reply.code(404).send({ error: "分镜不存在" });
+  return parseStoryboardRow(row);
+});
+
+app.put("/api/storyboards/:id", async (request, reply) => {
+  const existing = db.prepare("select * from storyboards where id = ?").get(request.params.id);
+  if (!existing) return reply.code(404).send({ error: "分镜不存在" });
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  try {
+    const prev = parseStoryboardRow(existing);
+    const merged = {
+      title: body.title ?? prev.title,
+      ipAssetIds: body.ipAssetIds ?? body.ip_asset_ids ?? body.ip_asset_ids_json ?? prev.ipAssetIds,
+    };
+    if (typeof merged.ipAssetIds === "string") {
+      try {
+        const parsed = JSON.parse(merged.ipAssetIds);
+        merged.ipAssetIds = Array.isArray(parsed) ? parsed : prev.ipAssetIds;
+      } catch {
+        merged.ipAssetIds = prev.ipAssetIds;
+      }
+    }
+    const normalized = normalizeStoryboard(merged);
+    if (normalized.ipAssetIds.length) {
+      for (const aid of normalized.ipAssetIds) {
+        const row = db.prepare("select id from ip_assets where id = ?").get(aid);
+        if (!row) return reply.code(400).send({ error: `关联IP资产不存在: ${aid}` });
+      }
+    }
+    const updatedAt = nowIso();
+    db.prepare(
+      `
+    update storyboards
+    set title = ?, ip_asset_ids_json = ?, updated_at = ?
+    where id = ?
+  `,
+    ).run(normalized.title, JSON.stringify(normalized.ipAssetIds), updatedAt, request.params.id);
+    const row = db.prepare("select * from storyboards where id = ?").get(request.params.id);
+    return parseStoryboardRow(row);
+  } catch (error) {
+    return reply
+      .code(400)
+      .send({ error: error instanceof Error ? error.message : "参数错误" });
+  }
+});
+
+app.delete("/api/storyboards/:id", async (request, reply) => {
+  const result = db.prepare("delete from storyboards where id = ?").run(request.params.id);
+  if (result.changes === 0) return reply.code(404).send({ error: "分镜不存在" });
+  db.prepare("delete from storyboard_shots where storyboard_id = ?").run(request.params.id);
+  return { ok: true };
+});
+
+app.get("/api/storyboards/:id/shots", async (request, reply) => {
+  const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!sb) return reply.code(404).send({ error: "分镜不存在" });
+  const rows = db
+    .prepare(
+      `
+    select * from storyboard_shots
+    where storyboard_id = ?
+    order by order_index asc, datetime(created_at) asc
+  `,
+    )
+    .all(request.params.id);
+  return rows.map(parseShotRow);
+});
+
+app.post("/api/storyboards/:id/shots", async (request, reply) => {
+  const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!sb) return reply.code(404).send({ error: "分镜不存在" });
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  try {
+    const normalized = normalizeShot(body);
+    if (normalized.ipAssetId) {
+      const asset = db.prepare("select id from ip_assets where id = ?").get(normalized.ipAssetId);
+      if (!asset) return reply.code(400).send({ error: "关联IP资产不存在" });
+    }
+    const maxRow = db
+      .prepare("select max(order_index) as maxIdx from storyboard_shots where storyboard_id = ?")
+      .get(request.params.id);
+    const hasOrder = body.orderIndex != null || body.order_index != null;
+    const nextOrder = maxRow && maxRow.maxIdx != null ? maxRow.maxIdx + 1 : 0;
+    const orderIndex = hasOrder ? normalized.orderIndex : nextOrder;
+    const now = nowIso();
+    const shotId = id();
+    db.prepare(
+      `
+    insert into storyboard_shots (id, storyboard_id, order_index, duration_sec, description, camera, ip_asset_id, prompt_override, status, created_at, updated_at)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+    ).run(
+      shotId,
+      request.params.id,
+      orderIndex,
+      normalized.durationSec,
+      normalized.description,
+      normalized.camera,
+      normalized.ipAssetId,
+      normalized.promptOverride,
+      normalized.status,
+      now,
+      now,
+    );
+    const row = db.prepare("select * from storyboard_shots where id = ?").get(shotId);
+    return reply.code(201).send(parseShotRow(row));
+  } catch (error) {
+    return reply
+      .code(400)
+      .send({ error: error instanceof Error ? error.message : "参数错误" });
+  }
+});
+
+app.put("/api/storyboards/:id/shots/:shotId", async (request, reply) => {
+  const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!sb) return reply.code(404).send({ error: "分镜不存在" });
+  const existing = db
+    .prepare("select * from storyboard_shots where id = ? and storyboard_id = ?")
+    .get(request.params.shotId, request.params.id);
+  if (!existing) return reply.code(404).send({ error: "分镜镜头不存在" });
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  try {
+    const prev = parseShotRow(existing);
+    const merged = {
+      description: body.description ?? prev.description,
+      camera: body.camera ?? prev.camera,
+      durationSec: body.durationSec ?? body.duration_sec ?? body.duration ?? prev.durationSec,
+      orderIndex: body.orderIndex ?? body.order_index ?? prev.orderIndex,
+      ipAssetId: body.ipAssetId ?? body.ip_asset_id ?? prev.ipAssetId,
+      promptOverride: body.promptOverride ?? body.prompt_override ?? prev.promptOverride,
+      status: body.status ?? prev.status,
+    };
+    const normalized = normalizeShot(merged);
+    if (normalized.ipAssetId) {
+      const asset = db.prepare("select id from ip_assets where id = ?").get(normalized.ipAssetId);
+      if (!asset) return reply.code(400).send({ error: "关联IP资产不存在" });
+    }
+    const updatedAt = nowIso();
+    db.prepare(
+      `
+    update storyboard_shots
+    set description = ?, camera = ?, duration_sec = ?, order_index = ?, ip_asset_id = ?, prompt_override = ?, status = ?, updated_at = ?
+    where id = ?
+  `,
+    ).run(
+      normalized.description,
+      normalized.camera,
+      normalized.durationSec,
+      normalized.orderIndex,
+      normalized.ipAssetId,
+      normalized.promptOverride,
+      normalized.status,
+      updatedAt,
+      request.params.shotId,
+    );
+    const row = db.prepare("select * from storyboard_shots where id = ?").get(request.params.shotId);
+    return parseShotRow(row);
+  } catch (error) {
+    return reply
+      .code(400)
+      .send({ error: error instanceof Error ? error.message : "参数错误" });
+  }
+});
+
+app.delete("/api/storyboards/:id/shots/:shotId", async (request, reply) => {
+  const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!sb) return reply.code(404).send({ error: "分镜不存在" });
+  const result = db
+    .prepare("delete from storyboard_shots where id = ? and storyboard_id = ?")
+    .run(request.params.shotId, request.params.id);
+  if (result.changes === 0) return reply.code(404).send({ error: "分镜镜头不存在" });
+  const remaining = db
+    .prepare("select id from storyboard_shots where storyboard_id = ? order by order_index asc, datetime(created_at) asc")
+    .all(request.params.id);
+  {
+    const upd = db.prepare("update storyboard_shots set order_index = ?, updated_at = ? where id = ?");
+    const now = nowIso();
+    db.exec("BEGIN");
+    try {
+      remaining.forEach((r, idx) => upd.run(idx, now, r.id));
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+  return { ok: true };
+});
+
+app.post("/api/storyboards/:id/reorder", async (request, reply) => {
+  const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!sb) return reply.code(404).send({ error: "分镜不存在" });
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  const orderedIds = body.orderedIds ?? body.ordered_ids ?? body.ids;
+  if (!Array.isArray(orderedIds)) {
+    return reply.code(400).send({ error: "排序参数需为 orderedIds 数组" });
+  }
+  const cleanIds = orderedIds.filter((v) => typeof v === "string");
+  if (cleanIds.length !== orderedIds.length) {
+    return reply.code(400).send({ error: "排序参数包含非字符串ID" });
+  }
+  if (new Set(cleanIds).size !== cleanIds.length) {
+    return reply.code(400).send({ error: "排序包含重复ID" });
+  }
+  const existing = db
+    .prepare("select id from storyboard_shots where storyboard_id = ?")
+    .all(request.params.id);
+  const existingIds = new Set(existing.map((r) => r.id));
+  if (cleanIds.length !== existing.length) {
+    return reply.code(400).send({ error: "排序数量与镜头数量不匹配" });
+  }
+  for (const oid of cleanIds) {
+    if (!existingIds.has(oid)) {
+      return reply.code(400).send({ error: `镜头不存在或不属于该分镜: ${oid}` });
+    }
+  }
+  {
+    const upd = db.prepare("update storyboard_shots set order_index = ?, updated_at = ? where id = ?");
+    const now = nowIso();
+    db.exec("BEGIN");
+    try {
+      cleanIds.forEach((sid, idx) => upd.run(idx, now, sid));
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+  const rows = db
+    .prepare(
+      `
+    select * from storyboard_shots
+    where storyboard_id = ?
+    order by order_index asc
+  `,
+    )
+    .all(request.params.id);
+  return rows.map(parseShotRow);
+});
+
 app.get("/api/projects", async () => {
   const rows = db
     .prepare(
@@ -596,10 +918,14 @@ app.delete("/api/projects", async (request) => {
     ? request.body.ids.filter((value) => typeof value === "string")
     : [];
   const remove = db.prepare("delete from projects where id = ?");
-  const transaction = db.transaction((projectIds) => {
-    for (const projectId of projectIds) remove.run(projectId);
-  });
-  transaction(ids);
+  db.exec("BEGIN");
+  try {
+    for (const projectId of ids) remove.run(projectId);
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
   return { ok: true, deleted: ids.length };
 });
 
