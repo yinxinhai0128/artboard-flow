@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin } from "vitest/config";
 
 import { parseChangelog } from "./src/lib/release";
 
@@ -54,5 +54,22 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(localVersion),
     __APP_RELEASES__: JSON.stringify(parseChangelog(localChangelog)),
+  },
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8787",
+        changeOrigin: true,
+      },
+    },
+  },
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    css: true,
+    testTimeout: 90000,
+    hookTimeout: 90000,
   },
 });

@@ -17,6 +17,9 @@ import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
 import VideoPage from "@/pages/video";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { lazy, Suspense } from "react";
+
+const IpAssetsPage = lazy(() => import("@/pages/ip-assets"));
 
 /** 强制登录守卫：未登录一律跳转 /login。 */
 function RequireAuth() {
@@ -45,6 +48,14 @@ export const router = createBrowserRouter([
           { path: "/canvas", element: <CanvasPage /> },
           { path: "/canvas/:id", element: <CanvasProjectPage /> },
           { path: "/config", element: <ConfigPage /> },
+          {
+            path: "/ip-assets",
+            element: (
+              <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
+                <IpAssetsPage />
+              </Suspense>
+            ),
+          },
         ],
       },
     ],

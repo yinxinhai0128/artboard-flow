@@ -1,4 +1,5 @@
 import {
+  Box,
   FileText,
   ImagePlus,
   Images,
@@ -12,6 +13,11 @@ export const navigationTools = [
     slug: "canvas",
     label: "我的画布",
     icon: Maximize2,
+  },
+  {
+    slug: "ip-assets",
+    label: "IP资产",
+    icon: Box,
   },
   {
     slug: "image",
