@@ -32,6 +32,10 @@ import {
   verifyPassword,
   verifyToken,
 } from "./auth-utils.mjs";
+import {
+  normalizeIpAsset,
+  parseIpAssetRow,
+} from "./ip-asset-store.mjs";
 
 const app = Fastify({ logger: true });
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -68,6 +72,17 @@ db.exec(`
     password_hash text not null,
     nickname text,
     created_at text not null
+  );
+
+  create table if not exists ip_assets (
+    id text primary key,
+    name text not null,
+    type text not null,
+    reference_keys_json text not null,
+    style_keywords text,
+    description text,
+    created_at text not null,
+    updated_at text not null
   );
 `);
 
@@ -379,6 +394,127 @@ app.get("/api/assets/:key", async (request, reply) => {
   return reply
     .type(mimeTypeFromAssetKey(key))
     .send(createReadStream(assetPath));
+});
+
+app.get("/api/ip-assets", async () => {
+  const rows = db
+    .prepare(
+      `
+    select id, name, type, reference_keys_json, style_keywords, description, created_at, updated_at
+    from ip_assets
+    order by datetime(updated_at) desc
+  `,
+    )
+    .all();
+  return rows.map(parseIpAssetRow);
+});
+
+app.post("/api/ip-assets", async (request, reply) => {
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  try {
+    const normalized = normalizeIpAsset(body);
+    const now = nowIso();
+    const assetId = id();
+    db.prepare(
+      `
+    insert into ip_assets (id, name, type, reference_keys_json, style_keywords, description, created_at, updated_at)
+    values (?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+    ).run(
+      assetId,
+      normalized.name,
+      normalized.type,
+      JSON.stringify(normalized.referenceKeys),
+      normalized.styleKeywords,
+      normalized.description,
+      now,
+      now,
+    );
+    const row = db
+      .prepare("select * from ip_assets where id = ?")
+      .get(assetId);
+    return reply.code(201).send(parseIpAssetRow(row));
+  } catch (error) {
+    return reply
+      .code(400)
+      .send({ error: error instanceof Error ? error.message : "参数错误" });
+  }
+});
+
+app.get("/api/ip-assets/:id", async (request, reply) => {
+  const row = db
+    .prepare("select * from ip_assets where id = ?")
+    .get(request.params.id);
+  if (!row) return reply.code(404).send({ error: "IP资产不存在" });
+  return parseIpAssetRow(row);
+});
+
+app.put("/api/ip-assets/:id", async (request, reply) => {
+  const existing = db
+    .prepare("select * from ip_assets where id = ?")
+    .get(request.params.id);
+  if (!existing) return reply.code(404).send({ error: "IP资产不存在" });
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  try {
+    const prev = parseIpAssetRow(existing);
+    const merged = {
+      name: body.name ?? prev.name,
+      type: body.type ?? prev.type,
+      referenceKeys:
+        body.referenceKeys ??
+        body.reference_keys ??
+        body.reference_keys_json ??
+        prev.referenceKeys,
+      styleKeywords:
+        body.styleKeywords ?? body.style_keywords ?? prev.styleKeywords,
+      description: body.description ?? prev.description,
+    };
+    // 处理 referenceKeys 为 JSON 字符串的情况
+    if (typeof merged.referenceKeys === "string") {
+      try {
+        const parsed = JSON.parse(merged.referenceKeys);
+        merged.referenceKeys = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        merged.referenceKeys = [];
+      }
+    }
+    const normalized = normalizeIpAsset(merged);
+    const updatedAt = nowIso();
+    db.prepare(
+      `
+    update ip_assets
+    set name = ?, type = ?, reference_keys_json = ?, style_keywords = ?, description = ?, updated_at = ?
+    where id = ?
+  `,
+    ).run(
+      normalized.name,
+      normalized.type,
+      JSON.stringify(normalized.referenceKeys),
+      normalized.styleKeywords,
+      normalized.description,
+      updatedAt,
+      request.params.id,
+    );
+    const row = db
+      .prepare("select * from ip_assets where id = ?")
+      .get(request.params.id);
+    return parseIpAssetRow(row);
+  } catch (error) {
+    return reply
+      .code(400)
+      .send({ error: error instanceof Error ? error.message : "参数错误" });
+  }
+});
+
+app.delete("/api/ip-assets/:id", async (request, reply) => {
+  const result = db
+    .prepare("delete from ip_assets where id = ?")
+    .run(request.params.id);
+  if (result.changes === 0)
+    return reply.code(404).send({ error: "IP资产不存在" });
+  return { ok: true };
 });
 
 app.get("/api/projects", async () => {
