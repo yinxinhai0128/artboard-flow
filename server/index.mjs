@@ -42,6 +42,11 @@ import {
   parseShotRow,
   parseStoryboardRow,
 } from "./storyboard-store.mjs";
+import {
+  aggregateDashboard,
+  normalizeReview,
+  parseReviewRow,
+} from "./review-store.mjs";
 
 const app = Fastify({ logger: true });
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -111,6 +116,16 @@ db.exec(`
     status text not null,
     created_at text not null,
     updated_at text not null
+  );
+
+  create table if not exists shot_reviews (
+    id text primary key,
+    shot_id text not null,
+    generation_job_id text,
+    verdict text not null,
+    reason text,
+    comment text,
+    created_at text not null
   );
 `);
 
@@ -837,6 +852,78 @@ app.post("/api/storyboards/:id/reorder", async (request, reply) => {
     )
     .all(request.params.id);
   return rows.map(parseShotRow);
+});
+
+// ── 审核与看板：shot_reviews + dashboard ───────────────────────
+app.post("/api/shots/:shotId/reviews", async (request, reply) => {
+  const shot = db
+    .prepare("select id from storyboard_shots where id = ?")
+    .get(request.params.shotId);
+  if (!shot) return reply.code(404).send({ error: "分镜镜头不存在" });
+  const body =
+    request.body && typeof request.body === "object" ? request.body : {};
+  try {
+    const normalized = normalizeReview(body);
+    const now = nowIso();
+    const reviewId = id();
+    db.prepare(
+      `
+    insert into shot_reviews (id, shot_id, generation_job_id, verdict, reason, comment, created_at)
+    values (?, ?, ?, ?, ?, ?, ?)
+  `,
+    ).run(
+      reviewId,
+      request.params.shotId,
+      normalized.generationJobId,
+      normalized.verdict,
+      normalized.reason,
+      normalized.comment,
+      now,
+    );
+    const row = db
+      .prepare("select * from shot_reviews where id = ?")
+      .get(reviewId);
+    return reply.code(201).send(parseReviewRow(row));
+  } catch (error) {
+    return reply
+      .code(400)
+      .send({ error: error instanceof Error ? error.message : "参数错误" });
+  }
+});
+
+app.get("/api/storyboards/:id/reviews", async (request, reply) => {
+  const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!sb) return reply.code(404).send({ error: "分镜不存在" });
+  const rows = db
+    .prepare(
+      `
+    select r.* from shot_reviews r
+    join storyboard_shots s on r.shot_id = s.id
+    where s.storyboard_id = ?
+    order by datetime(r.created_at) desc
+  `,
+    )
+    .all(request.params.id);
+  return rows.map(parseReviewRow);
+});
+
+app.get("/api/dashboard/stats", async () => {
+  const jobs = db.prepare("select status from generation_jobs").all();
+  const reviews = db.prepare("select verdict, reason from shot_reviews").all();
+  const agg = aggregateDashboard({ jobs, reviews });
+  const storyboardCount = db
+    .prepare("select count(*) as c from storyboards")
+    .get();
+  const shotCount = db
+    .prepare("select count(*) as c from storyboard_shots")
+    .get();
+  const totalStoryboards = storyboardCount ? Number(storyboardCount.c) : 0;
+  const totalShots = shotCount ? Number(shotCount.c) : 0;
+  return {
+    ...agg,
+    totalStoryboards,
+    totalShots,
+  };
 });
 
 app.get("/api/projects", async () => {
