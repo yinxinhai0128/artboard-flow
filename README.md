@@ -1,8 +1,8 @@
-# ArtboardFlow
+# ArtboardFlow · 游戏CG预演中台
 
-一个跑在浏览器里的 AI 创作工作台。核心是一块无限画布：把图片、视频、文本、音频节点拖进去连上线，再把素材交给生图 / 生视频模型出结果。画布、项目、生成记录、提示词库都存在浏览器本地（localStorage / IndexedDB），没有自己的后端，不用搭服务就能跑。
+面向游戏开场 / CG 预演的 AIGC 中台，在原有无限画布之上扩展出垂直闭环：**IP资产沉淀 → 分镜脚本编排 → 批量预演生成 → 人审打标 → 数据看板**。美术可沉淀角色 / 场景 / 道具参考图与风格词保障IP一致性，策划 / 导演可在分镜中配置多镜运镜与文案后一键批量生成视频预演，通过“通过 / 不通过 + 原因”人审闭环筛选可用镜头，看板聚合生成成功率、人审通过率与 Bad Case TOP3，直观对比“传统流程 14 天 vs AIGC 流程 2 天”的提效。
 
-最早是给自己攒素材、串镜头用的，后来陆陆续续加了画布编排、模型自定义脚本、插件和本地 Agent，慢慢变成了现在的样子。
+底层仍保留通用无限画布能力：画布、项目、生成记录、提示词库本地存取，支持节点拖拽连线、模型自定义脚本、插件与本地 Agent，未破坏原有体验。
 
 ## 能做什么
 
@@ -52,9 +52,19 @@ plugins/        # 画布节点插件（HTML / Markdown / SVG 等）+ SDK
 docs/           # Next.js 文档站
 ```
 
+## 游戏CG预演工作流
+
+1. **IP资产**：在 `/ip-assets` 创建角色 / 场景 / 道具资产包，上传 1-6 张参考图（复用 `/api/assets`），填写风格关键词与描述，保障全流程 IP 一致性。
+2. **分镜脚本**：在 `/storyboard` 新建分镜，关联 IP 资产，逐镜配置画面描述、运镜（推 / 拉 / 环绕 / 固定 / 跟随）、时长 2-15s、绑定 IP 与提示词追加，支持拖拽排序。
+3. **批量生成**：分镜详情页点击“一键生成全片”，后端为每镜创建 `generation_jobs`（Seedance 2.5 视频模型），前端轮询展示任务状态与缩略图。
+4. **人审打标**：在生成结果或镜头审核区对每镜点击“通过”或“不通过”（需选择原因：脸崩 / 盔甲错 / 风格偏离 / 运镜错 / 文字错 / 其他 + 备注），调用 `POST /api/shots/:shotId/reviews`，支持无任务时直接审核。
+5. **数据看板**：在 `/dashboard` 查看聚合指标——总分镜数、总镜头数、总生成数、生成成功率、人审通过率、总审核数，以及 Bad Case TOP3 与“传统 14 天 vs AIGC 2 天”提效对比。
+
+> 演示数据见 `docs/superpowers/plans/demo-data.json`，包含 1 个示例 IP 包与 1 个示例分镜（2 镜）。
+
 ## 技术栈
 
-Vite · React · TypeScript · Ant Design · Zustand · Tailwind CSS，构建用 Bun。
+Vite · React · TypeScript · Ant Design · Zustand · Tailwind CSS，构建用 Bun。新增后端为 Fastify + SQLite（DatabaseSync），表 `ip_assets / storyboards / storyboard_shots / shot_reviews`，前端新增页面 `/ip-assets /storyboard /dashboard`，复用现有生成队列与鉴权。
 
 ## License
 

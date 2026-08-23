@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Box,
   Clapperboard,
   FileText,
@@ -24,6 +25,11 @@ export const navigationTools = [
     slug: "storyboard",
     label: "分镜",
     icon: Clapperboard,
+  },
+  {
+    slug: "dashboard",
+    label: "看板",
+    icon: BarChart3,
   },
   {
     slug: "image",

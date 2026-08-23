@@ -1,0 +1,22 @@
+{
+  "ipAsset": {
+    "name": "示例骑士-通用奇幻",
+    "type": "character",
+    "styleKeywords": "写实, 铠甲, 废墟"
+  },
+  "storyboard": {
+    "title": "示例开场-废墟觉醒",
+    "shots": [
+      {
+        "description": "废墟城市远景乌云",
+        "camera": "push",
+        "durationSec": 3
+      },
+      {
+        "description": "骑士背影转身特写",
+        "camera": "orbit",
+        "durationSec": 4
+      }
+    ]
+  }
+}

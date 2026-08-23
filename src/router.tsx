@@ -22,6 +22,7 @@ import { lazy, Suspense } from "react";
 const IpAssetsPage = lazy(() => import("@/pages/ip-assets"));
 const StoryboardListPage = lazy(() => import("@/pages/storyboard"));
 const StoryboardDetailPage = lazy(() => import("@/pages/storyboard/detail"));
+const DashboardPage = lazy(() => import("@/pages/dashboard"));
 
 /** 强制登录守卫：未登录一律跳转 /login。 */
 function RequireAuth() {
@@ -71,6 +72,14 @@ export const router = createBrowserRouter([
             element: (
               <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
                 <StoryboardDetailPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: "/dashboard",
+            element: (
+              <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
+                <DashboardPage />
               </Suspense>
             ),
           },

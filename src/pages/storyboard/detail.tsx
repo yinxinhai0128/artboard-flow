@@ -15,6 +15,15 @@ const CAMERA_OPTIONS = [
   { label: "跟随", value: "follow" },
 ];
 
+const REASON_OPTIONS = [
+  { label: "脸崩", value: "face_collapse" },
+  { label: "盔甲错", value: "armor_error" },
+  { label: "风格偏离", value: "style_drift" },
+  { label: "运镜错", value: "camera_error" },
+  { label: "文字错", value: "text_error" },
+  { label: "其他", value: "other" },
+];
+
 export default function StoryboardDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { message } = App.useApp();
@@ -29,6 +38,12 @@ export default function StoryboardDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewShotId, setReviewShotId] = useState<string | null>(null);
+  const [reviewJobId, setReviewJobId] = useState<string | null>(null);
+  const [reviewReason, setReviewReason] = useState("face_collapse");
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!id) return;
@@ -172,6 +187,65 @@ export default function StoryboardDetailPage() {
     }
   };
 
+  const getJobIdForShot = (shotId: string): string | null => {
+    const match = jobs.find((j) => String((j.payload as Record<string, unknown>)?.shotId || j.nodeId) === shotId);
+    return match ? match.id : null;
+  };
+
+  const handleApprove = async (shotId: string, jobId?: string | null) => {
+    const generationJobId = jobId || getJobIdForShot(shotId) || undefined;
+    try {
+      const body: Record<string, unknown> = { verdict: "approved" };
+      if (generationJobId) body.generationJobId = generationJobId;
+      const res = await fetch(`/api/shots/${encodeURIComponent(shotId)}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "审核失败");
+      message.success("审核成功");
+      void fetchJobs();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "审核失败");
+    }
+  };
+
+  const openRejectModal = (shotId: string, jobId?: string | null) => {
+    setReviewShotId(shotId);
+    setReviewJobId(jobId || getJobIdForShot(shotId));
+    setReviewReason("face_collapse");
+    setReviewComment("");
+    setReviewModalOpen(true);
+  };
+
+  const handleRejectSubmit = async () => {
+    if (!reviewShotId) return;
+    if (!reviewReason) {
+      message.warning("请选择不通过原因");
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const body: Record<string, unknown> = { verdict: "rejected", reason: reviewReason, comment: reviewComment };
+      if (reviewJobId) body.generationJobId = reviewJobId;
+      const res = await fetch(`/api/shots/${encodeURIComponent(reviewShotId)}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "审核失败");
+      message.success("审核成功");
+      setReviewModalOpen(false);
+      void fetchJobs();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "审核失败");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center p-8">
@@ -268,34 +342,78 @@ export default function StoryboardDetailPage() {
               <div className="space-y-2">
                 <div className="text-xs text-stone-500">轮询 GET /api/generation/jobs?projectId={board.id} 展示任务状态</div>
                 <div className="divide-y divide-stone-100 rounded border border-stone-200 dark:divide-stone-800 dark:border-stone-700">
-                  {jobs.map((job) => (
-                    <div key={job.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-mono text-xs">{job.id}</div>
-                        <div className="truncate text-xs text-stone-500">
-                          shot: {String((job.payload as Record<string, unknown>)?.shotId || job.nodeId)} · prompt:{" "}
-                          {String((job.payload as Record<string, unknown>)?.prompt || "").slice(0, 40)}
+                  {jobs.map((job) => {
+                    const shotId = String((job.payload as Record<string, unknown>)?.shotId || job.nodeId);
+                    return (
+                      <div key={job.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-mono text-xs">{job.id}</div>
+                          <div className="truncate text-xs text-stone-500">
+                            shot: {shotId} · prompt: {String((job.payload as Record<string, unknown>)?.prompt || "").slice(0, 40)}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Tag
+                            color={
+                              job.status === "succeeded"
+                                ? "success"
+                                : job.status === "failed"
+                                  ? "error"
+                                  : job.status === "queued"
+                                    ? "default"
+                                    : "processing"
+                            }
+                          >
+                            {job.status}
+                          </Tag>
+                          <Button size="small" type="primary" ghost onClick={() => void handleApprove(shotId, job.id)}>
+                            通过
+                          </Button>
+                          <Button size="small" danger onClick={() => openRejectModal(shotId, job.id)}>
+                            不通过
+                          </Button>
                         </div>
                       </div>
-                      <Tag
-                        color={
-                          job.status === "succeeded"
-                            ? "success"
-                            : job.status === "failed"
-                              ? "error"
-                              : job.status === "queued"
-                                ? "default"
-                                : "processing"
-                        }
-                      >
-                        {job.status}
-                      </Tag>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (
               <div className="py-6 text-center text-sm text-stone-400">暂无生成任务，点击“一键生成全片”创建批量任务</div>
+            )}
+          </Card>
+
+          {/* 镜头审核 - 支持无 job 场景 */}
+          <Card title="镜头审核">
+            {shots.length ? (
+              <div className="space-y-2">
+                <div className="text-xs text-stone-500">对每个镜头的生成结果进行人工审核，支持无生成任务时直接审核</div>
+                <div className="divide-y divide-stone-100 rounded border border-stone-200 dark:divide-stone-800 dark:border-stone-700">
+                  {shots.map((shot) => {
+                    const jobId = getJobIdForShot(shot.id);
+                    return (
+                      <div key={shot.id} className="flex items-center justify-between gap-3 px-3 py-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">{shot.description || "未命名镜头"}</div>
+                          <div className="truncate text-xs text-stone-500">
+                            {shot.camera} · {shot.durationSec}秒 · {jobId ? `关联任务 ${jobId.slice(0, 8)}` : "无关联任务"}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <Button size="small" type="primary" ghost onClick={() => void handleApprove(shot.id, jobId)}>
+                            通过
+                          </Button>
+                          <Button size="small" danger onClick={() => openRejectModal(shot.id, jobId)}>
+                            不通过
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="py-6 text-center text-sm text-stone-400">暂无镜头，请先添加镜头</div>
             )}
           </Card>
         </div>
@@ -336,6 +454,28 @@ export default function StoryboardDetailPage() {
             <Input.TextArea rows={2} placeholder="可选：追加的提示词，如 风格追加词" maxLength={500} showCount />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="不通过原因"
+        open={reviewModalOpen}
+        onCancel={() => setReviewModalOpen(false)}
+        onOk={() => void handleRejectSubmit()}
+        okText="提交"
+        cancelText="取消"
+        confirmLoading={reviewSubmitting}
+        destroyOnHidden
+      >
+        <div className="mt-4 space-y-4">
+          <div>
+            <div className="mb-2 text-sm font-medium">原因</div>
+            <Select value={reviewReason} onChange={(v) => setReviewReason(v)} options={REASON_OPTIONS} style={{ width: "100%" }} />
+          </div>
+          <div>
+            <div className="mb-2 text-sm font-medium">备注</div>
+            <Input.TextArea rows={3} placeholder="可选：补充说明" maxLength={500} showCount value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
+          </div>
+        </div>
       </Modal>
     </div>
   );
