@@ -21,20 +21,18 @@ export default function StoryboardListPage() {
   const fetchBoards = async () => {
     setLoading(true);
     try {
-      const data = await storyboardApi.list();
+      const data = await storyboardApi.list({ withShotCounts: true });
       setBoards(data);
-      // 拉取每个分镜的镜头数
       const counts: Record<string, number> = {};
-      await Promise.all(
-        data.map(async (b) => {
-          try {
-            const shots = await storyboardApi.listShots(b.id);
-            counts[b.id] = shots.length;
-          } catch {
-            counts[b.id] = 0;
-          }
-        })
-      );
+      data.forEach((b) => {
+        const c =
+          typeof b.shotCount === "number"
+            ? b.shotCount
+            : typeof b.shot_count === "number"
+              ? b.shot_count
+              : 0;
+        counts[b.id] = c;
+      });
       setShotCounts(counts);
     } catch (e) {
       message.error(e instanceof Error ? e.message : "加载失败");

@@ -129,6 +129,11 @@ db.exec(`
   );
 `);
 
+db.exec(`
+  create index if not exists idx_shots_board on storyboard_shots(storyboard_id);
+  create index if not exists idx_reviews_shot on shot_reviews(shot_id);
+`);
+
 await app.register(cors, {
   origin: true,
 });
@@ -552,16 +557,64 @@ app.put("/api/ip-assets/:id", async (request, reply) => {
 });
 
 app.delete("/api/ip-assets/:id", async (request, reply) => {
+  const ipAssetId = request.params.id;
+  // 检查是否被分镜镜头引用
+  const shotRef = db
+    .prepare("select id from storyboard_shots where ip_asset_id = ? limit 1")
+    .get(ipAssetId);
+  if (shotRef) {
+    return reply.code(409).send({ error: "IP资产被分镜引用，无法删除" });
+  }
+  // 检查是否被分镜的 ip_asset_ids_json 引用（遍历解析，避免 LIKE 误判）
+  const boards = db.prepare("select ip_asset_ids_json from storyboards").all();
+  for (const b of boards) {
+    try {
+      const ids = b.ip_asset_ids_json ? JSON.parse(b.ip_asset_ids_json) : [];
+      if (Array.isArray(ids) && ids.includes(ipAssetId)) {
+        return reply.code(409).send({ error: "IP资产被分镜引用，无法删除" });
+      }
+    } catch {
+      // LIKE 兜底：若 JSON 解析失败，退化为字符串匹配
+      if (
+        typeof b.ip_asset_ids_json === "string" &&
+        b.ip_asset_ids_json.includes(ipAssetId)
+      ) {
+        return reply.code(409).send({ error: "IP资产被分镜引用，无法删除" });
+      }
+    }
+  }
   const result = db
     .prepare("delete from ip_assets where id = ?")
-    .run(request.params.id);
+    .run(ipAssetId);
   if (result.changes === 0)
     return reply.code(404).send({ error: "IP资产不存在" });
   return { ok: true };
 });
 
 // ── 分镜脚本：storyboards + shots ───────────────────────────
-app.get("/api/storyboards", async () => {
+app.get("/api/storyboards", async (request) => {
+  const q = request.query && typeof request.query === "object" ? request.query : {};
+  const withShotCounts =
+    q.withShotCounts === "1" ||
+    q.withShotCounts === 1 ||
+    q.withShotCounts === "true" ||
+    q.withShotCounts === true;
+  if (withShotCounts) {
+    const rows = db
+      .prepare(
+        `
+      select s.*, (select count(*) from storyboard_shots where storyboard_id = s.id) as shot_count
+      from storyboards s
+      order by datetime(s.updated_at) desc
+    `,
+      )
+      .all();
+    return rows.map((row) => {
+      const base = parseStoryboardRow(row);
+      const c = Number(row.shot_count) || 0;
+      return { ...base, shotCount: c, shot_count: c };
+    });
+  }
   const rows = db
     .prepare(
       `
@@ -658,9 +711,20 @@ app.put("/api/storyboards/:id", async (request, reply) => {
 });
 
 app.delete("/api/storyboards/:id", async (request, reply) => {
-  const result = db.prepare("delete from storyboards where id = ?").run(request.params.id);
-  if (result.changes === 0) return reply.code(404).send({ error: "分镜不存在" });
-  db.prepare("delete from storyboard_shots where storyboard_id = ?").run(request.params.id);
+  const exists = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!exists) return reply.code(404).send({ error: "分镜不存在" });
+  db.exec("BEGIN");
+  try {
+    db.prepare(
+      "delete from shot_reviews where shot_id in (select id from storyboard_shots where storyboard_id = ?)",
+    ).run(request.params.id);
+    db.prepare("delete from storyboard_shots where storyboard_id = ?").run(request.params.id);
+    db.prepare("delete from storyboards where id = ?").run(request.params.id);
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
   return { ok: true };
 });
 
@@ -877,7 +941,40 @@ app.post("/api/storyboards/:id/generate", async (request, reply) => {
   );
   const now = nowIso();
   for (const shot of shots) {
-    const prompt = `${shot.description || ""}${shot.prompt_override ? shot.prompt_override : ""}`;
+    const prompt = [shot.description, shot.prompt_override].filter(Boolean).join("\n");
+    // 查询 IP 参考图并映射为 generation payload inputs
+    let inputs = [];
+    if (shot.ip_asset_id) {
+      try {
+        const ipRow = db
+          .prepare("select reference_keys_json from ip_assets where id = ?")
+          .get(shot.ip_asset_id);
+        if (ipRow && ipRow.reference_keys_json) {
+          const keys = JSON.parse(ipRow.reference_keys_json);
+          if (Array.isArray(keys)) {
+            inputs = keys
+              .filter((k) => typeof k === "string" && k.trim())
+              .map((key) => ({
+                type: "image",
+                title: "IP参考图",
+                media: {
+                  url: `/api/assets/${key}`,
+                  mimeType: mimeTypeFromAssetKey(key),
+                  storageKey: key,
+                },
+              }));
+          }
+        }
+      } catch {
+        inputs = [];
+      }
+    }
+    const summary = {
+      text: 1,
+      image: inputs.length,
+      video: 0,
+      audio: 0,
+    };
     const rawPayload = {
       mode: "video",
       model: "doubao-seedance-2-5-260628",
@@ -886,12 +983,12 @@ app.post("/api/storyboards/:id/generate", async (request, reply) => {
       camera: shot.camera,
       ipAssetId: shot.ip_asset_id,
       shotId: shot.id,
+      inputs,
+      summary,
     };
-    // 复用 normalize 风格：先标准化再补回自定义字段
     const base = normalizeGenerationJobPayload(rawPayload);
     const payload = {
       ...base,
-      // 覆盖为批量生成所需模型与提示词
       mode: "video",
       model: "doubao-seedance-2-5-260628",
       prompt,
@@ -899,6 +996,8 @@ app.post("/api/storyboards/:id/generate", async (request, reply) => {
       camera: shot.camera,
       ipAssetId: shot.ip_asset_id,
       shotId: shot.id,
+      inputs: base.inputs,
+      summary: base.summary,
     };
     const jobId = id();
     insert.run(jobId, request.params.id, shot.id, "queued", now, now, JSON.stringify(payload));

@@ -1,8 +1,9 @@
+/// <reference types="vitest" />
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vitest/config";
+import { defineConfig, type Plugin } from "vite";
 
 import { parseChangelog } from "./src/lib/release";
 
@@ -63,13 +64,14 @@ export default defineConfig({
       },
     },
   },
+  // @ts-ignore vitest test config augments Vite UserConfig
   test: {
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "server/**/*.{test,spec}.{mjs,js,ts}"],
     css: true,
     testTimeout: 90000,
     hookTimeout: 90000,
   },
-});
+} as any);

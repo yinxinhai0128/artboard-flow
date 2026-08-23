@@ -4,6 +4,8 @@ export type Storyboard = {
   ipAssetIds: string[];
   createdAt: string;
   updatedAt: string;
+  shotCount?: number;
+  shot_count?: number;
 };
 
 export type ShotCamera = "push" | "pull" | "orbit" | "static" | "follow";
@@ -60,8 +62,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
   return data as T;
 }
 
-export async function list(): Promise<Storyboard[]> {
-  const res = await fetch(BASE);
+export async function list(opts?: { withShotCounts?: boolean }): Promise<Storyboard[]> {
+  const url = opts?.withShotCounts ? `${BASE}?withShotCounts=1` : BASE;
+  const res = await fetch(url);
   return handleResponse<Storyboard[]>(res);
 }
 
