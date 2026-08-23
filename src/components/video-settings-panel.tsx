@@ -283,19 +283,19 @@ function SeedanceVideoSettingsPanel({
               自适应
             </OptionPill>
           </div>
+          <DurationSlider
+            value={duration === -1 ? seedanceMaxDuration(model) : sliderDuration}
+            min={4}
+            max={seedanceMaxDuration(model)}
+            theme={theme}
+            onChange={(value) => onConfigChange("videoSeconds", String(value))}
+          />
           {duration === -1 ? (
-            <div className="text-[11px] leading-snug opacity-55">
-              已选自适应：模型根据提示词在 4~{seedanceMaxDuration(model)} 秒内自动选择最佳时长。
+            <div className="mt-1 text-[11px] leading-snug opacity-55">
+              已选自适应：模型根据提示词在 4~{seedanceMaxDuration(model)}{" "}
+              秒内自动选择最佳时长。拖动滑块可改回固定时长。
             </div>
-          ) : (
-            <DurationSlider
-              value={sliderDuration}
-              min={4}
-              max={seedanceMaxDuration(model)}
-              theme={theme}
-              onChange={(value) => onConfigChange("videoSeconds", String(value))}
-            />
-          )}
+          ) : null}
         </SettingGroup>
         <SettingGroup title="任务类型" color={theme.node.muted}>
           <div className="grid grid-cols-3 gap-2.5">

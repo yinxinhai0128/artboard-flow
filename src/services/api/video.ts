@@ -531,10 +531,17 @@ async function createGatewayTask(
   }
   const hasReferenceVideo = videoReferences.length > 0;
   const hasFirstLast = hasFirstOrLastFrame(references);
+  // 自适应时长（-1）：new-api 入口层校验顶层 seconds 必须为 1~3600，
+  // 但 metadata.duration 会经 UnmarshalMetadata 直达方舟，用它传 -1。
+  const isAdaptiveDuration =
+    Math.floor(Number(config.videoSeconds)) === -1 ||
+    config.videoSeconds === "-1";
   const payload = {
     model: modelOptionName(model),
     prompt: text || prompt.trim(),
-    seconds: normalizeVideoSeconds(config.videoSeconds),
+    ...(isAdaptiveDuration
+      ? {}
+      : { seconds: normalizeVideoSeconds(config.videoSeconds) }),
     metadata: {
       resolution: normalizeSeedanceResolution(config.vquality, model),
       ratio:
@@ -543,6 +550,7 @@ async function createGatewayTask(
           : normalizeSeedanceRatio(config.size),
       generate_audio: boolConfig(config.videoGenerateAudio, true),
       watermark: boolConfig(config.videoWatermark, false),
+      ...(isAdaptiveDuration ? { duration: -1 } : {}),
       ...(hasReferenceVideo
         ? {
             omni_reference_task_type: normalizeVideoTaskType(
