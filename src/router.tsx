@@ -16,7 +16,7 @@ import ImagePage from "@/pages/image";
 import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
 import VideoPage from "@/pages/video";
-import { useAuthStore } from "@/stores/use-auth-store";
+import { useAuthStore, isAdminUser } from "@/stores/use-auth-store";
 import { lazy, Suspense } from "react";
 
 const IpAssetsPage = lazy(() => import("@/pages/ip-assets"));
@@ -28,6 +28,13 @@ const DashboardPage = lazy(() => import("@/pages/dashboard"));
 function RequireAuth() {
   const token = useAuthStore((state) => state.token);
   if (!token) return <Navigate to="/login" replace />;
+  return <Outlet />;
+}
+
+/** 管理员守卫：普通用户访问管理模块（IP资产/分镜/看板）一律跳回首页。 */
+function RequireAdmin() {
+  const user = useAuthStore((state) => state.user);
+  if (!isAdminUser(user)) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 
@@ -52,36 +59,44 @@ export const router = createBrowserRouter([
           { path: "/canvas/:id", element: <CanvasProjectPage /> },
           { path: "/config", element: <ConfigPage /> },
           {
-            path: "/ip-assets",
-            element: (
-              <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
-                <IpAssetsPage />
-              </Suspense>
-            ),
-          },
-          {
-            path: "/storyboard",
-            element: (
-              <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
-                <StoryboardListPage />
-              </Suspense>
-            ),
-          },
-          {
-            path: "/storyboard/:id",
-            element: (
-              <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
-                <StoryboardDetailPage />
-              </Suspense>
-            ),
-          },
-          {
-            path: "/dashboard",
-            element: (
-              <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
-                <DashboardPage />
-              </Suspense>
-            ),
+            // ── 管理员专属：CG 生产管理模块 ──
+            // 导航对普通用户隐藏（app-top-nav/mobile drawer 按 adminOnly 过滤），
+            // 路由再套 RequireAdmin 守卫双保险：直接输 URL 会被跳回首页。
+            element: <RequireAdmin />,
+            children: [
+              {
+                path: "/ip-assets",
+                element: (
+                  <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
+                    <IpAssetsPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: "/storyboard",
+                element: (
+                  <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
+                    <StoryboardListPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: "/storyboard/:id",
+                element: (
+                  <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
+                    <StoryboardDetailPage />
+                  </Suspense>
+                ),
+              },
+              {
+                path: "/dashboard",
+                element: (
+                  <Suspense fallback={<div className="flex h-full items-center justify-center p-8 text-sm text-stone-500">加载中...</div>}>
+                    <DashboardPage />
+                  </Suspense>
+                ),
+              },
+            ],
           },
         ],
       },

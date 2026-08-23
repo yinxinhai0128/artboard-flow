@@ -10,7 +10,13 @@ function resolveNewApiBase(): string {
   return "/gateway";
 }
 
-export type LoginUser = { id: string; username: string; nickname?: string };
+export type LoginUser = {
+  id: string;
+  username: string;
+  nickname?: string;
+  /** 网关角色：1=普通用户 10=管理员 100=Root */
+  role?: number;
+};
 
 type ApiEnvelope<T> = {
   success?: boolean;
@@ -58,7 +64,7 @@ export async function login(
   const data = await requestJson<{
     data: {
       access_token: string;
-      user: { id: number; username: string; display_name?: string };
+      user: { id: number; username: string; display_name?: string; role?: number };
     };
   }>("/api/user/login", { method: "POST", body: { username, password } });
   const { access_token, user } = data.data;
@@ -68,6 +74,7 @@ export async function login(
       id: String(user.id),
       username: user.username,
       nickname: user.display_name || user.username,
+      role: user.role,
     },
   };
 }

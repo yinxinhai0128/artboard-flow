@@ -9,7 +9,7 @@ import {
 import { AppConfigModal } from "@/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
-import { useAuthStore } from "@/stores/use-auth-store";
+import { isAdminUser, useAuthStore } from "@/stores/use-auth-store";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useAgentStore } from "@/stores/use-agent-store";
@@ -18,6 +18,7 @@ export function AppTopNav() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const isAdmin = isAdminUser(user);
   const logout = useAuthStore((state) => state.logout);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const autoConnectRef = useRef(false);
@@ -77,7 +78,9 @@ export function AppTopNav() {
               </button>
 
               <nav className="hide-scrollbar ml-8 hidden h-14 min-w-0 items-center gap-7 overflow-x-auto md:flex">
-                {navigationTools.map((tool) => {
+                {navigationTools
+                  .filter((tool) => !("adminOnly" in tool && tool.adminOnly) || isAdmin)
+                  .map((tool) => {
                   const Icon = tool.icon;
                   const active = tool.slug === activeToolSlug;
                   return (
@@ -144,6 +147,7 @@ export function AppTopNav() {
       <MobileNavDrawer
         open={mobileNavOpen}
         activeToolSlug={activeToolSlug}
+        isAdmin={isAdmin}
         onClose={() => setMobileNavOpen(false)}
       />
       <AppConfigModal />

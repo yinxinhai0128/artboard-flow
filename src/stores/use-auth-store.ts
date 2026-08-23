@@ -5,6 +5,8 @@ export type AuthUser = {
   id: string;
   username: string;
   nickname?: string;
+  /** 网关角色：1=普通用户 10=管理员 100=Root */
+  role?: number;
 };
 
 type AuthStore = {
@@ -49,6 +51,11 @@ export function parseTokenPayload(
   } catch {
     return null;
   }
+}
+
+/** 管理员判定：网关 role >= 10（1=普通用户 10=管理员 100=Root）。 */
+export function isAdminUser(user: { role?: number } | null): boolean {
+  return Boolean(user && typeof user.role === "number" && user.role >= 10);
 }
 
 export const useAuthStore = create<AuthStore>()(

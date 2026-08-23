@@ -6,18 +6,23 @@ import {
   type NavigationToolSlug,
 } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
+import { isAdminUser, useAuthStore } from "@/stores/use-auth-store";
 
 type MobileNavDrawerProps = {
   open: boolean;
   activeToolSlug?: NavigationToolSlug;
   onClose: () => void;
+  isAdmin?: boolean;
 };
 
 export function MobileNavDrawer({
   open,
   activeToolSlug,
   onClose,
+  isAdmin,
 }: MobileNavDrawerProps) {
+  const user = useAuthStore((state) => state.user);
+  const adminVisible = isAdmin ?? isAdminUser(user);
   return (
     <Drawer
       title="导航"
@@ -28,7 +33,9 @@ export function MobileNavDrawer({
       className="md:hidden"
     >
       <div className="space-y-1">
-        {navigationTools.map((tool) => {
+        {navigationTools
+          .filter((tool) => !("adminOnly" in tool && tool.adminOnly) || adminVisible)
+          .map((tool) => {
           const Icon = tool.icon;
           const active = tool.slug === activeToolSlug;
           return (

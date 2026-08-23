@@ -20,16 +20,20 @@ export const navigationTools = [
     slug: "ip-assets",
     label: "IP资产",
     icon: Box,
+    /** 仅管理员可见：CG 生产管理模块 */
+    adminOnly: true,
   },
   {
     slug: "storyboard",
     label: "分镜",
     icon: Clapperboard,
+    adminOnly: true,
   },
   {
     slug: "dashboard",
     label: "看板",
     icon: BarChart3,
+    adminOnly: true,
   },
   {
     slug: "image",
