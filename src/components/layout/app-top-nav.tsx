@@ -56,12 +56,10 @@ export function AppTopNav() {
                 to="/"
                 className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-white transition hover:text-stone-300"
               >
-                <span
-                  className="size-5 shrink-0 bg-current"
-                  style={{
-                    mask: "url(/logo.svg) center / contain no-repeat",
-                    WebkitMask: "url(/logo.svg) center / contain no-repeat",
-                  }}
+                <img
+                  src="/brand-ins-wide.png"
+                  alt="ArtboardFlow logo"
+                  className="h-7 w-auto shrink-0 dark:invert"
                 />
                 <span className="text-base font-medium">ArtboardFlow</span>
                 <span className="text-sm text-stone-500">无限画布</span>
