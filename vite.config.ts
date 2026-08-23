@@ -62,6 +62,12 @@ export default defineConfig({
         target: "http://127.0.0.1:8787",
         changeOrigin: true,
       },
+      // 本地开发时把 /gateway 代理到内网 new-api（线上由 nginx 完成），否则登录/注册不可用
+      "/gateway": {
+        target: "http://127.0.0.1:32124",
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(/^\/gateway/, ""),
+      },
     },
   },
   // @ts-ignore vitest test config augments Vite UserConfig
