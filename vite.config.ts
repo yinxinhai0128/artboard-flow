@@ -57,6 +57,7 @@ export default defineConfig({
     __APP_RELEASES__: JSON.stringify(parseChangelog(localChangelog)),
   },
   server: {
+    port: 8788,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8787",
@@ -69,6 +70,9 @@ export default defineConfig({
         rewrite: (path: string) => path.replace(/^\/gateway/, ""),
       },
     },
+  },
+  preview: {
+    port: 8788,
   },
   // @ts-ignore vitest test config augments Vite UserConfig
   test: {

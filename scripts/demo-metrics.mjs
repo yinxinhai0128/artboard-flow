@@ -102,7 +102,7 @@ async function main() {
       `⚠ Bad Case TOP3: ${stats.badCaseTop3.map((b) => `${b.reason}×${b.count}`).join(", ")}`,
     );
   }
-  console.log("\n打开 http://localhost:3000/dashboard 可视化查看 ↑");
+  console.log("\n打开 http://localhost:8788/dashboard 可视化查看 ↑");
 }
 
 main().catch((e) => {
