@@ -187,6 +187,17 @@ export default function StoryboardDetailPage() {
     }
   };
 
+  const handleRetry = async (jobId: string) => {
+    try {
+      const job = await storyboardApi.retryJob(jobId);
+      message.success("已创建重试任务");
+      setJobs((prev) => [job, ...prev]);
+      setTimeout(() => void fetchJobs(), 800);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : "重试失败");
+    }
+  };
+
   const getJobIdForShot = (shotId: string): string | null => {
     const match = jobs.find((j) => String((j.payload as Record<string, unknown>)?.shotId || j.nodeId) === shotId);
     return match ? match.id : null;
@@ -366,6 +377,11 @@ export default function StoryboardDetailPage() {
                           >
                             {job.status}
                           </Tag>
+                          {(job.status === "failed" || job.status === "cancelled") && (
+                            <Button size="small" onClick={() => void handleRetry(job.id)}>
+                              重试
+                            </Button>
+                          )}
                           <Button size="small" type="primary" ghost onClick={() => void handleApprove(shotId, job.id)}>
                             通过
                           </Button>

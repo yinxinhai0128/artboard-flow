@@ -1303,6 +1303,46 @@ app.post("/api/generation/jobs/:id/cancel", async (request, reply) => {
   return parseGenerationJob(row);
 });
 
+// ── 失败重试：基于原任务 payload 新建任务，保留成本与来源可追溯 ──
+app.post("/api/generation/jobs/:id/retry", async (request, reply) => {
+  const previous = db
+    .prepare("select * from generation_jobs where id = ?")
+    .get(request.params.id);
+  if (!previous)
+    return reply.code(404).send({ error: "GENERATION_JOB_NOT_FOUND" });
+
+  const previousStatus = normalizeGenerationJobStatus(previous.status);
+  if (previousStatus !== "failed" && previousStatus !== "cancelled") {
+    return reply
+      .code(409)
+      .send({ error: "仅失败或已取消的任务可以重试" });
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(previous.payload_json);
+  } catch {
+    return reply.code(500).send({ error: "原任务数据损坏，无法重试" });
+  }
+
+  const now = nowIso();
+  const newId = id();
+  db.prepare(
+    `
+    insert into generation_jobs (id, project_id, node_id, status, created_at, updated_at, payload_json, result_json, error)
+    values (?, ?, ?, 'queued', ?, ?, ?, null, null)
+  `,
+  ).run(newId, previous.project_id, previous.node_id, now, now, JSON.stringify(payload));
+
+  // 原任务置为 cancelled：其成本仍计入"未产出浪费"（已扣费），但状态上不再等待处理
+  db.prepare(
+    `update generation_jobs set status = 'cancelled', updated_at = ?, error = ? where id = ?`,
+  ).run(now, "已由重试任务替代", request.params.id);
+
+  const row = db.prepare("select * from generation_jobs where id = ?").get(newId);
+  return reply.code(201).send(parseGenerationJob(row));
+});
+
 app.put("/api/generation/jobs/:id", async (request, reply) => {
   const previous = db
     .prepare("select * from generation_jobs where id = ?")

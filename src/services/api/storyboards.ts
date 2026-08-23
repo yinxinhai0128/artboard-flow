@@ -144,5 +144,14 @@ export async function generate(boardId: string): Promise<{ jobs: GenerationJob[]
   return handleResponse<{ jobs: GenerationJob[] }>(res);
 }
 
-const storyboardApi = { list, get, create, update, remove, listShots, createShot, updateShot, removeShot, reorder, generate };
+export async function retryJob(jobId: string): Promise<GenerationJob> {
+  const res = await fetch(`/api/generation/jobs/${encodeURIComponent(jobId)}/retry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  return handleResponse<GenerationJob>(res);
+}
+
+const storyboardApi = { list, get, create, update, remove, listShots, createShot, updateShot, removeShot, reorder, generate, retryJob };
 export default storyboardApi;
