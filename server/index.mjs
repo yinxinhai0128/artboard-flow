@@ -854,6 +854,60 @@ app.post("/api/storyboards/:id/reorder", async (request, reply) => {
   return rows.map(parseShotRow);
 });
 
+// ── 分镜批量生成：为每个 shot 创建 generation_job ───────────────
+app.post("/api/storyboards/:id/generate", async (request, reply) => {
+  const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
+  if (!sb) return reply.code(404).send({ error: "分镜不存在" });
+  const shots = db
+    .prepare(
+      `
+    select * from storyboard_shots
+    where storyboard_id = ?
+    order by order_index asc, datetime(created_at) asc
+  `,
+    )
+    .all(request.params.id);
+  if (!shots.length) return reply.code(400).send({ error: "暂无分镜" });
+  const jobs = [];
+  const insert = db.prepare(
+    `
+    insert into generation_jobs (id, project_id, node_id, status, created_at, updated_at, payload_json, result_json, error)
+    values (?, ?, ?, ?, ?, ?, ?, null, null)
+  `,
+  );
+  const now = nowIso();
+  for (const shot of shots) {
+    const prompt = `${shot.description || ""}${shot.prompt_override ? shot.prompt_override : ""}`;
+    const rawPayload = {
+      mode: "video",
+      model: "doubao-seedance-2-5-260628",
+      prompt,
+      duration: shot.duration_sec,
+      camera: shot.camera,
+      ipAssetId: shot.ip_asset_id,
+      shotId: shot.id,
+    };
+    // 复用 normalize 风格：先标准化再补回自定义字段
+    const base = normalizeGenerationJobPayload(rawPayload);
+    const payload = {
+      ...base,
+      // 覆盖为批量生成所需模型与提示词
+      mode: "video",
+      model: "doubao-seedance-2-5-260628",
+      prompt,
+      duration: shot.duration_sec,
+      camera: shot.camera,
+      ipAssetId: shot.ip_asset_id,
+      shotId: shot.id,
+    };
+    const jobId = id();
+    insert.run(jobId, request.params.id, shot.id, "queued", now, now, JSON.stringify(payload));
+    const row = db.prepare("select * from generation_jobs where id = ?").get(jobId);
+    jobs.push(parseGenerationJob(row));
+  }
+  return { jobs };
+});
+
 // ── 审核与看板：shot_reviews + dashboard ───────────────────────
 app.post("/api/shots/:shotId/reviews", async (request, reply) => {
   const shot = db

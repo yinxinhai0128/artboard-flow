@@ -1,5 +1,6 @@
 import {
   Box,
+  Clapperboard,
   FileText,
   ImagePlus,
   Images,
@@ -18,6 +19,11 @@ export const navigationTools = [
     slug: "ip-assets",
     label: "IP资产",
     icon: Box,
+  },
+  {
+    slug: "storyboard",
+    label: "分镜",
+    icon: Clapperboard,
   },
   {
     slug: "image",
