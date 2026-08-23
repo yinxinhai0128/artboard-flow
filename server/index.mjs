@@ -26,12 +26,9 @@ import {
 } from "./generation-adapter.mjs";
 import { canPersistConnection } from "./project-rules.mjs";
 import {
-  extractBearerToken,
-  hashPassword,
-  signToken,
-  verifyPassword,
-  verifyToken,
-} from "./auth-utils.mjs";
+  requireAdmin,
+  requireAuth,
+} from "./gateway-auth.mjs";
 import {
   normalizeIpAsset,
   parseIpAssetRow,
@@ -346,71 +343,10 @@ function saveProject(project) {
 app.get("/api/health", async () => ({ ok: true, name: "ArtboardFlow" }));
 
 // ── 认证：注册 / 登录 / 当前用户 ─────────────────────────────
-app.post("/api/auth/register", async (request, reply) => {
-  const { username, password } = request.body || {};
-  if (
-    typeof username !== "string" ||
-    !/^[a-zA-Z0-9_\u4e00-\u9fa5]{2,20}$/.test(username.trim())
-  ) {
-    return reply
-      .code(400)
-      .send({ error: "用户名需为 2-20 位字母、数字、下划线或中文" });
-  }
-  if (typeof password !== "string" || password.length < 6) {
-    return reply.code(400).send({ error: "密码至少 6 位" });
-  }
-  const name = username.trim();
-  const existing = db
-    .prepare("select id from users where username = ?")
-    .get(name);
-  if (existing) return reply.code(409).send({ error: "用户名已存在" });
+// 认证统一走网关（new-api）：注册/登录/当前用户均由前端直连网关完成，
+// 本地后端只做令牌内省鉴权（见 gateway-auth.mjs），不再维护第二套账号体系。
 
-  const userId = id();
-  db.prepare(
-    "insert into users (id, username, password_hash, nickname, created_at) values (?, ?, ?, ?, ?)",
-  ).run(userId, name, hashPassword(password), name, nowIso());
-  const token = signToken({ sub: userId, username: name });
-  return { token, user: { id: userId, username: name, nickname: name } };
-});
-
-app.post("/api/auth/login", async (request, reply) => {
-  const { username, password } = request.body || {};
-  if (typeof username !== "string" || typeof password !== "string") {
-    return reply.code(400).send({ error: "请输入用户名和密码" });
-  }
-  const row = db
-    .prepare("select * from users where username = ?")
-    .get(username.trim());
-  if (!row || !verifyPassword(password, row.password_hash)) {
-    return reply.code(401).send({ error: "用户名或密码错误" });
-  }
-  const token = signToken({ sub: row.id, username: row.username });
-  return {
-    token,
-    user: {
-      id: row.id,
-      username: row.username,
-      nickname: row.nickname || row.username,
-    },
-  };
-});
-
-app.get("/api/auth/me", async (request, reply) => {
-  const token = extractBearerToken(request);
-  const payload = token ? verifyToken(token) : null;
-  if (!payload) return reply.code(401).send({ error: "未登录或令牌已过期" });
-  const row = db
-    .prepare("select id, username, nickname from users where id = ?")
-    .get(payload.sub);
-  if (!row) return reply.code(401).send({ error: "用户不存在" });
-  return {
-    id: row.id,
-    username: row.username,
-    nickname: row.nickname || row.username,
-  };
-});
-
-app.post("/api/assets", async (request, reply) => {
+app.post("/api/assets", { preHandler: requireAuth }, async (request, reply) => {
   const body =
     request.body && typeof request.body === "object" ? request.body : {};
   try {
@@ -448,7 +384,7 @@ app.get("/api/assets/:key", async (request, reply) => {
     .send(createReadStream(assetPath));
 });
 
-app.get("/api/ip-assets", async () => {
+app.get("/api/ip-assets", { preHandler: requireAdmin }, async () => {
   const rows = db
     .prepare(
       `
@@ -461,7 +397,7 @@ app.get("/api/ip-assets", async () => {
   return rows.map(parseIpAssetRow);
 });
 
-app.post("/api/ip-assets", async (request, reply) => {
+app.post("/api/ip-assets", { preHandler: requireAdmin }, async (request, reply) => {
   const body =
     request.body && typeof request.body === "object" ? request.body : {};
   try {
@@ -494,7 +430,7 @@ app.post("/api/ip-assets", async (request, reply) => {
   }
 });
 
-app.get("/api/ip-assets/:id", async (request, reply) => {
+app.get("/api/ip-assets/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const row = db
     .prepare("select * from ip_assets where id = ?")
     .get(request.params.id);
@@ -502,7 +438,7 @@ app.get("/api/ip-assets/:id", async (request, reply) => {
   return parseIpAssetRow(row);
 });
 
-app.put("/api/ip-assets/:id", async (request, reply) => {
+app.put("/api/ip-assets/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const existing = db
     .prepare("select * from ip_assets where id = ?")
     .get(request.params.id);
@@ -560,7 +496,7 @@ app.put("/api/ip-assets/:id", async (request, reply) => {
   }
 });
 
-app.delete("/api/ip-assets/:id", async (request, reply) => {
+app.delete("/api/ip-assets/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const ipAssetId = request.params.id;
   // 检查是否被分镜镜头引用
   const shotRef = db
@@ -596,7 +532,7 @@ app.delete("/api/ip-assets/:id", async (request, reply) => {
 });
 
 // ── 分镜脚本：storyboards + shots ───────────────────────────
-app.get("/api/storyboards", async (request) => {
+app.get("/api/storyboards", { preHandler: requireAdmin }, async (request) => {
   const q = request.query && typeof request.query === "object" ? request.query : {};
   const withShotCounts =
     q.withShotCounts === "1" ||
@@ -631,7 +567,7 @@ app.get("/api/storyboards", async (request) => {
   return rows.map(parseStoryboardRow);
 });
 
-app.post("/api/storyboards", async (request, reply) => {
+app.post("/api/storyboards", { preHandler: requireAdmin }, async (request, reply) => {
   const body =
     request.body && typeof request.body === "object" ? request.body : {};
   try {
@@ -665,13 +601,13 @@ app.post("/api/storyboards", async (request, reply) => {
   }
 });
 
-app.get("/api/storyboards/:id", async (request, reply) => {
+app.get("/api/storyboards/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const row = db.prepare("select * from storyboards where id = ?").get(request.params.id);
   if (!row) return reply.code(404).send({ error: "分镜不存在" });
   return parseStoryboardRow(row);
 });
 
-app.put("/api/storyboards/:id", async (request, reply) => {
+app.put("/api/storyboards/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const existing = db.prepare("select * from storyboards where id = ?").get(request.params.id);
   if (!existing) return reply.code(404).send({ error: "分镜不存在" });
   const body =
@@ -714,7 +650,7 @@ app.put("/api/storyboards/:id", async (request, reply) => {
   }
 });
 
-app.delete("/api/storyboards/:id", async (request, reply) => {
+app.delete("/api/storyboards/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const exists = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!exists) return reply.code(404).send({ error: "分镜不存在" });
   db.exec("BEGIN");
@@ -732,7 +668,7 @@ app.delete("/api/storyboards/:id", async (request, reply) => {
   return { ok: true };
 });
 
-app.get("/api/storyboards/:id/shots", async (request, reply) => {
+app.get("/api/storyboards/:id/shots", { preHandler: requireAdmin }, async (request, reply) => {
   const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!sb) return reply.code(404).send({ error: "分镜不存在" });
   const rows = db
@@ -747,7 +683,7 @@ app.get("/api/storyboards/:id/shots", async (request, reply) => {
   return rows.map(parseShotRow);
 });
 
-app.post("/api/storyboards/:id/shots", async (request, reply) => {
+app.post("/api/storyboards/:id/shots", { preHandler: requireAdmin }, async (request, reply) => {
   const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!sb) return reply.code(404).send({ error: "分镜不存在" });
   const body =
@@ -793,7 +729,7 @@ app.post("/api/storyboards/:id/shots", async (request, reply) => {
   }
 });
 
-app.put("/api/storyboards/:id/shots/:shotId", async (request, reply) => {
+app.put("/api/storyboards/:id/shots/:shotId", { preHandler: requireAdmin }, async (request, reply) => {
   const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!sb) return reply.code(404).send({ error: "分镜不存在" });
   const existing = db
@@ -845,7 +781,7 @@ app.put("/api/storyboards/:id/shots/:shotId", async (request, reply) => {
   }
 });
 
-app.delete("/api/storyboards/:id/shots/:shotId", async (request, reply) => {
+app.delete("/api/storyboards/:id/shots/:shotId", { preHandler: requireAdmin }, async (request, reply) => {
   const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!sb) return reply.code(404).send({ error: "分镜不存在" });
   const result = db
@@ -870,7 +806,7 @@ app.delete("/api/storyboards/:id/shots/:shotId", async (request, reply) => {
   return { ok: true };
 });
 
-app.post("/api/storyboards/:id/reorder", async (request, reply) => {
+app.post("/api/storyboards/:id/reorder", { preHandler: requireAdmin }, async (request, reply) => {
   const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!sb) return reply.code(404).send({ error: "分镜不存在" });
   const body =
@@ -923,7 +859,7 @@ app.post("/api/storyboards/:id/reorder", async (request, reply) => {
 });
 
 // ── 分镜批量生成：为每个 shot 创建 generation_job ───────────────
-app.post("/api/storyboards/:id/generate", async (request, reply) => {
+app.post("/api/storyboards/:id/generate", { preHandler: requireAdmin }, async (request, reply) => {
   const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!sb) return reply.code(404).send({ error: "分镜不存在" });
   const shots = db
@@ -1014,7 +950,7 @@ app.post("/api/storyboards/:id/generate", async (request, reply) => {
 });
 
 // ── 审核与看板：shot_reviews + dashboard ───────────────────────
-app.post("/api/shots/:shotId/reviews", async (request, reply) => {
+app.post("/api/shots/:shotId/reviews", { preHandler: requireAdmin }, async (request, reply) => {
   const shot = db
     .prepare("select id from storyboard_shots where id = ?")
     .get(request.params.shotId);
@@ -1050,7 +986,7 @@ app.post("/api/shots/:shotId/reviews", async (request, reply) => {
   }
 });
 
-app.get("/api/storyboards/:id/reviews", async (request, reply) => {
+app.get("/api/storyboards/:id/reviews", { preHandler: requireAdmin }, async (request, reply) => {
   const sb = db.prepare("select id from storyboards where id = ?").get(request.params.id);
   if (!sb) return reply.code(404).send({ error: "分镜不存在" });
   const rows = db
@@ -1066,7 +1002,7 @@ app.get("/api/storyboards/:id/reviews", async (request, reply) => {
   return rows.map(parseReviewRow);
 });
 
-app.get("/api/dashboard/stats", async () => {
+app.get("/api/dashboard/stats", { preHandler: requireAdmin }, async () => {
   const jobRows = db.prepare("select status, payload_json from generation_jobs").all();
   // 单条脏数据不应打挂整个看板：解析失败降级为空 payload
   const jobs = [];
@@ -1189,7 +1125,7 @@ app.delete("/api/projects", async (request) => {
   return { ok: true, deleted: ids.length };
 });
 
-app.post("/api/generation/jobs", async (request, reply) => {
+app.post("/api/generation/jobs", { preHandler: requireAdmin }, async (request, reply) => {
   const body =
     request.body && typeof request.body === "object" ? request.body : {};
   const projectId = typeof body.projectId === "string" ? body.projectId : "";
@@ -1235,7 +1171,7 @@ app.post("/api/generation/jobs", async (request, reply) => {
   return reply.code(201).send(job);
 });
 
-app.get("/api/generation/jobs", async (request) => {
+app.get("/api/generation/jobs", { preHandler: requireAdmin }, async (request) => {
   const projectId =
     typeof request.query?.projectId === "string" ? request.query.projectId : "";
   const nodeId =
@@ -1264,7 +1200,7 @@ app.get("/api/generation/jobs", async (request) => {
   return rows.map(parseGenerationJob);
 });
 
-app.get("/api/generation/jobs/:id", async (request, reply) => {
+app.get("/api/generation/jobs/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const row = db
     .prepare("select * from generation_jobs where id = ?")
     .get(request.params.id);
@@ -1272,7 +1208,7 @@ app.get("/api/generation/jobs/:id", async (request, reply) => {
   return parseGenerationJob(row);
 });
 
-app.post("/api/generation/jobs/:id/cancel", async (request, reply) => {
+app.post("/api/generation/jobs/:id/cancel", { preHandler: requireAdmin }, async (request, reply) => {
   const previous = db
     .prepare("select * from generation_jobs where id = ?")
     .get(request.params.id);
@@ -1304,7 +1240,7 @@ app.post("/api/generation/jobs/:id/cancel", async (request, reply) => {
 });
 
 // ── 失败重试：基于原任务 payload 新建任务，保留成本与来源可追溯 ──
-app.post("/api/generation/jobs/:id/retry", async (request, reply) => {
+app.post("/api/generation/jobs/:id/retry", { preHandler: requireAdmin }, async (request, reply) => {
   const previous = db
     .prepare("select * from generation_jobs where id = ?")
     .get(request.params.id);
@@ -1343,7 +1279,7 @@ app.post("/api/generation/jobs/:id/retry", async (request, reply) => {
   return reply.code(201).send(parseGenerationJob(row));
 });
 
-app.put("/api/generation/jobs/:id", async (request, reply) => {
+app.put("/api/generation/jobs/:id", { preHandler: requireAdmin }, async (request, reply) => {
   const previous = db
     .prepare("select * from generation_jobs where id = ?")
     .get(request.params.id);
