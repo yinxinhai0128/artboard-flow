@@ -47,6 +47,10 @@ import {
   normalizeReview,
   parseReviewRow,
 } from "./review-store.mjs";
+import {
+  estimateGenerationCostCny,
+  summarizeGenerationMetrics,
+} from "./metrics-store.mjs";
 
 const app = Fastify({ logger: true });
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -999,6 +1003,8 @@ app.post("/api/storyboards/:id/generate", async (request, reply) => {
       inputs: base.inputs,
       summary: base.summary,
     };
+    // 必须基于最终持久化 payload 估算成本：normalize 会丢掉顶层 duration 并把模型兜底为 default
+    payload.estimatedCostCny = estimateGenerationCostCny(payload);
     const jobId = id();
     insert.run(jobId, request.params.id, shot.id, "queued", now, now, JSON.stringify(payload));
     const row = db.prepare("select * from generation_jobs where id = ?").get(jobId);
@@ -1061,7 +1067,19 @@ app.get("/api/storyboards/:id/reviews", async (request, reply) => {
 });
 
 app.get("/api/dashboard/stats", async () => {
-  const jobs = db.prepare("select status from generation_jobs").all();
+  const jobRows = db.prepare("select status, payload_json from generation_jobs").all();
+  // 单条脏数据不应打挂整个看板：解析失败降级为空 payload
+  const jobs = [];
+  for (const row of jobRows) {
+    let payload;
+    try {
+      payload = JSON.parse(row.payload_json);
+    } catch {
+      app.log.warn({ jobId: row.id }, "dashboard stats: malformed generation job payload");
+      payload = {};
+    }
+    jobs.push({ status: normalizeGenerationJobStatus(row.status), payload });
+  }
   const reviews = db.prepare("select verdict, reason from shot_reviews").all();
   const agg = aggregateDashboard({ jobs, reviews });
   const storyboardCount = db
@@ -1072,10 +1090,12 @@ app.get("/api/dashboard/stats", async () => {
     .get();
   const totalStoryboards = storyboardCount ? Number(storyboardCount.c) : 0;
   const totalShots = shotCount ? Number(shotCount.c) : 0;
+  const metrics = summarizeGenerationMetrics(jobs);
   return {
     ...agg,
     totalStoryboards,
     totalShots,
+    ...metrics,
   };
 });
 
@@ -1189,7 +1209,11 @@ app.post("/api/generation/jobs", async (request, reply) => {
     status: "queued",
     createdAt,
     updatedAt: createdAt,
-    payload,
+    payload: {
+      ...payload,
+      // 画布单节点生成：payload 顶层已带 model/duration（normalize 后），基于最终 payload 估算
+      estimatedCostCny: estimateGenerationCostCny(payload),
+    },
     result: null,
     error: undefined,
   };

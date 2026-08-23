@@ -20,6 +20,11 @@ describe("数据看板页面", () => {
           totalReviews: 8,
           totalStoryboards: 2,
           totalShots: 6,
+          totalEstimatedCostCny: 4.8,
+          succeededEstimatedCostCny: 3.2,
+          unproducedCostCny: 1.6,
+          totalVideoSeconds: 60,
+          knownCostJobs: 10,
         }),
       } as Response)
     );
@@ -48,5 +53,8 @@ describe("数据看板页面", () => {
     // 业务对比卡片
     expect(screen.getAllByText(/传统流程/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/AIGC流程/).length).toBeGreaterThan(0);
+    // 成本治理指标：有效产出成本 + 未产出浪费口径
+    expect(await screen.findByText("有效产出成本")).toBeInTheDocument();
+    expect(screen.getAllByText(/未产出浪费/).length).toBeGreaterThan(0);
   }, 90000);
 });

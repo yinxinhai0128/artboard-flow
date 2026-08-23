@@ -6,6 +6,11 @@ export type DashboardStats = {
   totalReviews: number;
   totalStoryboards: number;
   totalShots: number;
+  totalEstimatedCostCny: number;
+  succeededEstimatedCostCny: number;
+  unproducedCostCny: number;
+  totalVideoSeconds: number;
+  knownCostJobs: number;
 };
 
 const BASE = "/api/dashboard/stats";

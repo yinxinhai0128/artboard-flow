@@ -139,6 +139,29 @@ export default function DashboardPage() {
                 <Statistic title="总审核数" value={stats.totalReviews} />
               </Card>
             </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Card>
+                <Statistic
+                  title="有效产出成本"
+                  value={stats.succeededEstimatedCostCny}
+                  precision={2}
+                  prefix="¥"
+                />
+                <div className="mt-2 text-xs text-stone-500">
+                  总投入 ¥{stats.totalEstimatedCostCny.toFixed(2)} · 未产出浪费 ¥
+                  {stats.unproducedCostCny.toFixed(2)}（失败/取消已扣费）
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={8}>
+              <Card>
+                <Statistic
+                  title="生成视频时长"
+                  value={stats.totalVideoSeconds}
+                  suffix="秒"
+                />
+              </Card>
+            </Col>
           </Row>
 
           <Row gutter={[16, 16]}>
