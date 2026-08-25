@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本项目是 `ArtboardFlow`，一个基于无限画布的 AI 创作工作台：生图、生视频、画布编排、提示词库与素材沉淀。前端纯浏览器存储（localStorage/IndexedDB），无后端依赖。
+本项目是 `ArtboardFlow`，一个 AI 创作工作台：生图、生视频、画布编排、提示词库与素材沉淀。前端纯浏览器存储（localStorage/IndexedDB），无后端依赖。
 
 ## 基本原则
 

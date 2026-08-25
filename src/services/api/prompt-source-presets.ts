@@ -20,6 +20,44 @@ export function createPromptSource(
   };
 }
 
+const promptsChatScript = `// prompts.chat（f.k.a. awesome-chatgpt-prompts）：GitHub 最高星提示词库，解析 prompts.csv。
+const base = "https://raw.githubusercontent.com/f/prompts.chat/main";
+const csv = await fetchText(base + "/prompts.csv");
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else quoted = false;
+      } else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\\n" || c === "\\r") {
+      if (c === "\\r" && text[i + 1] === "\\n") i++;
+      row.push(field); field = ""; rows.push(row); row = [];
+    } else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows.filter((cells) => cells.some((cell) => cell.trim() !== ""));
+}
+const [header, ...dataRows] = parseCsv(csv);
+const items = [];
+dataRows.forEach((row, index) => {
+  const record = {};
+  header.forEach((key, i) => { record[key.trim()] = (row[i] || "").trim(); });
+  const title = record.act || "";
+  const prompt = record.prompt || "";
+  if (!title || !prompt) return;
+  const tags = ["prompts.chat", record.type].filter(Boolean);
+  items.push(makePrompt({ id: "prompts-chat-" + leftPad(index + 1), title, prompt, tags }));
+});
+return items;`;
+
 const awesomeGptImageScript = `// awesome-gpt-image：从 README.zh-CN.md 解析，## 为标签分组，### 为单条提示词。
 const base = "https://raw.githubusercontent.com/ZeroLu/awesome-gpt-image/main";
 const markdown = await fetchText(\`\${base}/README.zh-CN.md\`);
@@ -129,6 +167,14 @@ export const DEFAULT_PROMPT_SOURCES: PromptSource[] = [
       "youmind-nano-banana-pro",
       "nano-banana-pro",
     ),
+  },
+  {
+    // 纯文本提示词（无封面图），放在末尾避免挤掉带图的生图来源。
+    id: "prompts-chat",
+    name: "prompts.chat",
+    githubUrl: "https://github.com/f/prompts.chat",
+    enabled: true,
+    script: promptsChatScript,
   },
 ];
 

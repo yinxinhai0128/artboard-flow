@@ -1430,7 +1430,7 @@ function ArtboardFlowPage() {
 
   const createAndOpenProject = useCallback(() => {
     const id = createProject(
-      `无限画布 ${useCanvasStore.getState().projects.length + 1}`,
+      `画布 ${useCanvasStore.getState().projects.length + 1}`,
     );
     navigate(`/canvas/${id}`);
   }, [createProject, navigate]);
@@ -1448,7 +1448,7 @@ function ArtboardFlowPage() {
     if (!project) return message.error("未找到当前画布");
     const hide = message.loading("正在导出当前画布…", 0);
     try {
-      await exportCanvasProjects([project], project.title || "无限画布");
+      await exportCanvasProjects([project], project.title || "ArtboardFlow");
       message.success("已导出当前画布");
     } catch (error) {
       console.error(error);

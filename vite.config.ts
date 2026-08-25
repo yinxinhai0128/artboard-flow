@@ -51,6 +51,8 @@ export default defineConfig({
     alias: {
       "@": resolve(webDir, "src"),
     },
+    // 强制全站共享同一份 React 实例，避免依赖预打包产生双实例导致 hooks 报错
+    dedupe: ["react", "react-dom"],
   },
   define: {
     __APP_VERSION__: JSON.stringify(localVersion),
@@ -79,7 +81,8 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}", "server/**/*.{test,spec}.{mjs,js,ts}"],
+    // 仅前端组件/store 测试走 vitest；server 与 canvas-agent 使用 bun:test（见 npm run test:server）
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
     css: true,
     testTimeout: 90000,
     hookTimeout: 90000,

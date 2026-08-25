@@ -62,7 +62,7 @@ export function AppTopNav() {
                   className="h-7 w-auto shrink-0 dark:invert"
                 />
                 <span className="text-base font-medium">ArtboardFlow</span>
-                <span className="text-sm text-stone-500">无限画布</span>
+                <span className="hidden text-sm text-stone-500 sm:inline">游戏 CG 预演中台</span>
               </Link>
 
               <button

@@ -119,7 +119,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                 onClick={() =>
                   void exportCanvasProjects(
                     [project],
-                    project.title || "无限画布",
+                    project.title || "未命名画布",
                   )
                 }
                 aria-label="导出"

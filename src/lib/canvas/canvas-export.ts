@@ -12,7 +12,7 @@ import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
 
 export async function exportCanvasProjects(
   projects: CanvasProject[],
-  fileName = "无限画布",
+  fileName = "ArtboardFlow",
 ) {
   const zipFiles: { name: string; data: BlobPart }[] = [];
   const exportedProjects = await Promise.all(

@@ -33,7 +33,7 @@ export default function CanvasPage() {
     navigate(`/canvas/${id}${agentQuery}`);
   };
   const createAndEnter = () =>
-    enterProject(createProject(`无限画布 ${projects.length + 1}`));
+    enterProject(createProject(`画布 ${projects.length + 1}`));
   const importCanvas = async (file?: File) => {
     if (!file) return;
     try {
@@ -74,8 +74,8 @@ export default function CanvasPage() {
     autoOpenRef.current = true;
     enterProject(
       mode === "new"
-        ? createProject(`无限画布 ${projects.length + 1}`)
-        : projects[0]?.id || createProject(`无限画布 ${projects.length + 1}`),
+        ? createProject(`画布 ${projects.length + 1}`)
+        : projects[0]?.id || createProject(`画布 ${projects.length + 1}`),
     );
   }, [createProject, hydrated, mode, projects]);
 
@@ -91,8 +91,8 @@ export default function CanvasPage() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-stone-200 pb-6 dark:border-stone-800">
           <div>
-            <p className="text-xs text-stone-500">画布库</p>
-            <h1 className="mt-3 text-3xl font-semibold">无限画布</h1>
+            <p className="text-xs text-stone-500">创作空间</p>
+            <h1 className="mt-3 text-3xl font-semibold">画布库</h1>
           </div>
           <div className="flex items-center gap-2">
             {selectedIds.length ? (
@@ -105,7 +105,7 @@ export default function CanvasPage() {
                       projects.filter((project) =>
                         selectedIds.includes(project.id),
                       ),
-                      `无限画布-${selectedIds.length}个项目`,
+                      `ArtboardFlow-${selectedIds.length}个项目`,
                     )
                   }
                 >

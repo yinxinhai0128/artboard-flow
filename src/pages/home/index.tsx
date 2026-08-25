@@ -30,7 +30,7 @@ const HERO_FEATURES = [
   },
   {
     icon: Layers,
-    title: "无限画布",
+    title: "创作画布",
     desc: "节点编排，连接创意",
     slug: "canvas",
   },
@@ -98,7 +98,7 @@ export default function IndexPage() {
               连接你的多种创意想法
             </h1>
             <p className="mt-5 max-w-xl text-balance text-base leading-7 text-muted-foreground">
-              在无限画布中生成、连接和重组图片、文字与视频，让创作从单次生成变成连续推演。
+              在画布上生成、连接和重组图片、文字与视频，让创作从单次生成变成连续推演。
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button

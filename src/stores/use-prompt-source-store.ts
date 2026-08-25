@@ -71,6 +71,32 @@ export const usePromptSourceStore = create<PromptSourceStore>()(
     }),
     {
       name: PROMPT_SOURCE_STORE_KEY,
+      version: 3,
+      // 一次性迁移：补齐新增的内置默认来源，并按内置顺序重排（自定义来源保持在预设之后）。
+      migrate: (persisted) => {
+        const state = (persisted || {}) as Partial<PromptSourceStore>;
+        const sources = Array.isArray(state.sources)
+          ? state.sources.map((item) => createPromptSource(item))
+          : [];
+        const known = new Set(sources.map((item) => item.id));
+        const merged = [
+          ...sources,
+          ...DEFAULT_PROMPT_SOURCES.filter((item) => !known.has(item.id)),
+        ];
+        const rank = new Map(
+          DEFAULT_PROMPT_SOURCES.map((item, index) => [item.id, index]),
+        );
+        merged.sort(
+          (a, b) =>
+            (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+            (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+        );
+        return {
+          ...state,
+          sources: merged,
+          schedule: { ...defaultSchedule, ...(state.schedule || {}) },
+        };
+      },
       partialize: (state) => ({
         sources: state.sources,
         schedule: state.schedule,

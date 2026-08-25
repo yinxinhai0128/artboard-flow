@@ -8,6 +8,7 @@ import { RouterProvider } from "react-router-dom";
 import { AppProviders } from "@/components/layout/app-providers";
 import { initAnalytics } from "@/lib/analytics";
 import { router } from "@/router";
+import "@/i18n";
 
 initAnalytics();
 

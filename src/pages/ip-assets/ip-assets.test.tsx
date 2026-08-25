@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { App } from "antd";
 
+import IpAssetsPage from "./index";
+
 describe("IP资产库页面", () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -14,7 +16,6 @@ describe("IP资产库页面", () => {
   });
 
   it("渲染标题和新建按钮", async () => {
-    const { default: IpAssetsPage } = await import("./index");
     render(
       <App>
         <IpAssetsPage />
@@ -22,5 +23,5 @@ describe("IP资产库页面", () => {
     );
     expect(await screen.findByText("IP资产库")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /新建IP资产/ })).toBeInTheDocument();
-  }, 90000);
+  }, 30000);
 });

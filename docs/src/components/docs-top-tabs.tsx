@@ -26,11 +26,11 @@ const tabs = [
     prefix: "/docs/progress",
   },
   {
-    title: "商务合作",
-    href: "/docs/business/business",
+    title: "协议与安全",
+    href: "/docs/business/license",
     prefix: "/docs/business",
   },
-  { title: "赞助支持", href: "/docs/support/sponsor", prefix: "/docs/support" },
+  { title: "漏洞提交", href: "/docs/support/security", prefix: "/docs/support" },
 ];
 
 export function DocsTopTabs() {

@@ -28,7 +28,6 @@ https://canvas.best/canvas?mode=new&agentUrl=<Local URL>&agentToken=<Connect tok
 1. 在 ArtboardFlow 项目中启动前端，并使用 Vite 输出的 `Local` 地址：
 
 ```bash
-cd web
 bun install
 bun run dev
 ```
